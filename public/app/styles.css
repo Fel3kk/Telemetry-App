@@ -827,3 +827,175 @@ button:hover, .download-btn:hover {
   .season-box { width: 50px; height: 50px; font-size: 0.85em; }
   .session-grid { grid-template-columns: 1fr; }
 }
+
+/* ================================================================
+   Mobile Functionality Polish
+   Horizontal pill tabs, swipe-hint tables, larger touch targets,
+   sticky filter, taller charts, snap-scroll session cards.
+   ================================================================ */
+
+/* Edge-fade hint that tables/grids are horizontally scrollable */
+.table-responsive,
+.table-container {
+  position: relative;
+  background:
+    linear-gradient(90deg, var(--bg-2) 30%, rgba(18,18,26,0)),
+    linear-gradient(-90deg, var(--bg-2) 30%, rgba(18,18,26,0)) right,
+    linear-gradient(90deg, rgba(0,0,0,0.45), rgba(0,0,0,0)),
+    linear-gradient(-90deg, rgba(0,0,0,0.45), rgba(0,0,0,0)) right;
+  background-size: 32px 100%, 32px 100%, 14px 100%, 14px 100%;
+  background-repeat: no-repeat;
+  background-attachment: local, local, scroll, scroll;
+}
+
+/* iOS Safari momentum scroll & smoother table scroll */
+.table-responsive, .table-container, .collapsible-content,
+.session-grid, .collapsible-tabs {
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (hover: none) and (pointer: coarse) {
+  /* Always show session-card delete on touch devices */
+  .session-card .delete-btn { opacity: 0.75; }
+  /* Bigger tap targets */
+  .file-input-label { padding: 16px 26px; }
+  .season-box { width: 64px; height: 64px; }
+}
+
+@media (max-width: 768px) {
+  /* Horizontal-scroll pill tabs (F1 broadcast vibe) */
+  .collapsible-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    padding: 12px 14px;
+    gap: 8px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    position: sticky;
+    top: 0;
+    background: linear-gradient(180deg, var(--bg-2) 85%, transparent);
+    backdrop-filter: blur(12px);
+  }
+  .collapsible-tabs::-webkit-scrollbar { display: none; }
+  .section-tab {
+    flex: 0 0 auto;
+    min-width: 0;
+    padding: 11px 18px;
+    border-radius: 999px;
+    font-size: 0.72em;
+    letter-spacing: 0.1em;
+    scroll-snap-align: start;
+  }
+  .section-tab::before { display: none; }
+
+  /* Snap-scroll season selector */
+  .season-selector {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    justify-content: flex-start;
+    padding: 4px 4px 10px;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+  }
+  .season-selector::-webkit-scrollbar { display: none; }
+  .season-box { scroll-snap-align: center; flex: 0 0 auto; }
+
+  /* Sticky filter bar */
+  .filter-controls {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    background: var(--bg-2);
+    padding: 10px 0;
+    margin: 0;
+    border-radius: 0;
+  }
+
+  /* Larger, cleaner inputs/selects for touch */
+  .filter-controls input,
+  .filter-controls select {
+    padding: 13px 14px;
+    font-size: 1em;
+    min-height: 46px;
+  }
+
+  /* Charts: taller for legibility, slight breathing room */
+  .chart-container,
+  .chart-container:nth-child(-n+3) {
+    height: 320px !important;
+    min-height: 320px !important;
+    padding: 16px 12px !important;
+    border-radius: 12px !important;
+    margin-bottom: 14px;
+  }
+  .chart-container.full-width {
+    height: 380px !important;
+    min-height: 380px !important;
+  }
+  .charts-grid {
+    overflow: visible !important;
+    padding: 0 14px !important;
+  }
+
+  /* Session grid: horizontal swipe deck on mobile */
+  .session-grid {
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: 78%;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    padding-bottom: 8px;
+    gap: 10px;
+    scrollbar-width: none;
+  }
+  .session-grid::-webkit-scrollbar { display: none; }
+  .session-card { scroll-snap-align: start; }
+
+  /* Header: hide carbon fiber stripe glow but keep red line */
+  .header { padding: 18px 14px; }
+  .header h1 { font-size: 1.35em; letter-spacing: 0.04em; }
+  .header p { font-size: 0.85em; line-height: 1.4; }
+
+  /* Section title pad */
+  .section-title { padding: 0 14px 10px; margin-bottom: 16px; }
+
+  /* Driver assignment cards: 2-up on mobile */
+  #driver-assignments-container .driver-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* Bigger inputs in driver cards */
+  #driver-assignments-container .team-select,
+  #driver-assignments-container .driver-team-custom,
+  #driver-assignments-container .driver-team-input {
+    min-height: 40px;
+    font-size: 0.9rem;
+  }
+
+  /* Make Download Template buttons stack nicely */
+  .download-btn { width: 100%; max-width: 320px; padding: 14px 20px; font-size: 0.95em; }
+
+  /* Container padding tweak */
+  .upload-section { padding: 18px 12px; }
+  .saved-sessions { padding: 14px 12px; border-radius: 0; }
+  .saved-sessions h3 { font-size: 0.82em; }
+
+  /* Hide carbon-fiber overlay on small screens for perf */
+  body::before { background-image: none; }
+}
+
+@media (max-width: 480px) {
+  .chart-container { height: 280px !important; min-height: 280px !important; }
+  .chart-container.full-width { height: 320px !important; min-height: 320px !important; }
+  .header h1 { font-size: 1.15em; }
+  .section-tab { padding: 10px 14px; font-size: 0.68em; }
+  .file-input-label { width: 100%; max-width: 320px; justify-content: center; }
+  .stat-card, .saved-session-item { font-size: 0.9em; }
+}
+
+/* Landscape phones: tighten header so charts get visible space */
+@media (max-width: 900px) and (orientation: landscape) {
+  .header { padding: 12px 14px; position: relative; }
+  .chart-container { height: 280px !important; }
+}
