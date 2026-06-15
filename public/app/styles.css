@@ -767,6 +767,68 @@ button:hover, .download-btn:hover {
 #stintTable th:nth-child(5), #stintTable td:nth-child(5) { width: 100px; }
 #stintTable th:nth-child(6), #stintTable td:nth-child(6) { width: 110px; }
 
+/* ===========================================================
+   Stint Summary Table readability
+   =========================================================== */
+#stintTable,
+#practiceStintTable { font-size: 0.94rem; }
+#stintTable th,
+#practiceStintTable th,
+#stintTable td,
+#practiceStintTable td {
+  padding: 12px 14px;
+  vertical-align: middle;
+}
+
+/* Alternating row tint */
+#stintTable tbody tr:nth-child(odd),
+#practiceStintTable tbody tr:nth-child(odd) { background: rgba(255,255,255,0.02); }
+body.light-theme #stintTable tbody tr:nth-child(odd),
+body.light-theme #practiceStintTable tbody tr:nth-child(odd) { background: rgba(0,0,0,0.02); }
+
+/* Compound badge pill */
+#stintTable .compound-badge,
+#practiceStintTable .compound-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 0.82em;
+  letter-spacing: 0.02em;
+  border: 1.5px solid;
+  font-family: var(--font-display);
+  white-space: nowrap;
+}
+#stintTable .compound-dot,
+#practiceStintTable .compound-dot {
+  width: 12px;
+  height: 12px;
+  box-shadow: 0 0 8px currentColor;
+  flex-shrink: 0;
+}
+
+/* Wear severity colors */
+.wear-low  { color: #4ade80; font-weight: 700; }
+.wear-med  { color: #fbbf24; font-weight: 700; }
+.wear-high { color: #f87171; font-weight: 700; }
+body.light-theme .wear-low  { color: #15803d; }
+body.light-theme .wear-med  { color: #b45309; }
+body.light-theme .wear-high { color: #dc2626; }
+
+/* Grouped wear column borders */
+#stintTable td.group-start,
+#practiceStintTable td.group-start { border-left: 2px solid rgba(225,6,0,0.25) !important; }
+#stintTable td.group-end,
+#practiceStintTable td.group-end   { border-right: 2px solid rgba(225,6,0,0.25) !important; }
+
+/* Wear header group background */
+#stintTable thead tr:nth-child(2) th,
+#practiceStintTable thead tr:nth-child(2) th { background: rgba(225,6,0,0.04); }
+body.light-theme #stintTable thead tr:nth-child(2) th,
+body.light-theme #practiceStintTable thead tr:nth-child(2) th { background: rgba(225,6,0,0.03); }
+
 /* Scrollbar */
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: var(--bg-1); }
@@ -998,4 +1060,94 @@ button:hover, .download-btn:hover {
 @media (max-width: 900px) and (orientation: landscape) {
   .header { padding: 12px 14px; position: relative; }
   .chart-container { height: 280px !important; }
+}
+
+/* ================================================================
+   Light Theme Overrides — fix invisible/contrast issues
+   ================================================================ */
+body.light-theme {
+  color: var(--text);
+}
+body.light-theme .header {
+  background:
+    linear-gradient(180deg, rgba(225,6,0,0.06) 0%, transparent 100%),
+    linear-gradient(90deg, #ffffff 0%, #f7f8fb 100%);
+}
+body.light-theme .header h1 {
+  background: linear-gradient(180deg, #1a1a22, #4a4a55);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+body.light-theme .upload-section {
+  background: linear-gradient(180deg, #f7f8fb, #ffffff);
+}
+body.light-theme .session-card {
+  background: linear-gradient(180deg, #ffffff, #f7f8fb);
+}
+body.light-theme .session-card:hover {
+  box-shadow: 0 10px 24px -12px rgba(0,0,0,0.18);
+}
+body.light-theme .session-card.active {
+  background: linear-gradient(180deg, rgba(225,6,0,0.08), #ffffff);
+}
+body.light-theme .session-card .category-badge {
+  background: rgba(225,6,0,0.10);
+  color: #a30400;
+  border-color: rgba(225,6,0,0.30);
+}
+body.light-theme tbody tr:nth-child(even) { background: rgba(0,0,0,0.025); }
+body.light-theme tbody tr:hover { background: rgba(225,6,0,0.06); }
+body.light-theme .table-responsive,
+body.light-theme .table-container {
+  background:
+    linear-gradient(90deg, #ffffff 30%, rgba(255,255,255,0)),
+    linear-gradient(-90deg, #ffffff 30%, rgba(255,255,255,0)) right,
+    linear-gradient(90deg, rgba(0,0,0,0.10), rgba(0,0,0,0)),
+    linear-gradient(-90deg, rgba(0,0,0,0.10), rgba(0,0,0,0)) right;
+  background-size: 32px 100%, 32px 100%, 14px 100%, 14px 100%;
+  background-repeat: no-repeat;
+  background-attachment: local, local, scroll, scroll;
+}
+body.light-theme .season-box {
+  background: #ffffff;
+  color: var(--text-dim);
+}
+body.light-theme .filter-controls input,
+body.light-theme .filter-controls select {
+  background: #ffffff;
+  color: var(--text);
+}
+body.light-theme .saved-sessions { background: #f7f8fb; }
+body.light-theme .theme-toggle { background: #ffffff; color: var(--text); }
+body.light-theme #standings-container,
+body.light-theme #driver-assignments-container { background: #ffffff; }
+@media (max-width: 768px) {
+  body.light-theme .collapsible-tabs {
+    background: linear-gradient(180deg, #ffffff 85%, transparent);
+  }
+  body.light-theme .filter-controls { background: #ffffff; }
+}
+
+/* ================================================================
+   Extra small-device tweaks (<= 380px and safe-area)
+   ================================================================ */
+@supports (padding: max(0px)) {
+  body {
+    padding-left: max(0px, env(safe-area-inset-left));
+    padding-right: max(0px, env(safe-area-inset-right));
+    padding-bottom: max(0px, env(safe-area-inset-bottom));
+  }
+}
+@media (max-width: 380px) {
+  .header h1 { font-size: 1.05em; letter-spacing: 0.03em; }
+  .header p { font-size: 0.78em; }
+  .season-box { width: 44px; height: 44px; font-size: 0.78em; border-radius: 10px; }
+  .file-input-label { font-size: 0.8em; padding: 12px 18px; }
+  .section-tab { padding: 9px 12px; font-size: 0.64em; letter-spacing: 0.08em; }
+  .session-grid { grid-auto-columns: 86%; }
+  .chart-container { height: 240px !important; min-height: 240px !important; padding: 10px !important; }
+  th, td { padding: 8px 6px; font-size: 0.78em; }
+  .saved-sessions h3 { font-size: 0.74em; letter-spacing: 0.14em; }
+  #driver-assignments-container .driver-card-grid { grid-template-columns: 1fr !important; }
 }

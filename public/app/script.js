@@ -78,7 +78,7 @@ const SUPABASE_ANON_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imtiamp0aWFqdWd4dmhvYm9xeHdiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwODE5NzUsImV4cCI6MjA5MTY1Nzk3NX0.VI2B5EcQXx_aaXyOB-eGXentTbMRG6obxu6IjUv7juI";
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// F1 2025 Calendar Order for sorting
+// F1 2026 Calendar Order for sorting
 const F1_2026_CALENDAR = [
   "melbourne",
   "shanghai",
@@ -326,11 +326,29 @@ async function handleDownloadQualiTemplate() {
 // Global track normalization for linking sessions
 function normalizeTrackName(name) {
   const n = (name || "").toLowerCase().replace(/[\s-]/g, "_");
+  if (n === "canada" || n === "canadian_grand_prix") return "montreal";
+  if (n === "spain" || n === "spanish_grand_prix" || n === "barcelona") return "catalunya";
+  if (n === "madrid" || n === "madring") return "madring";
   if (n === "vegas" || n === "lasvegas") return "las_vegas";
   if (n === "interlagos") return "brazil";
   if (n === "mexico_city") return "mexico";
   if (n === "abu") return "abu_dhabi";
   return n;
+}
+
+function getTrackCalendarIndex(trackName) {
+  const index = F1_2026_CALENDAR.indexOf(normalizeTrackName(trackName));
+  return index === -1 ? 999 : index;
+}
+
+function sortSessionsByCalendar(a, b) {
+  if ((a.season || 1) !== (b.season || 1)) return (a.season || 1) - (b.season || 1);
+  const calendarDiff = getTrackCalendarIndex(a.track_name) - getTrackCalendarIndex(b.track_name);
+  if (calendarDiff !== 0) return calendarDiff;
+  const categoryOrder = { Sprint: 0, Race: 1 };
+  const categoryDiff = (categoryOrder[a.category] ?? 2) - (categoryOrder[b.category] ?? 2);
+  if (categoryDiff !== 0) return categoryDiff;
+  return new Date(a.created_at || a.session_date || 0) - new Date(b.created_at || b.session_date || 0);
 }
 
 let resizeTimeout;
@@ -737,21 +755,8 @@ async function loadSavedSessions() {
         results: s.results || [],
       }));
 
-      // Custom sorting: Season -> F1 2025 Calendar -> Date
-      mappedSessions.sort((a, b) => {
-        if (a.season !== b.season) return a.season - b.season;
-
-        const orderA = .indexOf(
-          normalizeTrackName(a.track_name),
-        );
-        const orderB = F1_2026_CALENDAR.indexOf(
-          normalizeTrackName(b.track_name),
-        );
-        const valA = orderA === -1 ? 999 : orderA;
-        const valB = orderB === -1 ? 999 : orderB;
-        if (valA !== valB) return valA - valB;
-        return new Date(a.created_at) - new Date(b.created_at);
-      });
+      // Custom sorting: Season -> F1 2026 Calendar -> Date
+      mappedSessions.sort(sortSessionsByCalendar);
 
       allSessions = mappedSessions;
       renderSeasonSelector();
@@ -1203,18 +1208,24 @@ function renderPracticeStints() {
   stints.forEach((stint, index) => {
     const compKey = String(stint.compound).toUpperCase();
     const dotColor = COMPOUND_COLORS[compKey] || "#888";
+    const rgba = (hex, a) => {
+      const r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
+      return `rgba(${r},${g},${b},${a})`;
+    };
+    const wearCls = (v) => v < 1.0 ? "wear-low" : v < 2.0 ? "wear-med" : "wear-high";
+    const compoundBadge = `<span class="compound-badge" style="background:${rgba(dotColor, 0.12)};border-color:${rgba(dotColor, 0.45)};color:${dotColor}"><span class="compound-dot" style="background-color:${dotColor}"></span>${stint.compound}</span>`;
     const row = document.createElement("tr");
     row.innerHTML = `
-        <td style="padding: 8px 4px; font-weight: bold; white-space: nowrap;">Stint ${index + 1}</td>
-        <td class="text-center" style="padding: 8px 4px;"><span class="compound-dot" style="background-color: ${dotColor}"></span>${stint.compound}</td>
-        <td class="text-center" style="padding: 8px 4px;">${stint.lapCount}</td>
-        <td class="text-center" style="padding: 8px 4px;">${stint.avgLapSeconds ? secondsToTimeString(stint.avgLapSeconds) : "N/A"}</td>
-        <td class="text-center" style="padding: 8px 4px;">${stint.avgFuel.toFixed(3)}</td>
-        <td class="text-center" style="padding: 8px 4px;">${stint.status}</td>
-        <td class="text-center group-start" style="padding: 8px 4px;">${stint.avgWear.FL.toFixed(2)}</td>
-        <td class="text-center" style="padding: 8px 4px;">${stint.avgWear.FR.toFixed(2)}</td>
-        <td class="text-center" style="padding: 8px 4px;">${stint.avgWear.RL.toFixed(2)}</td>
-        <td class="text-center group-end" style="padding: 8px 4px;">${stint.avgWear.RR.toFixed(2)}</td>
+        <td class="text-center"><strong>Stint ${index + 1}</strong></td>
+        <td class="text-center">${compoundBadge}</td>
+        <td class="text-center">${stint.lapCount}</td>
+        <td class="text-center">${stint.avgLapSeconds ? secondsToTimeString(stint.avgLapSeconds) : "N/A"}</td>
+        <td class="text-center">${stint.avgFuel.toFixed(3)}</td>
+        <td class="text-center">${stint.status}</td>
+        <td class="text-center group-start ${wearCls(stint.avgWear.FL)}">${stint.avgWear.FL.toFixed(2)}</td>
+        <td class="text-center ${wearCls(stint.avgWear.FR)}">${stint.avgWear.FR.toFixed(2)}</td>
+        <td class="text-center ${wearCls(stint.avgWear.RL)}">${stint.avgWear.RL.toFixed(2)}</td>
+        <td class="text-center group-end ${wearCls(stint.avgWear.RR)}">${stint.avgWear.RR.toFixed(2)}</td>
       `;
     stintTableBody.appendChild(row);
   });
@@ -1816,27 +1827,28 @@ function renderStints() {
 
   stintSection.style.display = "block";
   stintTableBody.innerHTML = "";
-  const table = stintTableBody.closest("table");
-  if (table) {
-    table.classList.add("table-sm");
-    table.style.fontSize = "0.85rem";
-  }
 
   stints.forEach((stint, index) => {
     const compKey = String(stint.compound).toUpperCase();
     const dotColor = COMPOUND_COLORS[compKey] || "#888";
+    const rgba = (hex, a) => {
+      const r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
+      return `rgba(${r},${g},${b},${a})`;
+    };
+    const wearCls = (v) => v < 1.0 ? "wear-low" : v < 2.0 ? "wear-med" : "wear-high";
+    const compoundBadge = `<span class="compound-badge" style="background:${rgba(dotColor, 0.12)};border-color:${rgba(dotColor, 0.45)};color:${dotColor}"><span class="compound-dot" style="background-color:${dotColor}"></span>${stint.compound}</span>`;
     const row = document.createElement("tr");
     row.innerHTML = `
-        <td style="padding: 8px 4px; font-weight: bold; white-space: nowrap;">Stint ${index + 1}</td>
-        <td class="text-center" style="padding: 8px 4px;"><span class="compound-dot" style="background-color: ${dotColor}"></span>${stint.compound}</td>
-        <td class="text-center" style="padding: 8px 4px;">${stint.lapCount}</td>
-        <td class="text-center" style="padding: 8px 4px;">${stint.avgLapSeconds ? secondsToTimeString(stint.avgLapSeconds) : "N/A"}</td>
-        <td class="text-center" style="padding: 8px 4px;">${stint.avgFuel.toFixed(3)}</td>
-        <td class="text-center" style="padding: 8px 4px;">${stint.status}</td>
-        <td class="text-center group-start" style="padding: 8px 4px;">${stint.avgWear.FL.toFixed(2)}</td>
-        <td class="text-center" style="padding: 8px 4px;">${stint.avgWear.FR.toFixed(2)}</td>
-        <td class="text-center" style="padding: 8px 4px;">${stint.avgWear.RL.toFixed(2)}</td>
-        <td class="text-center group-end" style="padding: 8px 4px;">${stint.avgWear.RR.toFixed(2)}</td>
+        <td class="text-center"><strong>Stint ${index + 1}</strong></td>
+        <td class="text-center">${compoundBadge}</td>
+        <td class="text-center">${stint.lapCount}</td>
+        <td class="text-center">${stint.avgLapSeconds ? secondsToTimeString(stint.avgLapSeconds) : "N/A"}</td>
+        <td class="text-center">${stint.avgFuel.toFixed(3)}</td>
+        <td class="text-center">${stint.status}</td>
+        <td class="text-center group-start ${wearCls(stint.avgWear.FL)}">${stint.avgWear.FL.toFixed(2)}</td>
+        <td class="text-center ${wearCls(stint.avgWear.FR)}">${stint.avgWear.FR.toFixed(2)}</td>
+        <td class="text-center ${wearCls(stint.avgWear.RL)}">${stint.avgWear.RL.toFixed(2)}</td>
+        <td class="text-center group-end ${wearCls(stint.avgWear.RR)}">${stint.avgWear.RR.toFixed(2)}</td>
       `;
     stintTableBody.appendChild(row);
   });
@@ -2813,12 +2825,14 @@ function renderStandingsTable() {
       }
     });
 
-  const scoringSessions = allSessions.filter(
-    (s) =>
-      s.season === currentSeason &&
-      ((s.category || "").toLowerCase() === "race" ||
-        (s.category || "").toLowerCase() === "sprint"),
-  );
+  const scoringSessions = allSessions
+    .filter(
+      (s) =>
+        s.season === currentSeason &&
+        ((s.category || "").toLowerCase() === "race" ||
+          (s.category || "").toLowerCase() === "sprint"),
+    )
+    .sort(sortSessionsByCalendar);
 
   scoringSessions.forEach((session) => {
     if (!session.results) return;
