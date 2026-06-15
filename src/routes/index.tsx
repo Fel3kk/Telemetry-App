@@ -1,29 +1,25 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useEffect } from "react";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Your App" },
-      { name: "description", content: "Replace this with a one-sentence description of your app." },
-      { property: "og:title", content: "Your App" },
-      { property: "og:description", content: "Replace this with a one-sentence description of your app." },
+      { title: "F1 Telemetry Analyzer" },
+      { name: "description", content: "Slick dark F1-inspired telemetry analyzer for race, qualifying, sprint and practice data." },
+      { property: "og:title", content: "F1 Telemetry Analyzer" },
+      { property: "og:description", content: "Slick dark F1-inspired telemetry analyzer for race, qualifying, sprint and practice data." },
     ],
   }),
   component: Index,
 });
 
-// IMPORTANT: Replace this placeholder. See ./README.md for routing conventions.
 function Index() {
+  useEffect(() => {
+    window.location.replace("/app/index.html");
+  }, []);
   return (
-    <div
-      className="flex min-h-screen items-center justify-center"
-      style={{ backgroundColor: "#fcfbf8" }}
-    >
-      <img
-        data-lovable-blank-page-placeholder="REMOVE_THIS"
-        src="https://cdn.gpteng.co/blank-app-v1.svg"
-        alt="Your app will live here!"
-      />
+    <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: "#07070a", color: "#f5f5f7", fontFamily: "system-ui" }}>
+      Loading F1 Telemetry Analyzer…
     </div>
   );
 }
