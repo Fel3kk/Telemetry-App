@@ -79,7 +79,7 @@ const SUPABASE_ANON_KEY =
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // F1 2025 Calendar Order for sorting
-const F1_2025_CALENDAR = [
+const F1_2026_CALENDAR = [
   "melbourne",
   "shanghai",
   "suzuka",
@@ -741,10 +741,10 @@ async function loadSavedSessions() {
       mappedSessions.sort((a, b) => {
         if (a.season !== b.season) return a.season - b.season;
 
-        const orderA = F1_2025_CALENDAR.indexOf(
+        const orderA = .indexOf(
           normalizeTrackName(a.track_name),
         );
-        const orderB = F1_2025_CALENDAR.indexOf(
+        const orderB = F1_2026_CALENDAR.indexOf(
           normalizeTrackName(b.track_name),
         );
         const valA = orderA === -1 ? 999 : orderA;
