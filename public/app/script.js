@@ -482,12 +482,110 @@ function hideError() {
   document.getElementById("error").style.display = "none";
 }
 
+function buildRaceStory(rootData, playerName, playerTeam, classification_data) {
+  if (!rootData || typeof rootData !== "object") return null;
+  const positionHistoryRoot = rootData["position-history"] || [];
+  const overtakeRecords = rootData["overtakes"]?.records || [];
+  const speedTraps = rootData["speed-trap-records"] || [];
+
+  const playerPos = positionHistoryRoot.find((p) => p.name === playerName);
+  if (!playerPos && !classification_data?.length) return null;
+
+  const position_history = (playerPos?.["driver-position-history"] || [])
+    .filter((p) => p["lap-number"] >= 1)
+    .map((p) => ({ lap: p["lap-number"], position: p.position }));
+
+  // Podium = top 3 by final-classification.position
+  const podium = [];
+  const sortedClass = [...(classification_data || [])]
+    .filter((e) => e["final-classification"]?.position)
+    .sort(
+      (a, b) =>
+        (a["final-classification"]?.position || 99) -
+        (b["final-classification"]?.position || 99),
+    )
+    .slice(0, 3);
+  sortedClass.forEach((entry) => {
+    const name = String(entry["driver-name"] || "").toUpperCase();
+    if (name === playerName) return; // shown as the main line
+    const ph = positionHistoryRoot.find((p) => p.name === name);
+    if (!ph) return;
+    podium.push({
+      name,
+      team: entry.team || "",
+      final: entry["final-classification"]?.position,
+      history: (ph["driver-position-history"] || [])
+        .filter((p) => p["lap-number"] >= 1)
+        .map((p) => ({ lap: p["lap-number"], position: p.position })),
+    });
+  });
+
+  const overtakes_made = overtakeRecords
+    .filter((o) => o["overtaking-driver-name"] === playerName)
+    .map((o) => ({ lap: o["overtaking-driver-lap"], opponent: o["overtaken-driver-name"] }));
+  const overtakes_suffered = overtakeRecords
+    .filter((o) => o["overtaken-driver-name"] === playerName)
+    .map((o) => ({ lap: o["overtaken-driver-lap"], opponent: o["overtaking-driver-name"] }));
+
+  // Pace delta vs field median (in ms)
+  const driverLapTimes = (classification_data || []).map((e) => ({
+    name: String(e["driver-name"] || "").toUpperCase(),
+    laps: (e["lap-time-history"]?.["lap-history-data"] || []).map(
+      (l) => l["lap-time-in-ms"] || 0,
+    ),
+  }));
+  const playerLaps =
+    driverLapTimes.find((d) => d.name === playerName)?.laps || [];
+  const pace_delta = [];
+  for (let i = 0; i < playerLaps.length; i++) {
+    const playerMs = playerLaps[i];
+    if (!playerMs || playerMs <= 0) continue;
+    const others = driverLapTimes
+      .map((d) => d.laps[i])
+      .filter((v) => typeof v === "number" && v > 0);
+    if (others.length < 3) continue;
+    const sorted = [...others].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    const median =
+      sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+    pace_delta.push({
+      lap: i + 1,
+      delta_ms: playerMs - median,
+      median_ms: median,
+      player_ms: playerMs,
+    });
+  }
+
+  const speed_traps = [...speedTraps]
+    .sort(
+      (a, b) =>
+        (b["speed-trap-record-kmph"] || 0) - (a["speed-trap-record-kmph"] || 0),
+    )
+    .map((s) => ({
+      name: s.name,
+      team: s.team,
+      kmph: Math.round(s["speed-trap-record-kmph"] || 0),
+    }));
+
+  return {
+    player_name: playerName,
+    player_team: playerTeam,
+    position_history,
+    podium,
+    overtakes_made,
+    overtakes_suffered,
+    pace_delta,
+    speed_traps,
+  };
+}
+
 function processTelemetryData(data) {
   // Check if data is already processed summary from get_data.py
   if (Array.isArray(data) && data.length > 0 && data[0].lap_history) {
     console.log("Loading pre-processed telemetry summary");
     return data;
   }
+
 
   const results = [];
   let track_name = null;
