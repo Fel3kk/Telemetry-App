@@ -1231,7 +1231,9 @@ function renderContent() {
   renderTable();
   renderQualiResults();
   renderPracticeSection();
+  renderRaceStory();
   document.getElementById("content").style.display = "block";
+
 }
 
 function showPracticeSectionIfNeeded() {
