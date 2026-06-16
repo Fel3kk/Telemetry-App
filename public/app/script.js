@@ -482,12 +482,110 @@ function hideError() {
   document.getElementById("error").style.display = "none";
 }
 
+function buildRaceStory(rootData, playerName, playerTeam, classification_data) {
+  if (!rootData || typeof rootData !== "object") return null;
+  const positionHistoryRoot = rootData["position-history"] || [];
+  const overtakeRecords = rootData["overtakes"]?.records || [];
+  const speedTraps = rootData["speed-trap-records"] || [];
+
+  const playerPos = positionHistoryRoot.find((p) => p.name === playerName);
+  if (!playerPos && !classification_data?.length) return null;
+
+  const position_history = (playerPos?.["driver-position-history"] || [])
+    .filter((p) => p["lap-number"] >= 1)
+    .map((p) => ({ lap: p["lap-number"], position: p.position }));
+
+  // Podium = top 3 by final-classification.position
+  const podium = [];
+  const sortedClass = [...(classification_data || [])]
+    .filter((e) => e["final-classification"]?.position)
+    .sort(
+      (a, b) =>
+        (a["final-classification"]?.position || 99) -
+        (b["final-classification"]?.position || 99),
+    )
+    .slice(0, 3);
+  sortedClass.forEach((entry) => {
+    const name = String(entry["driver-name"] || "").toUpperCase();
+    if (name === playerName) return; // shown as the main line
+    const ph = positionHistoryRoot.find((p) => p.name === name);
+    if (!ph) return;
+    podium.push({
+      name,
+      team: entry.team || "",
+      final: entry["final-classification"]?.position,
+      history: (ph["driver-position-history"] || [])
+        .filter((p) => p["lap-number"] >= 1)
+        .map((p) => ({ lap: p["lap-number"], position: p.position })),
+    });
+  });
+
+  const overtakes_made = overtakeRecords
+    .filter((o) => o["overtaking-driver-name"] === playerName)
+    .map((o) => ({ lap: o["overtaking-driver-lap"], opponent: o["overtaken-driver-name"] }));
+  const overtakes_suffered = overtakeRecords
+    .filter((o) => o["overtaken-driver-name"] === playerName)
+    .map((o) => ({ lap: o["overtaken-driver-lap"], opponent: o["overtaking-driver-name"] }));
+
+  // Pace delta vs field median (in ms)
+  const driverLapTimes = (classification_data || []).map((e) => ({
+    name: String(e["driver-name"] || "").toUpperCase(),
+    laps: (e["lap-time-history"]?.["lap-history-data"] || []).map(
+      (l) => l["lap-time-in-ms"] || 0,
+    ),
+  }));
+  const playerLaps =
+    driverLapTimes.find((d) => d.name === playerName)?.laps || [];
+  const pace_delta = [];
+  for (let i = 0; i < playerLaps.length; i++) {
+    const playerMs = playerLaps[i];
+    if (!playerMs || playerMs <= 0) continue;
+    const others = driverLapTimes
+      .map((d) => d.laps[i])
+      .filter((v) => typeof v === "number" && v > 0);
+    if (others.length < 3) continue;
+    const sorted = [...others].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    const median =
+      sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+    pace_delta.push({
+      lap: i + 1,
+      delta_ms: playerMs - median,
+      median_ms: median,
+      player_ms: playerMs,
+    });
+  }
+
+  const speed_traps = [...speedTraps]
+    .sort(
+      (a, b) =>
+        (b["speed-trap-record-kmph"] || 0) - (a["speed-trap-record-kmph"] || 0),
+    )
+    .map((s) => ({
+      name: s.name,
+      team: s.team,
+      kmph: Math.round(s["speed-trap-record-kmph"] || 0),
+    }));
+
+  return {
+    player_name: playerName,
+    player_team: playerTeam,
+    position_history,
+    podium,
+    overtakes_made,
+    overtakes_suffered,
+    pace_delta,
+    speed_traps,
+  };
+}
+
 function processTelemetryData(data) {
   // Check if data is already processed summary from get_data.py
   if (Array.isArray(data) && data.length > 0 && data[0].lap_history) {
     console.log("Loading pre-processed telemetry summary");
     return data;
   }
+
 
   const results = [];
   let track_name = null;
@@ -719,7 +817,14 @@ function processTelemetryData(data) {
           });
         });
 
+        summary.race_story = buildRaceStory(
+          data,
+          driver_name,
+          obj.team || "",
+          classification_data,
+        );
         results.push(summary);
+
       } else {
         Object.values(obj).forEach(findPlayerInObj);
       }
@@ -1126,7 +1231,9 @@ function renderContent() {
   renderTable();
   renderQualiResults();
   renderPracticeSection();
+  renderRaceStory();
   document.getElementById("content").style.display = "block";
+
 }
 
 function showPracticeSectionIfNeeded() {
@@ -1951,6 +2058,9 @@ function renderCharts() {
       ),
     },
   );
+
+  renderPaceDeltaChart();
+
 
   // Fuel Chart
   // compute avg-based bounds for fuel (kg)
@@ -3253,4 +3363,354 @@ function initCollapsibleSections() {
   } catch (err) {
     console.warn("initCollapsibleSections failed", err);
   }
+}
+
+// ============================================================
+//  Race Story (player-focused) — position, overtakes, stints, speed traps
+// ============================================================
+
+const COMPOUND_FILL = {
+  Soft: "#ef3340",
+  Medium: "#f4d03f",
+  Hard: "#e8e8e8",
+  Intermediate: "#27ae60",
+  Wet: "#2e86de",
+};
+
+function normalizeTeamName(t) {
+  if (!t) return "";
+  let s = String(t).replace(/['’]?\d{2,4}$/, "").trim();
+  s = s.replace(/_/g, " ").toLowerCase();
+  if (s === "my team" || s === "myteam") return "My Team";
+  // capitalize words
+  return s.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function teamColorFor(team) {
+  const norm = normalizeTeamName(team);
+  return TEAM_COLORS[norm] || "#9aa0a6";
+}
+
+function renderRaceStory() {
+  const empty = document.getElementById("raceStoryEmpty");
+  const wrap = document.getElementById("raceStoryContent");
+  if (!empty || !wrap) return;
+
+  const rs = currentData && currentData.race_story;
+  if (!rs || !rs.position_history || rs.position_history.length === 0) {
+    empty.style.display = "block";
+    wrap.style.display = "none";
+    return;
+  }
+
+  empty.style.display = "none";
+  wrap.style.display = "block";
+
+  // Headline
+  const start = rs.position_history[0]?.position;
+  const end = rs.position_history[rs.position_history.length - 1]?.position;
+  const gained = (start ?? 0) - (end ?? 0);
+  const headline = document.getElementById("raceStoryHeadline");
+  if (headline) {
+    headline.innerHTML = `
+      <span class="rs-pill"><b>${rs.player_name}</b></span>
+      <span class="rs-pill">Start P${start ?? "?"}</span>
+      <span class="rs-pill">Finish P${end ?? "?"}</span>
+      <span class="rs-pill ${gained > 0 ? "rs-pos" : gained < 0 ? "rs-neg" : ""}">
+        ${gained > 0 ? "▲ +" + gained : gained < 0 ? "▼ " + gained : "—"} positions
+      </span>
+      <span class="rs-pill">Overtakes made ${rs.overtakes_made.length}</span>
+      <span class="rs-pill">Lost ${rs.overtakes_suffered.length}</span>
+    `;
+  }
+
+  renderPositionChart(rs);
+  renderOvertakesChart(rs);
+  renderStintStrip();
+  renderTopSpeedList(rs);
+}
+
+function renderPositionChart(rs) {
+  const ctx = document.getElementById("positionChart");
+  if (!ctx) return;
+  if (charts.positionChart) charts.positionChart.destroy();
+
+  const labels = rs.position_history.map((p) => p.lap);
+  const datasets = [
+    {
+      label: rs.player_name,
+      data: rs.position_history.map((p) => p.position),
+      borderColor: "#e10600",
+      backgroundColor: "rgba(225, 6, 0, 0.12)",
+      borderWidth: 3,
+      tension: 0.25,
+      pointRadius: 0,
+      pointHoverRadius: 5,
+      fill: false,
+      order: 0,
+    },
+  ];
+
+  rs.podium.forEach((p) => {
+    const color = teamColorFor(p.team);
+    datasets.push({
+      label: `${p.name} (P${p.final})`,
+      data: p.history.map((h) => h.position),
+      borderColor: color,
+      backgroundColor: color + "22",
+      borderWidth: 1.5,
+      borderDash: [4, 4],
+      tension: 0.2,
+      pointRadius: 0,
+      pointHoverRadius: 4,
+      fill: false,
+      order: 1,
+    });
+  });
+
+  const maxPos = Math.max(
+    ...rs.position_history.map((p) => p.position),
+    ...rs.podium.flatMap((p) => p.history.map((h) => h.position)),
+    5,
+  );
+
+  charts.positionChart = new Chart(ctx.getContext("2d"), {
+    type: "line",
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => `${ctx.dataset.label}: P${ctx.parsed.y}`,
+          },
+        },
+      },
+      scales: {
+        x: { title: { display: true, text: "Lap" } },
+        y: {
+          reverse: true,
+          min: 1,
+          max: maxPos,
+          ticks: { stepSize: 1, precision: 0 },
+          title: { display: true, text: "Position" },
+        },
+      },
+    },
+  });
+}
+
+function renderOvertakesChart(rs) {
+  const ctx = document.getElementById("overtakesChart");
+  if (!ctx) return;
+  if (charts.overtakesChart) charts.overtakesChart.destroy();
+
+  const lapMax = Math.max(
+    ...rs.position_history.map((p) => p.lap),
+    ...rs.overtakes_made.map((o) => o.lap),
+    ...rs.overtakes_suffered.map((o) => o.lap),
+    1,
+  );
+  const labels = Array.from({ length: lapMax }, (_, i) => i + 1);
+  const made = labels.map(
+    (l) => rs.overtakes_made.filter((o) => o.lap === l).length,
+  );
+  const suffered = labels.map(
+    (l) => -rs.overtakes_suffered.filter((o) => o.lap === l).length,
+  );
+
+  charts.overtakesChart = new Chart(ctx.getContext("2d"), {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "Overtakes Made",
+          data: made,
+          backgroundColor: "rgba(46, 204, 113, 0.85)",
+          borderColor: "rgba(46, 204, 113, 1)",
+          borderWidth: 1,
+        },
+        {
+          label: "Positions Lost",
+          data: suffered,
+          backgroundColor: "rgba(225, 6, 0, 0.85)",
+          borderColor: "rgba(225, 6, 0, 1)",
+          borderWidth: 1,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: "bottom" },
+        tooltip: {
+          callbacks: {
+            label: (c) => {
+              const lap = c.label;
+              const list =
+                c.datasetIndex === 0
+                  ? rs.overtakes_made.filter((o) => String(o.lap) === String(lap))
+                  : rs.overtakes_suffered.filter((o) => String(o.lap) === String(lap));
+              const verb = c.datasetIndex === 0 ? "Passed" : "Lost to";
+              return [
+                `${c.dataset.label}: ${Math.abs(c.parsed.y)}`,
+                ...list.map((o) => `  ${verb} ${o.opponent}`),
+              ];
+            },
+          },
+        },
+      },
+      scales: {
+        x: { stacked: true, title: { display: true, text: "Lap" } },
+        y: {
+          stacked: true,
+          ticks: {
+            stepSize: 1,
+            precision: 0,
+            callback: (v) => Math.abs(v),
+          },
+          title: { display: true, text: "Count" },
+        },
+      },
+    },
+  });
+
+  // Notable battles list
+  const summaryEl = document.getElementById("overtakesSummary");
+  if (summaryEl) {
+    const counts = {};
+    [...rs.overtakes_made, ...rs.overtakes_suffered].forEach((o) => {
+      counts[o.opponent] = (counts[o.opponent] || 0) + 1;
+    });
+    const top = Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5);
+    summaryEl.innerHTML =
+      `<div class="rs-list-title">Most battled drivers</div>` +
+      top
+        .map(
+          ([name, n]) =>
+            `<div class="rs-list-row"><span>${name}</span><span class="rs-mono">${n}× exchange${n > 1 ? "s" : ""}</span></div>`,
+        )
+        .join("");
+  }
+}
+
+function renderStintStrip() {
+  const el = document.getElementById("stintStrip");
+  if (!el) return;
+  const stints = currentData?.stints || [];
+  if (!stints.length) {
+    el.innerHTML = `<div class="race-story-empty">No stint data available.</div>`;
+    return;
+  }
+  const totalLaps = stints[stints.length - 1]["end-lap"] || 1;
+  el.innerHTML = stints
+    .map((s, i) => {
+      const compound =
+        s["tyre-set-data"]?.["visual-tyre-compound"] || "Medium";
+      const len = (s["end-lap"] - s["start-lap"] + 1) / totalLaps * 100;
+      const color = COMPOUND_FILL[compound] || "#888";
+      return `<div class="stint-block" style="flex-basis:${len}%;background:${color};color:${compound === "Hard" || compound === "Medium" ? "#111" : "#fff"}" title="Stint ${i + 1}: ${compound} (L${s["start-lap"]}–L${s["end-lap"]})">
+        <span class="stint-compound">${compound}</span>
+        <span class="stint-laps">L${s["start-lap"]}–L${s["end-lap"]}</span>
+      </div>`;
+    })
+    .join("");
+}
+
+function renderTopSpeedList(rs) {
+  const el = document.getElementById("topSpeedList");
+  if (!el) return;
+  const top = rs.speed_traps.slice(0, 8);
+  if (!top.length) {
+    el.innerHTML = `<div class="race-story-empty">No speed-trap data.</div>`;
+    return;
+  }
+  const leader = top[0].kmph;
+  el.innerHTML = top
+    .map((s, i) => {
+      const isPlayer = s.name === rs.player_name;
+      const delta = s.kmph - leader;
+      return `<div class="speed-row${isPlayer ? " is-player" : ""}">
+        <span class="speed-rank">${i + 1}</span>
+        <span class="speed-name">${s.name}</span>
+        <span class="speed-team" style="color:${teamColorFor(s.team)}">${normalizeTeamName(s.team)}</span>
+        <span class="speed-val">${s.kmph} km/h</span>
+        <span class="speed-delta">${delta === 0 ? "—" : delta + " km/h"}</span>
+      </div>`;
+    })
+    .join("");
+}
+
+function renderPaceDeltaChart() {
+  const ctx = document.getElementById("paceDeltaChart");
+  if (!ctx) return;
+  if (charts.paceDeltaChart) charts.paceDeltaChart.destroy();
+
+  const rs = currentData?.race_story;
+  if (!rs || !rs.pace_delta || rs.pace_delta.length === 0) {
+    const c = ctx.getContext("2d");
+    c.clearRect(0, 0, ctx.width, ctx.height);
+    c.fillStyle = "#888";
+    c.font = "13px sans-serif";
+    c.textAlign = "center";
+    c.fillText(
+      "Pace-vs-field requires a freshly uploaded race JSON.",
+      ctx.width / 2,
+      ctx.height / 2,
+    );
+    return;
+  }
+
+  const labels = rs.pace_delta.map((p) => p.lap);
+  const data = rs.pace_delta.map((p) => +(p.delta_ms / 1000).toFixed(3));
+  const colors = data.map((v) =>
+    v < 0 ? "rgba(46, 204, 113, 0.85)" : "rgba(225, 6, 0, 0.85)",
+  );
+
+  charts.paceDeltaChart = new Chart(ctx.getContext("2d"), {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "Δ vs field median (s)",
+          data,
+          backgroundColor: colors,
+          borderWidth: 0,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (c) =>
+              `${c.parsed.y > 0 ? "+" : ""}${c.parsed.y.toFixed(3)} s vs median`,
+          },
+        },
+      },
+      scales: {
+        x: { title: { display: true, text: "Lap" } },
+        y: {
+          title: { display: true, text: "Δ seconds (− = faster)" },
+          grid: {
+            color: (ctx) =>
+              ctx.tick.value === 0
+                ? "rgba(255,255,255,0.5)"
+                : "rgba(255,255,255,0.08)",
+          },
+        },
+      },
+    },
+  });
 }
