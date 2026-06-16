@@ -817,7 +817,14 @@ function processTelemetryData(data) {
           });
         });
 
+        summary.race_story = buildRaceStory(
+          data,
+          driver_name,
+          obj.team || "",
+          classification_data,
+        );
         results.push(summary);
+
       } else {
         Object.values(obj).forEach(findPlayerInObj);
       }
