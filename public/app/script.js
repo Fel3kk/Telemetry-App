@@ -3626,14 +3626,20 @@ function renderPositionChart(rs) {
   charts.positionChart = new Chart(ctx.getContext("2d"), {
     type: "line",
     data: { labels, datasets },
+<<<<<<< HEAD
     plugins: [pitLinesPlugin],
+=======
+>>>>>>> e5abd8c46649957cdbe9f26d408cca824ce5eb60
     options: {
       responsive: true,
       maintainAspectRatio: false,
       interaction: { mode: "index", intersect: false },
       plugins: {
         legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } },
+<<<<<<< HEAD
         pitLines: { laps: getPlayerPitLaps() },
+=======
+>>>>>>> e5abd8c46649957cdbe9f26d408cca824ce5eb60
         tooltip: {
           callbacks: {
             label: (ctx) => `${ctx.dataset.label}: P${ctx.parsed.y}`,
@@ -3694,13 +3700,19 @@ function renderOvertakesChart(rs) {
         },
       ],
     },
+<<<<<<< HEAD
     plugins: [pitLinesPlugin],
+=======
+>>>>>>> e5abd8c46649957cdbe9f26d408cca824ce5eb60
     options: {
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
         legend: { position: "bottom" },
+<<<<<<< HEAD
         pitLines: { laps: getPlayerPitLaps() },
+=======
+>>>>>>> e5abd8c46649957cdbe9f26d408cca824ce5eb60
         tooltip: {
           callbacks: {
             label: (c) => {
@@ -3780,12 +3792,17 @@ function renderStintStrip() {
 function renderTopSpeedList(rs) {
   const el = document.getElementById("topSpeedList");
   if (!el) return;
+<<<<<<< HEAD
   const top = rs.speed_traps.slice(0, 20);
+=======
+  const top = rs.speed_traps.slice(0, 8);
+>>>>>>> e5abd8c46649957cdbe9f26d408cca824ce5eb60
   if (!top.length) {
     el.innerHTML = `<div class="race-story-empty">No speed-trap data.</div>`;
     return;
   }
   const leader = top[0].kmph;
+<<<<<<< HEAD
   const header = `<div class="speed-row speed-row-head">
       <span class="speed-rank">#</span>
       <span class="speed-name">Driver</span>
@@ -3800,17 +3817,29 @@ function renderTopSpeedList(rs) {
       const delta = s.kmph - leader;
       const pct = Math.max(20, Math.round((s.kmph / leader) * 100));
       const barColor = isPlayer ? "#e10600" : teamColorFor(s.team);
+=======
+  el.innerHTML = top
+    .map((s, i) => {
+      const isPlayer = s.name === rs.player_name;
+      const delta = s.kmph - leader;
+>>>>>>> e5abd8c46649957cdbe9f26d408cca824ce5eb60
       return `<div class="speed-row${isPlayer ? " is-player" : ""}">
         <span class="speed-rank">${i + 1}</span>
         <span class="speed-name">${s.name}</span>
         <span class="speed-team" style="color:${teamColorFor(s.team)}">${normalizeTeamName(s.team)}</span>
         <span class="speed-val">${s.kmph} km/h</span>
+<<<<<<< HEAD
         <span class="speed-bar-cell"><span class="speed-bar" style="width:${pct}%;background:${barColor}"></span></span>
+=======
+>>>>>>> e5abd8c46649957cdbe9f26d408cca824ce5eb60
         <span class="speed-delta">${delta === 0 ? "—" : delta + " km/h"}</span>
       </div>`;
     })
     .join("");
+<<<<<<< HEAD
   el.innerHTML = header + rows;
+=======
+>>>>>>> e5abd8c46649957cdbe9f26d408cca824ce5eb60
 }
 
 function renderPaceDeltaChart() {
@@ -3852,13 +3881,19 @@ function renderPaceDeltaChart() {
         },
       ],
     },
+<<<<<<< HEAD
     plugins: [pitLinesPlugin],
+=======
+>>>>>>> e5abd8c46649957cdbe9f26d408cca824ce5eb60
     options: {
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
         legend: { display: false },
+<<<<<<< HEAD
         pitLines: { laps: getPlayerPitLaps() },
+=======
+>>>>>>> e5abd8c46649957cdbe9f26d408cca824ce5eb60
         tooltip: {
           callbacks: {
             label: (c) =>
