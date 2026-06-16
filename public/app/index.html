@@ -146,7 +146,41 @@
           </div>
         </div>
 
+        <div class="collapsible-section" id="section-race-story">
+          <div class="section-header">
+            <h2 style="margin: 0; font-size: 1.05rem">🎬 Race Story</h2>
+          </div>
+          <div class="section-body">
+            <div id="raceStoryEmpty" class="race-story-empty" style="display:none">
+              Race Story is available for freshly uploaded race telemetry. Re-upload the JSON to view position changes, overtakes, and pace deltas for this session.
+            </div>
+            <div id="raceStoryContent" style="display:none">
+              <div class="race-story-headline" id="raceStoryHeadline"></div>
+              <div class="charts-grid">
+                <div class="chart-container full-width">
+                  <div class="chart-title">📈 Position Changes Through the Race</div>
+                  <canvas id="positionChart"></canvas>
+                </div>
+                <div class="chart-container full-width">
+                  <div class="chart-title">⚔️ Overtakes Timeline</div>
+                  <canvas id="overtakesChart"></canvas>
+                  <div id="overtakesSummary" class="race-story-list"></div>
+                </div>
+                <div class="chart-container full-width">
+                  <div class="chart-title">🛞 Tyre Stint Strategy</div>
+                  <div id="stintStrip" class="stint-strip"></div>
+                </div>
+                <div class="chart-container">
+                  <div class="chart-title">🚀 Speed Trap Leaderboard</div>
+                  <div id="topSpeedList" class="speed-trap-list"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div class="collapsible-section" id="section-graphs">
+
           <div class="section-header">
             <h2 style="margin: 0; font-size: 1.05rem">📊 Graphs & Metrics</h2>
           </div>
