@@ -2059,6 +2059,9 @@ function renderCharts() {
     },
   );
 
+  renderPaceDeltaChart();
+
+
   // Fuel Chart
   // compute avg-based bounds for fuel (kg)
   let fuelMin = null;
