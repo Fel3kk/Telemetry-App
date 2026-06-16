@@ -1151,3 +1151,155 @@ body.light-theme #driver-assignments-container { background: #ffffff; }
   .saved-sessions h3 { font-size: 0.74em; letter-spacing: 0.14em; }
   #driver-assignments-container .driver-card-grid { grid-template-columns: 1fr !important; }
 }
+
+/* ============================================================
+   Race Story
+   ============================================================ */
+.race-story-empty {
+  padding: 18px;
+  background: rgba(255,255,255,0.04);
+  border: 1px dashed var(--border-color, rgba(255,255,255,0.12));
+  border-radius: 10px;
+  color: var(--secondary-text, #b0b0b0);
+  font-size: 0.95em;
+  margin-bottom: 16px;
+}
+
+.race-story-headline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 4px 0 18px;
+}
+.rs-pill {
+  padding: 6px 12px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 999px;
+  font-size: 0.82em;
+  letter-spacing: 0.03em;
+  color: #e8e8e8;
+  font-family: "JetBrains Mono", monospace;
+}
+.rs-pill.rs-pos { color: #2ecc71; border-color: rgba(46,204,113,0.35); }
+.rs-pill.rs-neg { color: #e10600; border-color: rgba(225,6,0,0.45); }
+
+.stint-strip {
+  display: flex;
+  width: 100%;
+  height: 44px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.03);
+}
+.stint-block {
+  display: flex;
+  flex-direction: row;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.78em;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-right: 2px solid rgba(0,0,0,0.35);
+  padding: 4px 8px;
+  min-width: 0;
+}
+.stint-block:last-child { border-right: none; }
+.stint-compound { font-size: 0.85em; }
+.stint-laps { font-size: 0.72em; opacity: 0.85; font-family: "JetBrains Mono", monospace; }
+
+.speed-trap-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 4px;
+}
+.speed-row {
+  display: grid;
+  grid-template-columns: 28px 1.1fr 1fr 90px minmax(120px, 1fr) 90px;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.03);
+  font-size: 0.88em;
+}
+.speed-row-head {
+  background: transparent;
+  font-size: 0.72em;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #888;
+  padding-bottom: 2px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  border-radius: 0;
+}
+.speed-row-head .speed-val,
+.speed-row-head .speed-delta { color: #888; }
+.speed-row.is-player {
+  background: rgba(225,6,0,0.18);
+  border: 1px solid rgba(225,6,0,0.45);
+  font-weight: 700;
+}
+.speed-rank { color: #888; font-family: "JetBrains Mono", monospace; }
+.speed-name { font-weight: 600; }
+.speed-team { font-size: 0.78em; opacity: 0.85; }
+.speed-val { font-family: "JetBrains Mono", monospace; text-align: right; }
+.speed-delta { font-family: "JetBrains Mono", monospace; text-align: right; color: #888; font-size: 0.85em; }
+.speed-bar-cell {
+  display: block;
+  height: 8px;
+  background: rgba(255,255,255,0.05);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.speed-bar {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  transition: width .3s ease;
+}
+.speed-row-head .speed-bar-cell {
+  background: transparent;
+  height: auto;
+  text-align: left;
+  font: inherit;
+}
+
+.race-story-list { margin-top: 14px; }
+.rs-list-title {
+  font-size: 0.78em;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #888;
+  margin-bottom: 6px;
+}
+.rs-list-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 8px;
+  background: rgba(255,255,255,0.03);
+  border-radius: 6px;
+  margin-bottom: 4px;
+  font-size: 0.9em;
+}
+.rs-mono { font-family: "JetBrains Mono", monospace; color: #b0b0b0; }
+
+@media (max-width: 600px) {
+  .speed-row { grid-template-columns: 22px 1fr 70px 60px; }
+  .speed-team, .speed-bar-cell { display: none; }
+  #positionChart, #overtakesChart, #paceDeltaChart { height: 280px !important; }
+}
+
+/* Race-story containers that shouldn't enforce the default 500px height */
+.chart-container.auto-height,
+.chart-container.full-width.auto-height {
+  height: auto !important;
+  min-height: 0 !important;
+}
+.chart-container.auto-height .chart-title { margin-bottom: 10px; }
+.rs-canvas-wrap { position: relative; height: 320px; width: 100%; }
+.rs-canvas-wrap > canvas { width: 100% !important; height: 100% !important; }

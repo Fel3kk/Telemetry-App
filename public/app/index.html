@@ -92,6 +92,9 @@
         <button class="section-tab" data-target="section-assignments">
           🏎️ Driver Team Assignments
         </button>
+        <button class="section-tab" data-target="section-race-story">
+          🎬 Race Story
+        </button>
         <button class="section-tab" data-target="section-graphs">
           📊 Graphs & Metrics
         </button>
@@ -102,6 +105,7 @@
           🏁 Practice Review
         </button>
       </div>
+
       <div class="collapsible-content">
         <div class="collapsible-section" id="section-standings">
           <div class="section-header">
@@ -142,7 +146,41 @@
           </div>
         </div>
 
+        <div class="collapsible-section" id="section-race-story">
+          <div class="section-header">
+            <h2 style="margin: 0; font-size: 1.05rem">🎬 Race Story</h2>
+          </div>
+          <div class="section-body">
+            <div id="raceStoryEmpty" class="race-story-empty" style="display:none">
+              Race Story is available for freshly uploaded race telemetry. Re-upload the JSON to view position changes, overtakes, and pace deltas for this session.
+            </div>
+            <div id="raceStoryContent" style="display:none">
+              <div class="race-story-headline" id="raceStoryHeadline"></div>
+              <div class="charts-grid">
+                <div class="chart-container full-width">
+                  <div class="chart-title">📈 Position Changes Through the Race</div>
+                  <canvas id="positionChart"></canvas>
+                </div>
+                <div class="chart-container full-width auto-height">
+                  <div class="chart-title">⚔️ Overtakes Timeline</div>
+                  <div class="rs-canvas-wrap"><canvas id="overtakesChart"></canvas></div>
+                  <div id="overtakesSummary" class="race-story-list"></div>
+                </div>
+                <div class="chart-container full-width auto-height">
+                  <div class="chart-title">🛞 Tyre Stint Strategy</div>
+                  <div id="stintStrip" class="stint-strip"></div>
+                </div>
+                <div class="chart-container full-width auto-height">
+                  <div class="chart-title">🚀 Speed Trap Leaderboard</div>
+                  <div id="topSpeedList" class="speed-trap-list"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div class="collapsible-section" id="section-graphs">
+
           <div class="section-header">
             <h2 style="margin: 0; font-size: 1.05rem">📊 Graphs & Metrics</h2>
           </div>
@@ -157,6 +195,11 @@
                     <div class="chart-title">Lap Times</div>
                     <canvas id="lapTimesChart"></canvas>
                   </div>
+                  <div class="chart-container">
+                    <div class="chart-title">Pace vs Field Median (Δ seconds)</div>
+                    <canvas id="paceDeltaChart"></canvas>
+                  </div>
+
                   <div class="chart-container">
                     <div class="chart-title">Fuel Level</div>
                     <canvas id="fuelChart"></canvas>

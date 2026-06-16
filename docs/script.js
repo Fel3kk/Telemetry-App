@@ -482,12 +482,110 @@ function hideError() {
   document.getElementById("error").style.display = "none";
 }
 
+function buildRaceStory(rootData, playerName, playerTeam, classification_data) {
+  if (!rootData || typeof rootData !== "object") return null;
+  const positionHistoryRoot = rootData["position-history"] || [];
+  const overtakeRecords = rootData["overtakes"]?.records || [];
+  const speedTraps = rootData["speed-trap-records"] || [];
+
+  const playerPos = positionHistoryRoot.find((p) => p.name === playerName);
+  if (!playerPos && !classification_data?.length) return null;
+
+  const position_history = (playerPos?.["driver-position-history"] || [])
+    .filter((p) => p["lap-number"] >= 1)
+    .map((p) => ({ lap: p["lap-number"], position: p.position }));
+
+  // Podium = top 3 by final-classification.position
+  const podium = [];
+  const sortedClass = [...(classification_data || [])]
+    .filter((e) => e["final-classification"]?.position)
+    .sort(
+      (a, b) =>
+        (a["final-classification"]?.position || 99) -
+        (b["final-classification"]?.position || 99),
+    )
+    .slice(0, 3);
+  sortedClass.forEach((entry) => {
+    const name = String(entry["driver-name"] || "").toUpperCase();
+    if (name === playerName) return; // shown as the main line
+    const ph = positionHistoryRoot.find((p) => p.name === name);
+    if (!ph) return;
+    podium.push({
+      name,
+      team: entry.team || "",
+      final: entry["final-classification"]?.position,
+      history: (ph["driver-position-history"] || [])
+        .filter((p) => p["lap-number"] >= 1)
+        .map((p) => ({ lap: p["lap-number"], position: p.position })),
+    });
+  });
+
+  const overtakes_made = overtakeRecords
+    .filter((o) => o["overtaking-driver-name"] === playerName)
+    .map((o) => ({ lap: o["overtaking-driver-lap"], opponent: o["overtaken-driver-name"] }));
+  const overtakes_suffered = overtakeRecords
+    .filter((o) => o["overtaken-driver-name"] === playerName)
+    .map((o) => ({ lap: o["overtaken-driver-lap"], opponent: o["overtaking-driver-name"] }));
+
+  // Pace delta vs field median (in ms)
+  const driverLapTimes = (classification_data || []).map((e) => ({
+    name: String(e["driver-name"] || "").toUpperCase(),
+    laps: (e["lap-time-history"]?.["lap-history-data"] || []).map(
+      (l) => l["lap-time-in-ms"] || 0,
+    ),
+  }));
+  const playerLaps =
+    driverLapTimes.find((d) => d.name === playerName)?.laps || [];
+  const pace_delta = [];
+  for (let i = 0; i < playerLaps.length; i++) {
+    const playerMs = playerLaps[i];
+    if (!playerMs || playerMs <= 0) continue;
+    const others = driverLapTimes
+      .map((d) => d.laps[i])
+      .filter((v) => typeof v === "number" && v > 0);
+    if (others.length < 3) continue;
+    const sorted = [...others].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    const median =
+      sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+    pace_delta.push({
+      lap: i + 1,
+      delta_ms: playerMs - median,
+      median_ms: median,
+      player_ms: playerMs,
+    });
+  }
+
+  const speed_traps = [...speedTraps]
+    .sort(
+      (a, b) =>
+        (b["speed-trap-record-kmph"] || 0) - (a["speed-trap-record-kmph"] || 0),
+    )
+    .map((s) => ({
+      name: s.name,
+      team: s.team,
+      kmph: Math.round(s["speed-trap-record-kmph"] || 0),
+    }));
+
+  return {
+    player_name: playerName,
+    player_team: playerTeam,
+    position_history,
+    podium,
+    overtakes_made,
+    overtakes_suffered,
+    pace_delta,
+    speed_traps,
+  };
+}
+
 function processTelemetryData(data) {
   // Check if data is already processed summary from get_data.py
   if (Array.isArray(data) && data.length > 0 && data[0].lap_history) {
     console.log("Loading pre-processed telemetry summary");
     return data;
   }
+
 
   const results = [];
   let track_name = null;
@@ -719,7 +817,14 @@ function processTelemetryData(data) {
           });
         });
 
+        summary.race_story = buildRaceStory(
+          data,
+          driver_name,
+          obj.team || "",
+          classification_data,
+        );
         results.push(summary);
+
       } else {
         Object.values(obj).forEach(findPlayerInObj);
       }
@@ -753,6 +858,7 @@ async function loadSavedSessions() {
         starting_fuel: s.starting_fuel,
         stints: s.stints || [],
         results: s.results || [],
+        race_story: s.race_story || null,
       }));
 
       // Custom sorting: Season -> F1 2026 Calendar -> Date
@@ -794,6 +900,7 @@ async function saveSessions(sessions) {
     starting_fuel: session.starting_fuel,
     stints: session.stints,
     results: session.results,
+    race_story: session.race_story || null,
   }));
 
   const { error } = await supabaseClient
@@ -1126,7 +1233,9 @@ function renderContent() {
   renderTable();
   renderQualiResults();
   renderPracticeSection();
+  renderRaceStory();
   document.getElementById("content").style.display = "block";
+
 }
 
 function showPracticeSectionIfNeeded() {
@@ -1638,6 +1747,139 @@ function renderSessionInfo() {
   });
 }
 
+// Exclude pit laps, the starting lap, and red-flag laps from "clean" race-pace metrics
+function isCleanRaceLap(lap) {
+  if (!lap) return false;
+  if (Number(lap.lap) === 1) return false;
+  if (Number(lap.pit_status || 0) === 1) return false;
+  if (Number(lap.sc_status || 0) === 3) return false;
+  return true;
+}
+
+// Group contiguous SC/VSC/Red-Flag laps into single periods.
+// Returns [{ status, firstLap, lastLap, startOffset, endOffset, label }]
+// where startOffset/endOffset ∈ [-0.5, 0.5] are added to the lap index to
+// describe a half-lap shading boundary. We infer mid-lap start/end by
+// comparing the first/last flagged lap time to the median clean lap time:
+// a "normal" lap means the SC was only active for part of it.
+function computeSafetyCarPeriods(laps) {
+  if (!Array.isArray(laps) || laps.length === 0) return [];
+
+  const cleanTimes = laps
+    .filter(
+      (l) =>
+        Number(l.sc_status || 0) === 0 &&
+        Number(l.pit_status || 0) === 0 &&
+        Number(l.lap) > 1,
+    )
+    .map((l) => timeStringToSeconds(l.lap_time))
+    .filter((t) => typeof t === "number" && t > 0);
+
+  let median = null;
+  if (cleanTimes.length) {
+    const sorted = cleanTimes.slice().sort((a, b) => a - b);
+    median = sorted[Math.floor(sorted.length / 2)];
+  }
+  // SC laps usually cost 15-30s; treat <8s over median as "barely affected"
+  const PARTIAL_THRESHOLD = 8;
+
+  const labelFor = (st) => (st === 3 ? "RED" : st === 2 ? "VSC" : "SC");
+
+  const periods = [];
+  let i = 0;
+  while (i < laps.length) {
+    const st = Number(laps[i].sc_status || 0);
+    if (st === 0) {
+      i++;
+      continue;
+    }
+    let j = i;
+    while (j + 1 < laps.length && Number(laps[j + 1].sc_status || 0) === st) {
+      j++;
+    }
+    let startOffset = -0.5;
+    let endOffset = 0.5;
+    if (median !== null) {
+      const firstT = timeStringToSeconds(laps[i].lap_time);
+      const lastT = timeStringToSeconds(laps[j].lap_time);
+      if (
+        typeof firstT === "number" &&
+        firstT > 0 &&
+        firstT - median < PARTIAL_THRESHOLD
+      ) {
+        // first SC lap is near normal pace → SC engaged near the end of it
+        startOffset = 0;
+      }
+      if (
+        typeof lastT === "number" &&
+        lastT > 0 &&
+        lastT - median < PARTIAL_THRESHOLD &&
+        j !== i // don't collapse a single-lap period to zero width
+      ) {
+        // last SC lap is near normal pace → SC released near the start of it
+        endOffset = 0;
+      }
+    }
+    periods.push({
+      status: st,
+      firstLap: Number(laps[i].lap),
+      lastLap: Number(laps[j].lap),
+      startOffset,
+      endOffset,
+      label: labelFor(st),
+    });
+    i = j + 1;
+  }
+  return periods;
+}
+
+// Returns lap numbers where the player pitted, used to draw vertical lines on race charts
+function getPlayerPitLaps() {
+  const stints = currentData?.stints || [];
+  if (stints.length > 1) {
+    return stints
+      .slice(0, -1)
+      .map((s) => Number(s["end-lap"]))
+      .filter((n) => Number.isFinite(n) && n > 0);
+  }
+  const laps = currentData?.lap_history || [];
+  return laps
+    .filter((l) => Number(l.pit_status) === 1)
+    .map((l) => Number(l.lap))
+    .filter((n) => Number.isFinite(n) && n > 0);
+}
+
+// Chart.js plugin: draws dashed vertical "PIT" markers at given lap numbers.
+// Usage: register in `plugins: [pitLinesPlugin]` and pass options via
+// `options.plugins.pitLines = { laps: [...], color: '#ffc233' }`.
+const pitLinesPlugin = {
+  id: "pitLines",
+  afterDatasetsDraw(chart, _args, opts) {
+    const laps = (opts && opts.laps) || [];
+    if (!laps.length) return;
+    const { ctx, chartArea, scales } = chart;
+    const x = scales.x;
+    if (!x) return;
+    const color = (opts && opts.color) || "rgba(255, 194, 51, 0.75)";
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.setLineDash([5, 4]);
+    ctx.lineWidth = 1.4;
+    ctx.fillStyle = color;
+    ctx.font = "10px 'JetBrains Mono', monospace";
+    laps.forEach((lap) => {
+      const xPos = x.getPixelForValue(lap);
+      if (xPos < chartArea.left || xPos > chartArea.right) return;
+      ctx.beginPath();
+      ctx.moveTo(xPos, chartArea.top);
+      ctx.lineTo(xPos, chartArea.bottom);
+      ctx.stroke();
+      ctx.fillText("PIT L" + lap, xPos + 3, chartArea.top + 11);
+    });
+    ctx.restore();
+  },
+};
+
 function calculateStints() {
   const laps = currentData.lap_history;
   if (!laps || laps.length === 0) return [];
@@ -1687,6 +1929,7 @@ function calculateStints() {
 
         // Average lap time for the stint (seconds)
         const stintLapTimes = stintLaps
+          .filter(isCleanRaceLap)
           .map((l) => timeStringToSeconds(l.lap_time))
           .filter((v) => typeof v === "number" && v > 0);
         const avgLapSeconds =
@@ -1791,6 +2034,7 @@ function calculateStints() {
 
       // compute avg lap time for this generated stint
       const stintLapTimes = s.laps
+        .filter(isCleanRaceLap)
         .map((l) => timeStringToSeconds(l.lap_time))
         .filter((v) => typeof v === "number" && v > 0);
       const avgLapSeconds =
@@ -1951,6 +2195,9 @@ function renderCharts() {
       ),
     },
   );
+
+  renderPaceDeltaChart();
+
 
   // Fuel Chart
   // compute avg-based bounds for fuel (kg)
@@ -2518,41 +2765,53 @@ function createChart(
       const barWidth = x.width / laps.length;
 
       ctx.save();
+      // 1. Background overlays for SC / VSC / Red Flag — grouped per period
+      // with half-lap precision at the start/end boundaries.
+      const COLORS = {
+        1: "rgba(173, 216, 230, 0.22)", // SC – light blue
+        2: "rgba(255, 215, 0, 0.18)",   // VSC – amber
+        3: "rgba(255, 60, 60, 0.22)",   // Red Flag – red
+      };
+      const BORDERS = {
+        1: "rgba(120, 180, 230, 0.55)",
+        2: "rgba(255, 200, 0, 0.55)",
+        3: "rgba(255, 80, 80, 0.7)",
+      };
+      const periods = computeSafetyCarPeriods(laps);
+      periods.forEach((p) => {
+        const xFirst = x.getPixelForValue(p.firstLap);
+        const xLast = x.getPixelForValue(p.lastLap);
+        const xLeft = xFirst + p.startOffset * barWidth;
+        const xRight = xLast + p.endOffset * barWidth;
+        const w = Math.max(2, xRight - xLeft);
+        ctx.fillStyle = COLORS[p.status];
+        ctx.fillRect(xLeft, chartArea.top, w, chartArea.bottom - chartArea.top);
+        // soft borders so the boundary feels intentional, not noisy
+        ctx.strokeStyle = BORDERS[p.status];
+        ctx.lineWidth = 1;
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath();
+        ctx.moveTo(xLeft + 0.5, chartArea.top);
+        ctx.lineTo(xLeft + 0.5, chartArea.bottom);
+        ctx.moveTo(xLeft + w - 0.5, chartArea.top);
+        ctx.lineTo(xLeft + w - 0.5, chartArea.bottom);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        // single centered label with lap range
+        ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
+        ctx.font = `${isMobile ? 9 : 10}px sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "top";
+        const rangeTxt =
+          p.firstLap === p.lastLap
+            ? `${p.label} L${p.firstLap}`
+            : `${p.label} L${p.firstLap}–${p.lastLap}`;
+        ctx.fillText(rangeTxt, (xLeft + xRight) / 2, chartArea.top + 4);
+      });
+
+      // 2. Vertical lines for pit stops (kept per-lap)
       laps.forEach((lap) => {
         const xPos = x.getPixelForValue(lap.lap);
-
-        // 1. Draw Background Overlays for SC/Red Flag
-        let bgColor = null;
-        let statusLabel = null;
-        if (lap.sc_status === 3) {
-          bgColor = "rgba(255, 0, 0, 0.2)"; // Red Flag
-          statusLabel = "RED";
-        } else if (lap.sc_status === 2) {
-          bgColor = "rgba(255, 255, 0, 0.15)"; // VSC
-          statusLabel = "VSC";
-        } else if (lap.sc_status === 1) {
-          bgColor = "rgba(173, 216, 230, 0.2)"; // SC
-          statusLabel = "SC";
-        }
-
-        if (bgColor) {
-          ctx.fillStyle = bgColor;
-          // Draw a box covering the width of this lap's category
-          ctx.fillRect(
-            xPos - barWidth / 2,
-            chartArea.top,
-            barWidth,
-            chartArea.bottom - chartArea.top,
-          );
-
-          ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
-          ctx.font = `${isMobile ? 9 : 10}px sans-serif`;
-          ctx.textAlign = "center";
-          ctx.textBaseline = "top";
-          ctx.fillText(statusLabel, xPos, chartArea.top + 4);
-        }
-
-        // 2. Draw Vertical Lines for Pit Stops
         if (Number(lap.pit_status) === 1) {
           ctx.strokeStyle = "rgba(255, 255, 255, 0.6)";
           ctx.lineWidth = 2;
@@ -3253,4 +3512,372 @@ function initCollapsibleSections() {
   } catch (err) {
     console.warn("initCollapsibleSections failed", err);
   }
+}
+
+// ============================================================
+//  Race Story (player-focused) — position, overtakes, stints, speed traps
+// ============================================================
+
+const COMPOUND_FILL = {
+  Soft: "#ef3340",
+  Medium: "#f4d03f",
+  Hard: "#e8e8e8",
+  Intermediate: "#27ae60",
+  Wet: "#2e86de",
+};
+
+function normalizeTeamName(t) {
+  if (!t) return "";
+  let s = String(t).replace(/['’]?\d{2,4}$/, "").trim();
+  s = s.replace(/_/g, " ").toLowerCase();
+  if (s === "my team" || s === "myteam") return "My Team";
+  // capitalize words
+  return s.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function teamColorFor(team) {
+  const norm = normalizeTeamName(team);
+  return TEAM_COLORS[norm] || "#9aa0a6";
+}
+
+function renderRaceStory() {
+  const empty = document.getElementById("raceStoryEmpty");
+  const wrap = document.getElementById("raceStoryContent");
+  if (!empty || !wrap) return;
+
+  const rs = currentData && currentData.race_story;
+  if (!rs || !rs.position_history || rs.position_history.length === 0) {
+    empty.style.display = "block";
+    wrap.style.display = "none";
+    return;
+  }
+
+  empty.style.display = "none";
+  wrap.style.display = "block";
+
+  // Headline
+  const start = rs.position_history[0]?.position;
+  const end = rs.position_history[rs.position_history.length - 1]?.position;
+  const gained = (start ?? 0) - (end ?? 0);
+  const headline = document.getElementById("raceStoryHeadline");
+  if (headline) {
+    headline.innerHTML = `
+      <span class="rs-pill"><b>${rs.player_name}</b></span>
+      <span class="rs-pill">Start P${start ?? "?"}</span>
+      <span class="rs-pill">Finish P${end ?? "?"}</span>
+      <span class="rs-pill ${gained > 0 ? "rs-pos" : gained < 0 ? "rs-neg" : ""}">
+        ${gained > 0 ? "▲ +" + gained : gained < 0 ? "▼ " + gained : "—"} positions
+      </span>
+      <span class="rs-pill">Overtakes made ${rs.overtakes_made.length}</span>
+      <span class="rs-pill">Lost ${rs.overtakes_suffered.length}</span>
+    `;
+  }
+
+  renderPositionChart(rs);
+  renderOvertakesChart(rs);
+  renderStintStrip();
+  renderTopSpeedList(rs);
+}
+
+function renderPositionChart(rs) {
+  const ctx = document.getElementById("positionChart");
+  if (!ctx) return;
+  if (charts.positionChart) charts.positionChart.destroy();
+
+  const labels = rs.position_history.map((p) => p.lap);
+  const datasets = [
+    {
+      label: rs.player_name,
+      data: rs.position_history.map((p) => p.position),
+      borderColor: "#e10600",
+      backgroundColor: "rgba(225, 6, 0, 0.12)",
+      borderWidth: 3,
+      tension: 0.25,
+      pointRadius: 0,
+      pointHoverRadius: 5,
+      fill: false,
+      order: 0,
+    },
+  ];
+
+  rs.podium.forEach((p) => {
+    const color = teamColorFor(p.team);
+    datasets.push({
+      label: `${p.name} (P${p.final})`,
+      data: p.history.map((h) => h.position),
+      borderColor: color,
+      backgroundColor: color + "22",
+      borderWidth: 1.5,
+      borderDash: [4, 4],
+      tension: 0.2,
+      pointRadius: 0,
+      pointHoverRadius: 4,
+      fill: false,
+      order: 1,
+    });
+  });
+
+  const maxPos = Math.max(
+    ...rs.position_history.map((p) => p.position),
+    ...rs.podium.flatMap((p) => p.history.map((h) => h.position)),
+    5,
+  );
+
+  charts.positionChart = new Chart(ctx.getContext("2d"), {
+    type: "line",
+    data: { labels, datasets },
+    plugins: [pitLinesPlugin],
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } },
+        pitLines: { laps: getPlayerPitLaps() },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => `${ctx.dataset.label}: P${ctx.parsed.y}`,
+          },
+        },
+      },
+      scales: {
+        x: { title: { display: true, text: "Lap" } },
+        y: {
+          reverse: true,
+          min: 1,
+          max: maxPos,
+          ticks: { stepSize: 1, precision: 0 },
+          title: { display: true, text: "Position" },
+        },
+      },
+    },
+  });
+}
+
+function renderOvertakesChart(rs) {
+  const ctx = document.getElementById("overtakesChart");
+  if (!ctx) return;
+  if (charts.overtakesChart) charts.overtakesChart.destroy();
+
+  const lapMax = Math.max(
+    ...rs.position_history.map((p) => p.lap),
+    ...rs.overtakes_made.map((o) => o.lap),
+    ...rs.overtakes_suffered.map((o) => o.lap),
+    1,
+  );
+  const labels = Array.from({ length: lapMax }, (_, i) => i + 1);
+  const made = labels.map(
+    (l) => rs.overtakes_made.filter((o) => o.lap === l).length,
+  );
+  const suffered = labels.map(
+    (l) => -rs.overtakes_suffered.filter((o) => o.lap === l).length,
+  );
+
+  charts.overtakesChart = new Chart(ctx.getContext("2d"), {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "Overtakes Made",
+          data: made,
+          backgroundColor: "rgba(46, 204, 113, 0.85)",
+          borderColor: "rgba(46, 204, 113, 1)",
+          borderWidth: 1,
+        },
+        {
+          label: "Positions Lost",
+          data: suffered,
+          backgroundColor: "rgba(225, 6, 0, 0.85)",
+          borderColor: "rgba(225, 6, 0, 1)",
+          borderWidth: 1,
+        },
+      ],
+    },
+    plugins: [pitLinesPlugin],
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: "bottom" },
+        pitLines: { laps: getPlayerPitLaps() },
+        tooltip: {
+          callbacks: {
+            label: (c) => {
+              const lap = c.label;
+              const list =
+                c.datasetIndex === 0
+                  ? rs.overtakes_made.filter((o) => String(o.lap) === String(lap))
+                  : rs.overtakes_suffered.filter((o) => String(o.lap) === String(lap));
+              const verb = c.datasetIndex === 0 ? "Passed" : "Lost to";
+              return [
+                `${c.dataset.label}: ${Math.abs(c.parsed.y)}`,
+                ...list.map((o) => `  ${verb} ${o.opponent}`),
+              ];
+            },
+          },
+        },
+      },
+      scales: {
+        x: { stacked: true, title: { display: true, text: "Lap" } },
+        y: {
+          stacked: true,
+          ticks: {
+            stepSize: 1,
+            precision: 0,
+            callback: (v) => Math.abs(v),
+          },
+          title: { display: true, text: "Count" },
+        },
+      },
+    },
+  });
+
+  // Notable battles list
+  const summaryEl = document.getElementById("overtakesSummary");
+  if (summaryEl) {
+    const counts = {};
+    [...rs.overtakes_made, ...rs.overtakes_suffered].forEach((o) => {
+      counts[o.opponent] = (counts[o.opponent] || 0) + 1;
+    });
+    const top = Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5);
+    summaryEl.innerHTML =
+      `<div class="rs-list-title">Most battled drivers</div>` +
+      top
+        .map(
+          ([name, n]) =>
+            `<div class="rs-list-row"><span>${name}</span><span class="rs-mono">${n}× exchange${n > 1 ? "s" : ""}</span></div>`,
+        )
+        .join("");
+  }
+}
+
+function renderStintStrip() {
+  const el = document.getElementById("stintStrip");
+  if (!el) return;
+  const stints = currentData?.stints || [];
+  if (!stints.length) {
+    el.innerHTML = `<div class="race-story-empty">No stint data available.</div>`;
+    return;
+  }
+  const totalLaps = stints[stints.length - 1]["end-lap"] || 1;
+  el.innerHTML = stints
+    .map((s, i) => {
+      const compound =
+        s["tyre-set-data"]?.["visual-tyre-compound"] || "Medium";
+      const len = (s["end-lap"] - s["start-lap"] + 1) / totalLaps * 100;
+      const color = COMPOUND_FILL[compound] || "#888";
+      return `<div class="stint-block" style="flex-basis:${len}%;background:${color};color:${compound === "Hard" || compound === "Medium" ? "#111" : "#fff"}" title="Stint ${i + 1}: ${compound} (L${s["start-lap"]}–L${s["end-lap"]})">
+        <span class="stint-compound">${compound}</span>
+        <span class="stint-laps">L${s["start-lap"]}–L${s["end-lap"]}</span>
+      </div>`;
+    })
+    .join("");
+}
+
+function renderTopSpeedList(rs) {
+  const el = document.getElementById("topSpeedList");
+  if (!el) return;
+  const top = rs.speed_traps.slice(0, 20);
+  if (!top.length) {
+    el.innerHTML = `<div class="race-story-empty">No speed-trap data.</div>`;
+    return;
+  }
+  const leader = top[0].kmph;
+  const header = `<div class="speed-row speed-row-head">
+      <span class="speed-rank">#</span>
+      <span class="speed-name">Driver</span>
+      <span class="speed-team">Team</span>
+      <span class="speed-val">Top Speed</span>
+      <span class="speed-bar-cell">Relative</span>
+      <span class="speed-delta">Δ Leader</span>
+    </div>`;
+  const rows = top
+    .map((s, i) => {
+      const isPlayer = s.name === rs.player_name;
+      const delta = s.kmph - leader;
+      const pct = Math.max(20, Math.round((s.kmph / leader) * 100));
+      const barColor = isPlayer ? "#e10600" : teamColorFor(s.team);
+      return `<div class="speed-row${isPlayer ? " is-player" : ""}">
+        <span class="speed-rank">${i + 1}</span>
+        <span class="speed-name">${s.name}</span>
+        <span class="speed-team" style="color:${teamColorFor(s.team)}">${normalizeTeamName(s.team)}</span>
+        <span class="speed-val">${s.kmph} km/h</span>
+        <span class="speed-bar-cell"><span class="speed-bar" style="width:${pct}%;background:${barColor}"></span></span>
+        <span class="speed-delta">${delta === 0 ? "—" : delta + " km/h"}</span>
+      </div>`;
+    })
+    .join("");
+  el.innerHTML = header + rows;
+}
+
+function renderPaceDeltaChart() {
+  const ctx = document.getElementById("paceDeltaChart");
+  if (!ctx) return;
+  if (charts.paceDeltaChart) charts.paceDeltaChart.destroy();
+
+  const rs = currentData?.race_story;
+  if (!rs || !rs.pace_delta || rs.pace_delta.length === 0) {
+    const c = ctx.getContext("2d");
+    c.clearRect(0, 0, ctx.width, ctx.height);
+    c.fillStyle = "#888";
+    c.font = "13px sans-serif";
+    c.textAlign = "center";
+    c.fillText(
+      "Pace-vs-field requires a freshly uploaded race JSON.",
+      ctx.width / 2,
+      ctx.height / 2,
+    );
+    return;
+  }
+
+  const labels = rs.pace_delta.map((p) => p.lap);
+  const data = rs.pace_delta.map((p) => +(p.delta_ms / 1000).toFixed(3));
+  const colors = data.map((v) =>
+    v < 0 ? "rgba(46, 204, 113, 0.85)" : "rgba(225, 6, 0, 0.85)",
+  );
+
+  charts.paceDeltaChart = new Chart(ctx.getContext("2d"), {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "Δ vs field median (s)",
+          data,
+          backgroundColor: colors,
+          borderWidth: 0,
+        },
+      ],
+    },
+    plugins: [pitLinesPlugin],
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        pitLines: { laps: getPlayerPitLaps() },
+        tooltip: {
+          callbacks: {
+            label: (c) =>
+              `${c.parsed.y > 0 ? "+" : ""}${c.parsed.y.toFixed(3)} s vs median`,
+          },
+        },
+      },
+      scales: {
+        x: { title: { display: true, text: "Lap" } },
+        y: {
+          title: { display: true, text: "Δ seconds (− = faster)" },
+          grid: {
+            color: (ctx) =>
+              ctx.tick.value === 0
+                ? "rgba(255,255,255,0.5)"
+                : "rgba(255,255,255,0.08)",
+          },
+        },
+      },
+    },
+  });
 }
