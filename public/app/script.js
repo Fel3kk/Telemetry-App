@@ -1645,6 +1645,7 @@ function renderQualiResults() {
     tableDiv.innerHTML = tableHtml;
     segmentsGridContainer.appendChild(tableDiv);
   });
+  enableTableRowReorder("#quali-results-container table");
 }
 
 function updateQualiGapButton() {
