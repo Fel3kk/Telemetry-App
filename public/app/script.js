@@ -3516,12 +3516,25 @@ function secondsToTimeString(seconds) {
 // Collapsible sections helpers
 function initCollapsibleSections() {
   try {
+    const tabContainer = document.querySelector(".collapsible-tabs");
     const tabs = Array.from(document.querySelectorAll(".section-tab"));
     const sections = Array.from(
       document.querySelectorAll(".collapsible-section"),
     );
     const activeKey = "active_collapsible_section";
+    const orderKey = "collapsible_tab_order_v1";
     const storedActive = localStorage.getItem(activeKey);
+
+    // Restore saved tab order
+    try {
+      const savedOrder = JSON.parse(localStorage.getItem(orderKey) || "null");
+      if (Array.isArray(savedOrder) && tabContainer) {
+        savedOrder.forEach((target) => {
+          const tab = tabs.find((t) => t.dataset.target === target);
+          if (tab) tabContainer.appendChild(tab);
+        });
+      }
+    } catch (_) {}
 
     function activateSection(targetId) {
       sections.forEach((section) => {
@@ -3535,10 +3548,26 @@ function initCollapsibleSections() {
 
     tabs.forEach((tab) => {
       const targetId = tab.dataset.target;
-      tab.addEventListener("click", () => {
+      tab.addEventListener("click", (e) => {
+        // Ignore clicks that immediately follow a drag
+        if (tab.dataset.justDragged === "1") {
+          delete tab.dataset.justDragged;
+          return;
+        }
         activateSection(targetId);
       });
     });
+
+    if (tabContainer) {
+      enableDragReorder(tabContainer, ".section-tab", {
+        onReorder: () => {
+          const order = Array.from(
+            tabContainer.querySelectorAll(".section-tab"),
+          ).map((t) => t.dataset.target);
+          localStorage.setItem(orderKey, JSON.stringify(order));
+        },
+      });
+    }
 
     const defaultSection =
       storedActive && document.getElementById(storedActive)
@@ -3549,6 +3578,57 @@ function initCollapsibleSections() {
     console.warn("initCollapsibleSections failed", err);
   }
 }
+
+// Generic native HTML5 drag-and-drop reorder helper.
+// Marks all matching children as draggable, swaps DOM order on drop,
+// and calls opts.onReorder() afterwards. Safe to call repeatedly on the
+// same container (re-binds listeners cleanly via dataset flag).
+function enableDragReorder(container, itemSelector, opts = {}) {
+  if (!container) return;
+  const items = Array.from(container.querySelectorAll(itemSelector));
+  let dragging = null;
+  items.forEach((item) => {
+    if (item.dataset.dragBound === "1") return;
+    item.dataset.dragBound = "1";
+    item.setAttribute("draggable", "true");
+    item.addEventListener("dragstart", (e) => {
+      dragging = item;
+      item.classList.add("dragging");
+      try {
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", "");
+      } catch (_) {}
+    });
+    item.addEventListener("dragend", () => {
+      if (dragging) dragging.dataset.justDragged = "1";
+      item.classList.remove("dragging");
+      dragging = null;
+      if (typeof opts.onReorder === "function") opts.onReorder();
+    });
+    item.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      if (!dragging || dragging === item) return;
+      const rect = item.getBoundingClientRect();
+      // Decide horizontal vs vertical by the longer axis of the item
+      const horizontal = rect.width >= rect.height;
+      const before = horizontal
+        ? e.clientX < rect.left + rect.width / 2
+        : e.clientY < rect.top + rect.height / 2;
+      if (before) item.parentNode.insertBefore(dragging, item);
+      else item.parentNode.insertBefore(dragging, item.nextSibling);
+    });
+  });
+}
+
+// Apply drag-reorder to a freshly rendered table body. Call after innerHTML
+// updates that rebuild the rows.
+function enableTableRowReorder(tableSelector) {
+  document.querySelectorAll(tableSelector + " tbody").forEach((tbody) => {
+    enableDragReorder(tbody, "tr");
+    tbody.classList.add("reorderable-rows");
+  });
+}
+
 
 // ============================================================
 //  Race Story (player-focused) — position, overtakes, stints, speed traps
