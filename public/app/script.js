@@ -2801,6 +2801,15 @@ function createChart(
       const laps = currentData.lap_history;
       const barWidth = x.width / laps.length;
 
+      // Chart.js category scales treat the first arg to getPixelForValue() as
+      // an index, so passing the actual lap number draws everything offset by
+      // (labels[0]) ticks. Convert lap → label index instead.
+      const chartLabels = (chart.data && chart.data.labels) || [];
+      const pixelForLap = (lapNum) => {
+        const idx = chartLabels.findIndex((v) => Number(v) === Number(lapNum));
+        return x.getPixelForValue(idx >= 0 ? idx : lapNum);
+      };
+
       ctx.save();
       // 1. Background overlays for SC / VSC / Red Flag — grouped per period
       // with half-lap precision at the start/end boundaries.
@@ -2816,8 +2825,8 @@ function createChart(
       };
       const periods = computeSafetyCarPeriods(laps);
       periods.forEach((p) => {
-        const xFirst = x.getPixelForValue(p.firstLap);
-        const xLast = x.getPixelForValue(p.lastLap);
+        const xFirst = pixelForLap(p.firstLap);
+        const xLast = pixelForLap(p.lastLap);
         const xLeft = xFirst + p.startOffset * barWidth;
         const xRight = xLast + p.endOffset * barWidth;
         const w = Math.max(2, xRight - xLeft);
@@ -2848,7 +2857,7 @@ function createChart(
 
       // 2. Vertical lines for pit stops (kept per-lap)
       laps.forEach((lap) => {
-        const xPos = x.getPixelForValue(lap.lap);
+        const xPos = pixelForLap(lap.lap);
         if (Number(lap.pit_status) === 1) {
           ctx.strokeStyle = "rgba(255, 255, 255, 0.6)";
           ctx.lineWidth = 2;
