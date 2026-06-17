@@ -1303,3 +1303,52 @@ body.light-theme #driver-assignments-container { background: #ffffff; }
 .chart-container.auto-height .chart-title { margin-bottom: 10px; }
 .rs-canvas-wrap { position: relative; height: 320px; width: 100%; }
 .rs-canvas-wrap > canvas { width: 100% !important; height: 100% !important; }
+
+/* ============================================================
+   Drag-and-drop reorder affordances (tabs + standings rows)
+   ============================================================ */
+.section-tab[draggable="true"] { cursor: grab; }
+.section-tab[draggable="true"]:active { cursor: grabbing; }
+.section-tab.dragging,
+.reorderable-rows tr.dragging {
+  opacity: 0.55;
+  outline: 1px dashed var(--accent-red, #e10600);
+  outline-offset: -2px;
+}
+.reorderable-rows tr { cursor: grab; }
+.reorderable-rows tr:active { cursor: grabbing; }
+.reorderable-rows tr td:first-child::before {
+  content: "⋮⋮";
+  display: inline-block;
+  margin-right: 6px;
+  color: rgba(255,255,255,0.25);
+  font-size: 0.9em;
+  letter-spacing: -1px;
+  vertical-align: middle;
+}
+
+/* ============================================================
+   Consistency Rating pill in Session Info
+   ============================================================ */
+.consistency-pill {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.95em;
+  letter-spacing: 0.02em;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+}
+.consistency-pill .consistency-unit {
+  font-size: 0.65em;
+  opacity: 0.6;
+  font-weight: 500;
+}
+.consistency-elite { color: #2ecc71; border-color: rgba(46,204,113,0.45); background: rgba(46,204,113,0.10); }
+.consistency-good  { color: #4ea0ff; border-color: rgba(78,160,255,0.45); background: rgba(78,160,255,0.10); }
+.consistency-mid   { color: #f4d03f; border-color: rgba(244,208,63,0.45); background: rgba(244,208,63,0.10); }
+.consistency-low   { color: #e10600; border-color: rgba(225,6,0,0.50);   background: rgba(225,6,0,0.10); }
