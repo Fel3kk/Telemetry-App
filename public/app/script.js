@@ -1666,6 +1666,25 @@ function renderSessionInfo() {
   const totalFuelConsumed = Math.max(0, startFuel - lastFuel);
   const avgFuelPerLap = laps.length > 0 ? totalFuelConsumed / laps.length : 0;
 
+  // Consistency rating: how close the slowest clean lap is to the fastest.
+  // 100 = identical laps, 0 = slowest is 2x the fastest. Pit/SC/lap-1 excluded.
+  const cleanLapSeconds = laps
+    .filter(isCleanRaceLap)
+    .map((l) => timeStringToSeconds(l.lap_time))
+    .filter((t) => typeof t === "number" && t > 0);
+  let consistencyHtml = "—";
+  let consistencyTitle = "Needs at least 3 clean racing laps";
+  if (cleanLapSeconds.length >= 3) {
+    const fast = Math.min(...cleanLapSeconds);
+    const slow = Math.max(...cleanLapSeconds);
+    const spread = (slow - fast) / fast; // 0 = perfect
+    const rating = Math.max(0, Math.min(100, 100 - spread * 100));
+    const tier =
+      rating >= 95 ? "elite" : rating >= 88 ? "good" : rating >= 78 ? "mid" : "low";
+    consistencyHtml = `<span class="consistency-pill consistency-${tier}">${rating.toFixed(1)}<span class="consistency-unit">/100</span></span>`;
+    consistencyTitle = `Fastest ${fast.toFixed(3)}s · Slowest ${slow.toFixed(3)}s · Spread ${(slow - fast).toFixed(3)}s (${cleanLapSeconds.length} clean laps)`;
+  }
+
   const statusCounts = laps.reduce(
     (counts, lap) => {
       if (Number(lap.sc_status) === 1) counts.sc += 1;
