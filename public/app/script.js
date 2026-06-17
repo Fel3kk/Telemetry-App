@@ -1755,6 +1755,10 @@ function renderSessionInfo() {
             <div class="info-label">Avg Fuel / Lap</div>
             <div class="info-value">${avgFuelPerLap.toFixed(3)} kg</div>
         </div>
+        <div class="info-item" title="${consistencyTitle.replace(/"/g, "&quot;")}">
+            <div class="info-label">Consistency Rating</div>
+            <div class="info-value">${consistencyHtml}</div>
+        </div>
     `;
   document.getElementById("sessionInfo").innerHTML = html;
 
