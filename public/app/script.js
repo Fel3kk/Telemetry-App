@@ -2978,7 +2978,11 @@ function createChart(
                   scales: { x },
                 } = chart;
 
-                const xPos = x.getPixelForValue(fastestLapLap);
+                const chartLabels = (chart.data && chart.data.labels) || [];
+                const flIdx = chartLabels.findIndex(
+                  (v) => Number(v) === Number(fastestLapLap),
+                );
+                const xPos = x.getPixelForValue(flIdx >= 0 ? flIdx : fastestLapLap);
                 ctx.save();
                 ctx.strokeStyle = "rgba(170, 88, 255, 0.95)";
                 ctx.fillStyle = "rgba(170, 88, 255, 0.95)";
