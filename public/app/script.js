@@ -1867,8 +1867,21 @@ const pitLinesPlugin = {
     ctx.lineWidth = 1.4;
     ctx.fillStyle = color;
     ctx.font = "10px 'JetBrains Mono', monospace";
+    // Resolve a lap number to a pixel using the chart's actual label array.
+    // Chart.js category scales treat the first arg to getPixelForValue() as
+    // an index, so passing the lap number directly draws the line offset by
+    // (labels[0] - 0) ticks — usually 1, sometimes 2 if the telemetry skips a
+    // lap. Look up the label's real index to stay aligned with the data.
+    const labels = (chart.data && chart.data.labels) || [];
+    const resolveX = (lap) => {
+      if (labels.length) {
+        const idx = labels.findIndex((v) => Number(v) === Number(lap));
+        if (idx >= 0) return x.getPixelForValue(idx);
+      }
+      return x.getPixelForValue(lap);
+    };
     laps.forEach((lap) => {
-      const xPos = x.getPixelForValue(lap);
+      const xPos = resolveX(lap);
       if (xPos < chartArea.left || xPos > chartArea.right) return;
       ctx.beginPath();
       ctx.moveTo(xPos, chartArea.top);
