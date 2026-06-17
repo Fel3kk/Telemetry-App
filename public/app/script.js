@@ -3218,6 +3218,7 @@ function renderStandingsTable() {
   }
 
   container.innerHTML = html;
+  enableTableRowReorder("#standings-container .standings-table");
   // Render driver assignment UI below the standings
   try {
     renderDriverAssignments(driverNames);
