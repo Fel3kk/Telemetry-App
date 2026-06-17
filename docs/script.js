@@ -1645,6 +1645,7 @@ function renderQualiResults() {
     tableDiv.innerHTML = tableHtml;
     segmentsGridContainer.appendChild(tableDiv);
   });
+  enableTableRowReorder("#quali-results-container table");
 }
 
 function updateQualiGapButton() {
@@ -1665,6 +1666,25 @@ function renderSessionInfo() {
   const lastFuel = laps.length > 0 ? laps[laps.length - 1].fuel_kg : startFuel;
   const totalFuelConsumed = Math.max(0, startFuel - lastFuel);
   const avgFuelPerLap = laps.length > 0 ? totalFuelConsumed / laps.length : 0;
+
+  // Consistency rating: how close the slowest clean lap is to the fastest.
+  // 100 = identical laps, 0 = slowest is 2x the fastest. Pit/SC/lap-1 excluded.
+  const cleanLapSeconds = laps
+    .filter(isCleanRaceLap)
+    .map((l) => timeStringToSeconds(l.lap_time))
+    .filter((t) => typeof t === "number" && t > 0);
+  let consistencyHtml = "—";
+  let consistencyTitle = "Needs at least 3 clean racing laps";
+  if (cleanLapSeconds.length >= 3) {
+    const fast = Math.min(...cleanLapSeconds);
+    const slow = Math.max(...cleanLapSeconds);
+    const spread = (slow - fast) / fast; // 0 = perfect
+    const rating = Math.max(0, Math.min(100, 100 - spread * 100));
+    const tier =
+      rating >= 95 ? "elite" : rating >= 88 ? "good" : rating >= 78 ? "mid" : "low";
+    consistencyHtml = `<span class="consistency-pill consistency-${tier}">${rating.toFixed(1)}<span class="consistency-unit">/100</span></span>`;
+    consistencyTitle = `Fastest ${fast.toFixed(3)}s · Slowest ${slow.toFixed(3)}s · Spread ${(slow - fast).toFixed(3)}s (${cleanLapSeconds.length} clean laps)`;
+  }
 
   const statusCounts = laps.reduce(
     (counts, lap) => {
@@ -1735,6 +1755,10 @@ function renderSessionInfo() {
         <div class="info-item">
             <div class="info-label">Avg Fuel / Lap</div>
             <div class="info-value">${avgFuelPerLap.toFixed(3)} kg</div>
+        </div>
+        <div class="info-item" title="${consistencyTitle.replace(/"/g, "&quot;")}">
+            <div class="info-label">Consistency Rating</div>
+            <div class="info-value">${consistencyHtml}</div>
         </div>
     `;
   document.getElementById("sessionInfo").innerHTML = html;
@@ -1867,8 +1891,21 @@ const pitLinesPlugin = {
     ctx.lineWidth = 1.4;
     ctx.fillStyle = color;
     ctx.font = "10px 'JetBrains Mono', monospace";
+    // Resolve a lap number to a pixel using the chart's actual label array.
+    // Chart.js category scales treat the first arg to getPixelForValue() as
+    // an index, so passing the lap number directly draws the line offset by
+    // (labels[0] - 0) ticks — usually 1, sometimes 2 if the telemetry skips a
+    // lap. Look up the label's real index to stay aligned with the data.
+    const labels = (chart.data && chart.data.labels) || [];
+    const resolveX = (lap) => {
+      if (labels.length) {
+        const idx = labels.findIndex((v) => Number(v) === Number(lap));
+        if (idx >= 0) return x.getPixelForValue(idx);
+      }
+      return x.getPixelForValue(lap);
+    };
     laps.forEach((lap) => {
-      const xPos = x.getPixelForValue(lap);
+      const xPos = resolveX(lap);
       if (xPos < chartArea.left || xPos > chartArea.right) return;
       ctx.beginPath();
       ctx.moveTo(xPos, chartArea.top);
@@ -2764,6 +2801,15 @@ function createChart(
       const laps = currentData.lap_history;
       const barWidth = x.width / laps.length;
 
+      // Chart.js category scales treat the first arg to getPixelForValue() as
+      // an index, so passing the actual lap number draws everything offset by
+      // (labels[0]) ticks. Convert lap → label index instead.
+      const chartLabels = (chart.data && chart.data.labels) || [];
+      const pixelForLap = (lapNum) => {
+        const idx = chartLabels.findIndex((v) => Number(v) === Number(lapNum));
+        return x.getPixelForValue(idx >= 0 ? idx : lapNum);
+      };
+
       ctx.save();
       // 1. Background overlays for SC / VSC / Red Flag — grouped per period
       // with half-lap precision at the start/end boundaries.
@@ -2779,8 +2825,8 @@ function createChart(
       };
       const periods = computeSafetyCarPeriods(laps);
       periods.forEach((p) => {
-        const xFirst = x.getPixelForValue(p.firstLap);
-        const xLast = x.getPixelForValue(p.lastLap);
+        const xFirst = pixelForLap(p.firstLap);
+        const xLast = pixelForLap(p.lastLap);
         const xLeft = xFirst + p.startOffset * barWidth;
         const xRight = xLast + p.endOffset * barWidth;
         const w = Math.max(2, xRight - xLeft);
@@ -2811,7 +2857,7 @@ function createChart(
 
       // 2. Vertical lines for pit stops (kept per-lap)
       laps.forEach((lap) => {
-        const xPos = x.getPixelForValue(lap.lap);
+        const xPos = pixelForLap(lap.lap);
         if (Number(lap.pit_status) === 1) {
           ctx.strokeStyle = "rgba(255, 255, 255, 0.6)";
           ctx.lineWidth = 2;
@@ -2932,7 +2978,11 @@ function createChart(
                   scales: { x },
                 } = chart;
 
-                const xPos = x.getPixelForValue(fastestLapLap);
+                const chartLabels = (chart.data && chart.data.labels) || [];
+                const flIdx = chartLabels.findIndex(
+                  (v) => Number(v) === Number(fastestLapLap),
+                );
+                const xPos = x.getPixelForValue(flIdx >= 0 ? flIdx : fastestLapLap);
                 ctx.save();
                 ctx.strokeStyle = "rgba(170, 88, 255, 0.95)";
                 ctx.fillStyle = "rgba(170, 88, 255, 0.95)";
@@ -3182,6 +3232,7 @@ function renderStandingsTable() {
   }
 
   container.innerHTML = html;
+  enableTableRowReorder("#standings-container .standings-table");
   // Render driver assignment UI below the standings
   try {
     renderDriverAssignments(driverNames);
@@ -3480,12 +3531,25 @@ function secondsToTimeString(seconds) {
 // Collapsible sections helpers
 function initCollapsibleSections() {
   try {
+    const tabContainer = document.querySelector(".collapsible-tabs");
     const tabs = Array.from(document.querySelectorAll(".section-tab"));
     const sections = Array.from(
       document.querySelectorAll(".collapsible-section"),
     );
     const activeKey = "active_collapsible_section";
+    const orderKey = "collapsible_tab_order_v1";
     const storedActive = localStorage.getItem(activeKey);
+
+    // Restore saved tab order
+    try {
+      const savedOrder = JSON.parse(localStorage.getItem(orderKey) || "null");
+      if (Array.isArray(savedOrder) && tabContainer) {
+        savedOrder.forEach((target) => {
+          const tab = tabs.find((t) => t.dataset.target === target);
+          if (tab) tabContainer.appendChild(tab);
+        });
+      }
+    } catch (_) {}
 
     function activateSection(targetId) {
       sections.forEach((section) => {
@@ -3499,10 +3563,26 @@ function initCollapsibleSections() {
 
     tabs.forEach((tab) => {
       const targetId = tab.dataset.target;
-      tab.addEventListener("click", () => {
+      tab.addEventListener("click", (e) => {
+        // Ignore clicks that immediately follow a drag
+        if (tab.dataset.justDragged === "1") {
+          delete tab.dataset.justDragged;
+          return;
+        }
         activateSection(targetId);
       });
     });
+
+    if (tabContainer) {
+      enableDragReorder(tabContainer, ".section-tab", {
+        onReorder: () => {
+          const order = Array.from(
+            tabContainer.querySelectorAll(".section-tab"),
+          ).map((t) => t.dataset.target);
+          localStorage.setItem(orderKey, JSON.stringify(order));
+        },
+      });
+    }
 
     const defaultSection =
       storedActive && document.getElementById(storedActive)
@@ -3513,6 +3593,57 @@ function initCollapsibleSections() {
     console.warn("initCollapsibleSections failed", err);
   }
 }
+
+// Generic native HTML5 drag-and-drop reorder helper.
+// Marks all matching children as draggable, swaps DOM order on drop,
+// and calls opts.onReorder() afterwards. Safe to call repeatedly on the
+// same container (re-binds listeners cleanly via dataset flag).
+function enableDragReorder(container, itemSelector, opts = {}) {
+  if (!container) return;
+  const items = Array.from(container.querySelectorAll(itemSelector));
+  let dragging = null;
+  items.forEach((item) => {
+    if (item.dataset.dragBound === "1") return;
+    item.dataset.dragBound = "1";
+    item.setAttribute("draggable", "true");
+    item.addEventListener("dragstart", (e) => {
+      dragging = item;
+      item.classList.add("dragging");
+      try {
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", "");
+      } catch (_) {}
+    });
+    item.addEventListener("dragend", () => {
+      if (dragging) dragging.dataset.justDragged = "1";
+      item.classList.remove("dragging");
+      dragging = null;
+      if (typeof opts.onReorder === "function") opts.onReorder();
+    });
+    item.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      if (!dragging || dragging === item) return;
+      const rect = item.getBoundingClientRect();
+      // Decide horizontal vs vertical by the longer axis of the item
+      const horizontal = rect.width >= rect.height;
+      const before = horizontal
+        ? e.clientX < rect.left + rect.width / 2
+        : e.clientY < rect.top + rect.height / 2;
+      if (before) item.parentNode.insertBefore(dragging, item);
+      else item.parentNode.insertBefore(dragging, item.nextSibling);
+    });
+  });
+}
+
+// Apply drag-reorder to a freshly rendered table body. Call after innerHTML
+// updates that rebuild the rows.
+function enableTableRowReorder(tableSelector) {
+  document.querySelectorAll(tableSelector + " tbody").forEach((tbody) => {
+    enableDragReorder(tbody, "tr");
+    tbody.classList.add("reorderable-rows");
+  });
+}
+
 
 // ============================================================
 //  Race Story (player-focused) — position, overtakes, stints, speed traps
