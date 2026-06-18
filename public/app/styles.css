@@ -1408,6 +1408,6 @@ body.light-theme #driver-assignments-container { background: #ffffff; }
   white-space: nowrap; line-height: 1.45;
   box-shadow: var(--shadow-md); pointer-events: none;
   opacity: 0; visibility: hidden; transition: opacity 0.2s, visibility 0.2s;
-  z-index: 100; max-width: 320px; text-wrap: auto;
+  z-index: 9999; max-width: 320px; text-wrap: auto;
 }
 .hint-icon:hover::after { opacity: 1; visibility: visible; }
