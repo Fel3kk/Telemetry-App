@@ -708,6 +708,44 @@ button:hover, .download-btn:hover {
   font-weight: 700;
   font-family: var(--font-mono);
 }
+.fuel-calc-item label {
+  display: block;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted, #9aa3ad);
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+#targetLapsInput {
+  width: 100%;
+  background: linear-gradient(135deg, rgba(225,6,0,0.12), rgba(225,6,0,0.03));
+  border: 1px solid var(--border-red);
+  color: #fff;
+  padding: 12px 14px;
+  border-radius: 12px;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 1.05rem;
+  letter-spacing: 0.02em;
+  outline: none;
+  transition: border-color 0.18s, box-shadow 0.18s, transform 0.18s;
+  -moz-appearance: textfield;
+}
+#targetLapsInput::-webkit-outer-spin-button,
+#targetLapsInput::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+#targetLapsInput:hover {
+  border-color: rgba(225,6,0,0.75);
+}
+#targetLapsInput:focus {
+  border-color: var(--f1-red);
+  box-shadow: 0 0 0 3px rgba(225,6,0,0.22);
+  transform: translateY(-1px);
+}
+body.light-theme #targetLapsInput { color: #1a1a1a; }
 
 .lap-row-selected { background: rgba(225,6,0,0.10) !important; }
 .lap-select-cb { accent-color: var(--f1-red); transform: scale(1.1); }
