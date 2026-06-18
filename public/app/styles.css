@@ -1393,10 +1393,11 @@ body.light-theme #driver-assignments-container { background: #ffffff; }
 
 .hint-icon {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 16px; height: 16px; border-radius: 50%;
-  background: var(--text-mute); color: var(--bg-1);
-  font-size: 0.7em; font-weight: 700; cursor: help;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: var(--text-dim); color: var(--bg-0);
+  font-size: 0.75em; font-weight: 700; cursor: help;
   position: relative; line-height: 1;
+  border: 1px solid var(--text);
 }
 .hint-icon::after {
   content: attr(data-tooltip);
