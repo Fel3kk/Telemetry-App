@@ -1667,23 +1667,52 @@ function renderSessionInfo() {
   const totalFuelConsumed = Math.max(0, startFuel - lastFuel);
   const avgFuelPerLap = laps.length > 0 ? totalFuelConsumed / laps.length : 0;
 
-  // Consistency rating: how close the slowest clean lap is to the fastest.
-  // 100 = identical laps, 0 = slowest is 2x the fastest. Pit/SC/lap-1 excluded.
+  // Consistency rating: coefficient of variation across clean racing laps.
+  // Excludes lap 1, pit (in) laps, out-laps (lap after a pit), and any
+  // SC/VSC/Red Flag lap. Outliers slower than 107% of the fastest lap are
+  // trimmed before measuring spread so one lock-up doesn't dominate.
+  const pitLapNumbers = new Set(
+    laps
+      .filter((l) => Number(l.pit_status || 0) === 1)
+      .map((l) => Number(l.lap)),
+  );
+  const isCleanForConsistency = (l) => {
+    if (!l) return false;
+    const lapNum = Number(l.lap);
+    if (lapNum === 1) return false;
+    if (Number(l.pit_status || 0) === 1) return false;
+    if (Number(l.sc_status || 0) > 0) return false; // SC, VSC, Red
+    if (pitLapNumbers.has(lapNum - 1)) return false; // out-lap
+    return true;
+  };
   const cleanLapSeconds = laps
-    .filter(isCleanRaceLap)
+    .filter(isCleanForConsistency)
     .map((l) => timeStringToSeconds(l.lap_time))
     .filter((t) => typeof t === "number" && t > 0);
   let consistencyHtml = "—";
-  let consistencyTitle = "Needs at least 3 clean racing laps";
+  let consistencyTitle =
+    "Needs ≥3 clean racing laps (excludes lap 1, in/out laps, SC, VSC, Red)";
   if (cleanLapSeconds.length >= 3) {
     const fast = Math.min(...cleanLapSeconds);
-    const slow = Math.max(...cleanLapSeconds);
-    const spread = (slow - fast) / fast; // 0 = perfect
-    const rating = Math.max(0, Math.min(100, 100 - spread * 100));
+    const trimmed = cleanLapSeconds.filter((t) => t <= fast * 1.07);
+    const sample = trimmed.length >= 3 ? trimmed : cleanLapSeconds;
+    const dropped = cleanLapSeconds.length - sample.length;
+    const mean = sample.reduce((a, b) => a + b, 0) / sample.length;
+    const variance =
+      sample.reduce((a, b) => a + (b - mean) * (b - mean), 0) / sample.length;
+    const stddev = Math.sqrt(variance);
+    const slow = Math.max(...sample);
+    const cv = stddev / mean;
+    const rating = Math.max(0, Math.min(100, 100 - cv * 2000));
     const tier =
-      rating >= 95 ? "elite" : rating >= 88 ? "good" : rating >= 78 ? "mid" : "low";
+      rating >= 92 ? "elite" : rating >= 82 ? "good" : rating >= 68 ? "mid" : "low";
     consistencyHtml = `<span class="consistency-pill consistency-${tier}">${rating.toFixed(1)}<span class="consistency-unit">/100</span></span>`;
-    consistencyTitle = `Fastest ${fast.toFixed(3)}s · Slowest ${slow.toFixed(3)}s · Spread ${(slow - fast).toFixed(3)}s (${cleanLapSeconds.length} clean laps)`;
+    consistencyTitle =
+      `σ ${stddev.toFixed(3)}s · Mean ${mean.toFixed(3)}s · Spread ${(slow - fast).toFixed(3)}s · ${sample.length} laps used` +
+      (dropped > 0
+        ? ` (${dropped} outlier${dropped > 1 ? "s" : ""} >107% trimmed)`
+        : "") +
+      ` · excludes lap 1, in/out laps, SC/VSC/Red`;
   }
 
   const statusCounts = laps.reduce(
