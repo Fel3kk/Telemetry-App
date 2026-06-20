@@ -1567,9 +1567,11 @@ function renderQualiResults() {
     const tableDiv = document.createElement("div");
     tableDiv.className = "table-container";
 
+    const weatherIcon = determineWeatherIcon(session);
     let tableHtml = `
-      <h3 style="margin-bottom: 12px; color: var(--accent-red); font-size: 0.9rem; text-transform: uppercase;">
-        ⏱️ ${segmentTitle}
+      <h3 style="margin-bottom: 12px; color: var(--accent-red); font-size: 0.9rem; text-transform: uppercase; display:flex; align-items:center; gap:8px;">
+        <span>⏱️ ${segmentTitle}</span>
+        <span style="font-size:1.1rem;">${weatherIcon}</span>
       </h3>
       <table>
         <thead>
