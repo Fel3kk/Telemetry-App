@@ -826,7 +826,9 @@ body.light-theme #practiceStintTable tbody tr:nth-child(odd) { background: rgba(
 
 /* Compound badge pill */
 #stintTable .compound-badge,
-#practiceStintTable .compound-badge {
+#practiceStintTable .compound-badge,
+#lapTable .compound-badge,
+#practiceLapTable .compound-badge {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -840,7 +842,9 @@ body.light-theme #practiceStintTable tbody tr:nth-child(odd) { background: rgba(
   white-space: nowrap;
 }
 #stintTable .compound-dot,
-#practiceStintTable .compound-dot {
+#practiceStintTable .compound-dot,
+#lapTable .compound-dot,
+#practiceLapTable .compound-dot {
   width: 12px;
   height: 12px;
   box-shadow: 0 0 8px currentColor;

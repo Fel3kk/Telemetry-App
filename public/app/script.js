@@ -1427,6 +1427,14 @@ function renderPracticeTable() {
     }
     lastCompound = currentComp;
 
+    const prCompKey = String(lap.current_tyre_compound).toUpperCase();
+    const prDotColor = COMPOUND_COLORS[prCompKey] || "#888";
+    const prRgba = (hex, a) => {
+      const r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
+      return `rgba(${r},${g},${b},${a})`;
+    };
+    const prCompoundBadge = `<span class="compound-badge" style="background:${prRgba(prDotColor, 0.12)};border-color:${prRgba(prDotColor, 0.45)};color:${prDotColor}"><span class="compound-dot" style="background-color:${prDotColor}"></span>${lap.current_tyre_compound}</span>`;
+
     row.innerHTML = `
             <td class="text-center"><input type="checkbox" class="lap-select-cb" ${selectedPracticeLaps.has(lap.lap) ? "checked" : ""}></td>
             <td class="text-center" style="padding: 8px 4px;">${lap.lap}</td>
@@ -1435,7 +1443,7 @@ function renderPracticeTable() {
             <td class="text-center group-start" style="padding: 8px 4px;">${lap.s1}</td>
             <td class="text-center" style="padding: 8px 4px;">${lap.s2}</td>
             <td class="text-center group-end" style="padding: 8px 4px;">${lap.s3}</td>
-            <td class="text-center" style="padding: 8px 4px;">${lap.current_tyre_compound}</td>
+            <td class="text-center" style="padding: 8px 4px;">${prCompoundBadge}</td>
             <td class="text-center" style="padding: 8px 4px;">${lap.fuel_kg.toFixed(2)}</td>
             <td class="text-center" style="padding: 8px 4px;">${fuelConsumed.toFixed(2)}</td>
             <td class="text-center group-start ${getWearClass(lap.tyre_wear.FL)}" style="padding: 8px 4px;">${lap.tyre_wear.FL.toFixed(2)}</td>
