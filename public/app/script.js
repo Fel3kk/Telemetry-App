@@ -3123,6 +3123,14 @@ function renderTable() {
     }
     lastCompound = currentComp;
 
+    const rtCompKey = String(lap.current_tyre_compound).toUpperCase();
+    const rtDotColor = COMPOUND_COLORS[rtCompKey] || "#888";
+    const rtRgba = (hex, a) => {
+      const r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
+      return `rgba(${r},${g},${b},${a})`;
+    };
+    const rtCompoundBadge = `<span class="compound-badge" style="background:${rtRgba(rtDotColor, 0.12)};border-color:${rtRgba(rtDotColor, 0.45)};color:${rtDotColor}"><span class="compound-dot" style="background-color:${rtDotColor}"></span>${lap.current_tyre_compound}</span>`;
+
     row.innerHTML = `
             <td class="text-center" style="padding: 8px 4px;">${lap.lap}</td>
             <td class="text-center" style="padding: 8px 4px;">${statusLabel}</td>
@@ -3130,7 +3138,7 @@ function renderTable() {
             <td class="text-center group-start" style="padding: 8px 4px;">${lap.s1}</td>
             <td class="text-center" style="padding: 8px 4px;">${lap.s2}</td>
             <td class="text-center group-end" style="padding: 8px 4px;">${lap.s3}</td>
-            <td class="text-center" style="padding: 8px 4px;">${lap.current_tyre_compound}</td>
+            <td class="text-center" style="padding: 8px 4px;">${rtCompoundBadge}</td>
             <td class="text-center" style="padding: 8px 4px;">${lap.fuel_kg.toFixed(2)}</td>
             <td class="text-center" style="padding: 8px 4px;">${fuelConsumed.toFixed(2)}</td>
             <td class="text-center group-start ${getWearClass(lap.tyre_wear.FL)}" style="padding: 8px 4px;">${lap.tyre_wear.FL.toFixed(2)}</td>
