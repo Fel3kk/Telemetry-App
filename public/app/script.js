@@ -1567,9 +1567,11 @@ function renderQualiResults() {
     const tableDiv = document.createElement("div");
     tableDiv.className = "table-container";
 
+    const weatherIcon = determineWeatherIcon(session);
     let tableHtml = `
-      <h3 style="margin-bottom: 12px; color: var(--accent-red); font-size: 0.9rem; text-transform: uppercase;">
-        ⏱️ ${segmentTitle}
+      <h3 style="margin-bottom: 12px; color: var(--accent-red); font-size: 0.9rem; text-transform: uppercase; display:flex; align-items:center; gap:8px;">
+        <span>⏱️ ${segmentTitle}</span>
+        <span style="font-size:1.1rem;">${weatherIcon}</span>
       </h3>
       <table>
         <thead>
@@ -4041,3 +4043,44 @@ function renderPaceDeltaChart() {
     },
   });
 }
+
+// Global floating tooltip for .hint-icon elements (escapes overflow:hidden parents)
+(function initHintTooltip() {
+  let tipEl = null;
+  function ensureEl() {
+    if (!tipEl) {
+      tipEl = document.createElement("div");
+      tipEl.id = "global-hint-tooltip";
+      document.body.appendChild(tipEl);
+    }
+    return tipEl;
+  }
+  function position(target) {
+    const el = ensureEl();
+    const r = target.getBoundingClientRect();
+    el.style.left = "0px";
+    el.style.top = "0px";
+    const tw = el.offsetWidth;
+    const th = el.offsetHeight;
+    let left = r.left + r.width / 2 - tw / 2;
+    let top = r.top - th - 8;
+    if (top < 8) top = r.bottom + 8;
+    left = Math.max(8, Math.min(left, window.innerWidth - tw - 8));
+    el.style.left = left + "px";
+    el.style.top = top + "px";
+  }
+  document.addEventListener("mouseover", (e) => {
+    const t = e.target.closest(".hint-icon");
+    if (!t) return;
+    const el = ensureEl();
+    el.textContent = t.getAttribute("data-tooltip") || "";
+    el.classList.add("show");
+    position(t);
+  });
+  document.addEventListener("mouseout", (e) => {
+    const t = e.target.closest(".hint-icon");
+    if (!t) return;
+    if (tipEl) tipEl.classList.remove("show");
+  });
+  window.addEventListener("scroll", () => { if (tipEl) tipEl.classList.remove("show"); }, true);
+})();
