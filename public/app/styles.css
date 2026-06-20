@@ -1399,15 +1399,18 @@ body.light-theme #driver-assignments-container { background: #ffffff; }
   position: relative; line-height: 1;
   border: 1px solid var(--text);
 }
-.hint-icon::after {
-  content: attr(data-tooltip);
-  position: absolute; bottom: 140%; left: 50%; transform: translateX(-50%);
+.hint-icon::after { content: none; }
+
+#global-hint-tooltip {
+  position: fixed;
   background: var(--bg-3); color: var(--text);
   border: 1px solid var(--border-strong); border-radius: 8px;
   padding: 8px 12px; font-size: 0.82em; font-weight: 400;
-  white-space: nowrap; line-height: 1.45;
+  line-height: 1.45;
   box-shadow: var(--shadow-md); pointer-events: none;
-  opacity: 0; visibility: hidden; transition: opacity 0.2s, visibility 0.2s;
-  z-index: 9999; max-width: 320px; text-wrap: auto;
+  opacity: 0; visibility: hidden; transition: opacity 0.15s;
+  z-index: 99999; max-width: 320px;
+  white-space: normal;
 }
-.hint-icon:hover::after { opacity: 1; visibility: visible; }
+#global-hint-tooltip.show { opacity: 1; visibility: visible; }
+
