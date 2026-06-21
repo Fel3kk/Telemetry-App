@@ -1008,14 +1008,17 @@ function renderSavedSessions(sessions) {
 
   grid.innerHTML = "";
 
-  // Render summary cards below the session grid instead of above it
+  // Render summary cards at the TOP of the main pane
   let summaryContainer = document.getElementById("seasonSummaryCards");
   if (!summaryContainer) {
     summaryContainer = document.createElement("div");
     summaryContainer.id = "seasonSummaryCards";
     summaryContainer.className = "season-summary";
   }
-  grid.insertAdjacentElement("afterend", summaryContainer);
+  const summaryHost = document.getElementById("seasonStatsHost");
+  if (summaryHost && summaryContainer.parentElement !== summaryHost) {
+    summaryHost.appendChild(summaryContainer);
+  }
   summaryContainer.innerHTML = `
     <div class="stat-card">
       <span class="stat-label">Race Wins</span>
@@ -1034,123 +1037,89 @@ function renderSavedSessions(sessions) {
       <span class="stat-value">⚡ ${sprintPoles}</span>
     </div>
   `;
-  const searchQuery = (document.getElementById("searchTrack")?.value || "").toLowerCase();
-  const catFilter = document.getElementById("filterCategory")?.value || "all";
-  const sortVal = document.getElementById("sortSessions")?.value || "date_desc";
 
-  // Group sessions by Track + Season + Event type (GP vs Sprint)
-  const trackGroups = {};
-  sessions.forEach((s) => {
-    if (s.season !== currentSeason) return;
+  // Build flat list of sessions for the active season, sorted newest first
+  const displaySessions = sessions
+    .filter((s) => s.season === currentSeason)
+    .slice()
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
-    // Separate GP (Race/Quali) from Sprint (Sprint/Shootout) into different cards
-    // while keeping Qualifying data attached to its corresponding main session.
-    let eventGroup = s.category;
-    if (s.category === "Qualifying") eventGroup = "Race";
-    if (s.category === "Sprint Shootout") eventGroup = "Sprint";
-
-    const key = `${normalizeTrackName(s.track_name)}_${s.season}_${eventGroup}`;
-    if (!trackGroups[key]) trackGroups[key] = [];
-    trackGroups[key].push(s);
+  // Group by date (YYYY-MM-DD) so we can render date headers
+  const groupsByDate = new Map();
+  displaySessions.forEach((s) => {
+    const d = new Date(s.created_at);
+    const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+    if (!groupsByDate.has(key)) groupsByDate.set(key, { date: d, items: [] });
+    groupsByDate.get(key).items.push(s);
   });
 
-  // Priority for which session represents the "Card" in the sidebar
-  const priority = {
-    Race: 0,
-    Sprint: 1,
-    "Sprint Shootout": 2,
-    Qualifying: 3,
-    Practice: 4,
+  const fmtTime = (d) =>
+    `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  const fmtDateHeader = (d) =>
+    d
+      .toLocaleDateString(undefined, {
+        weekday: "short",
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      })
+      .toUpperCase();
+
+  const catLabel = (c) => {
+    if (!c) return "";
+    if (c === "Sprint Shootout") return "SHOOTOUT";
+    return c.toUpperCase();
   };
 
-  let displaySessions = [];
-  for (const key in trackGroups) {
-    const group = trackGroups[key];
+  for (const { date, items } of groupsByDate.values()) {
+    const header = document.createElement("div");
+    header.className = "session-date-header";
+    header.textContent = fmtDateHeader(date);
+    grid.appendChild(header);
 
-    // Sort group so Race > Sprint > Quali
-    group.sort(
-      (a, b) => (priority[a.category] ?? 99) - (priority[b.category] ?? 99),
-    );
+    items.forEach((session) => {
+      const trackKey = (session.track_name || "").toLowerCase();
+      const flag = trackToFlag[trackKey] || "🏁";
+      const weatherIcon = determineWeatherIcon(session);
+      const isWin =
+        session.category === "Race" &&
+        Number(session.finishing_position) === 1;
+      const winMarker = isWin
+        ? '<span class="result-tag win-marker mini">WIN</span>'
+        : "";
+      const t = new Date(session.created_at);
 
-    const rep = group[0]; // Representative session (usually the Race)
-
-    const matchSearch = (rep.track_name || "")
-      .toLowerCase()
-      .includes(searchQuery);
-    const matchCat = catFilter === "all" || rep.category === catFilter;
-
-    if (matchSearch && matchCat) {
-      displaySessions.push(rep);
-    }
-  }
-
-  if (sortVal === "date_desc")
-    displaySessions.sort(
-      (a, b) => new Date(b.created_at) - new Date(a.created_at),
-    );
-  if (sortVal === "date_asc")
-    displaySessions.sort(
-      (a, b) => new Date(a.created_at) - new Date(b.created_at),
-    );
-
-  displaySessions.forEach((session) => {
-    const trackKey = (session.track_name || "").toLowerCase();
-    const flag = `<span class="flag-icon" title="${session.track_name}">${trackToFlag[trackKey] || "🏁"}</span>`;
-
-    const isWin = Number(session.finishing_position) === 1;
-    const winMarker = isWin
-      ? '<span class="result-tag win-marker">🏁 WIN</span>'
-      : "";
-    const startPos = session.starting_position || 0;
-    const isPole = startPos === 1;
-    const poleMarker = isPole
-      ? '<span class="result-tag pole-marker">🥇 POLE</span>'
-      : "";
-    const weatherIcon = determineWeatherIcon(session);
-
-    const finPos = session.finishing_position || 0;
-    const diff = startPos - finPos;
-    const diffText = diff > 0 ? `+${diff}` : diff < 0 ? diff : "0";
-    const diffClass = diff > 0 ? "pos-gain" : diff < 0 ? "pos-loss" : "";
-
-    const card = document.createElement("div");
-    card.className = `session-card ${currentData && currentData.id === session.id ? "active" : ""}`;
-
-    card.innerHTML = `
-      <button class="delete-btn" title="Delete">🗑️</button>
-      <div class="session-badges">
-        <span class="category-badge">${session.category}</span>
-        ${winMarker}
-        ${poleMarker}
-      </div>
-      <div class="track-title" style="margin-bottom: 2px; font-size: 0.85rem;">${flag} ${session.track_name} ${weatherIcon}</div>
-      <div style="display: flex; justify-content: space-between; align-items: flex-end;">
-        <div style="font-size: 0.75em; color: #888; line-height: 1.2;">
-          ${new Date(session.created_at).toLocaleDateString()}<br>
-          ${session.driver_name}
-        </div>
-        <div style="text-align: right;">
-          <div style="font-size: 0.65em; color: #aaa; text-transform: uppercase;">Pos</div>
-          <div style="font-size: 1.05em; font-weight: bold;">
-            ${startPos || "?"}→${finPos || "?"} 
-            <span class="${diffClass}" style="font-size: 0.8em; margin-left: 2px;">(${diffText})</span>
+      const card = document.createElement("div");
+      card.className = `session-row ${currentData && currentData.id === session.id ? "active" : ""}`;
+      card.innerHTML = `
+        <button class="delete-btn" title="Delete">🗑️</button>
+        <div class="sr-left">
+          <div class="sr-track">
+            <span class="flag-icon">${flag}</span>
+            <span class="sr-track-name">${session.track_name || "Unknown"}</span>
           </div>
+          <div class="sr-time">${fmtTime(t)}</div>
         </div>
-      </div>
-    `;
+        <div class="sr-right">
+          <span class="sr-cat">🏁 ${catLabel(session.category)}</span>
+          <span class="sr-weather">${weatherIcon}</span>
+          ${winMarker}
+        </div>
+      `;
 
-    card.querySelector(".delete-btn").onclick = (e) =>
-      deleteSession(session.id, e);
+      card.querySelector(".delete-btn").onclick = (e) =>
+        deleteSession(session.id, e);
 
-    card.addEventListener("click", (e) => {
-      if (e.target.closest(".delete-btn")) return;
-      currentData = session;
-      renderContent();
-      renderSavedSessions(allSessions);
+      card.addEventListener("click", (e) => {
+        if (e.target.closest(".delete-btn")) return;
+        currentData = session;
+        renderContent();
+        renderSavedSessions(allSessions);
+      });
+
+      grid.appendChild(card);
     });
-
-    grid.appendChild(card);
-  });
+  }
 
   renderStandingsTable();
 
@@ -4094,4 +4063,21 @@ function renderPaceDeltaChart() {
     if (tipEl) tipEl.classList.remove("show");
   });
   window.addEventListener("scroll", () => { if (tipEl) tipEl.classList.remove("show"); }, true);
+})();
+
+// Sidebar collapse toggle
+(function () {
+  const apply = (collapsed) => {
+    document.getElementById("appShell")?.classList.toggle("sidebar-collapsed", collapsed);
+    try { localStorage.setItem("sidebarCollapsed", collapsed ? "1" : "0"); } catch (e) {}
+  };
+  document.addEventListener("DOMContentLoaded", () => {
+    const initial = (() => { try { return localStorage.getItem("sidebarCollapsed") === "1"; } catch (e) { return false; }})();
+    apply(initial);
+    document.getElementById("sidebarToggle")?.addEventListener("click", () => {
+      const collapsed = !document.getElementById("appShell")?.classList.contains("sidebar-collapsed");
+      apply(collapsed);
+    });
+    document.getElementById("sidebarExpand")?.addEventListener("click", () => apply(false));
+  });
 })();
