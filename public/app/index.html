@@ -18,14 +18,15 @@
         🌓
       </button>
     </nav>
-    <div class="app-shell">
+    <div class="app-shell" id="appShell">
       <aside class="sidebar" id="sidebar">
         <div class="sidebar-brand">
           <div class="brand-mark">🏎️</div>
-          <div>
+          <div class="brand-text">
             <div class="brand-title">F1 Telemetry</div>
             <div class="brand-sub">Analyzer</div>
           </div>
+          <button id="sidebarToggle" class="sidebar-toggle" title="Collapse sidebar" aria-label="Toggle sidebar">⟨</button>
         </div>
 
         <details class="sidebar-block" open>
@@ -58,9 +59,13 @@
 
       <div class="main-pane">
       <div class="header compact-header">
+        <button id="sidebarExpand" class="sidebar-expand" title="Show sidebar" aria-label="Show sidebar">⟩</button>
         <h1>🏎️ F1 Telemetry Analyzer</h1>
         <p>Detailed stats &amp; graphs from your telemetry uploads</p>
       </div>
+
+      <div id="seasonStatsHost" class="season-stats-host"></div>
+
 
       <div class="collapsible-tabs sticky-tabs">
         <button class="section-tab active" data-target="section-standings">
