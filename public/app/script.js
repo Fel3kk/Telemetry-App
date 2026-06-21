@@ -1034,11 +1034,9 @@ function renderSavedSessions(sessions) {
       <span class="stat-value">⚡ ${sprintPoles}</span>
     </div>
   `;
-  const searchQuery = document
-    .getElementById("searchTrack")
-    .value.toLowerCase();
-  const catFilter = document.getElementById("filterCategory").value;
-  const sortVal = document.getElementById("sortSessions").value;
+  const searchQuery = (document.getElementById("searchTrack")?.value || "").toLowerCase();
+  const catFilter = document.getElementById("filterCategory")?.value || "all";
+  const sortVal = document.getElementById("sortSessions")?.value || "date_desc";
 
   // Group sessions by Track + Season + Event type (GP vs Sprint)
   const trackGroups = {};
