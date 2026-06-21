@@ -164,15 +164,12 @@ window.addEventListener("DOMContentLoaded", () => {
   if (dlQualiBtn)
     dlQualiBtn.addEventListener("click", handleDownloadQualiTemplate);
 
-  document
-    .getElementById("searchTrack")
-    .addEventListener("input", () => renderSavedSessions(allSessions));
-  document
-    .getElementById("filterCategory")
-    .addEventListener("change", () => renderSavedSessions(allSessions));
-  document
-    .getElementById("sortSessions")
-    .addEventListener("change", () => renderSavedSessions(allSessions));
+  const _st = document.getElementById("searchTrack");
+  if (_st) _st.addEventListener("input", () => renderSavedSessions(allSessions));
+  const _fc = document.getElementById("filterCategory");
+  if (_fc) _fc.addEventListener("change", () => renderSavedSessions(allSessions));
+  const _ss = document.getElementById("sortSessions");
+  if (_ss) _ss.addEventListener("change", () => renderSavedSessions(allSessions));
 });
 
 async function handleDownloadTemplate() {
