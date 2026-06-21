@@ -4064,3 +4064,20 @@ function renderPaceDeltaChart() {
   });
   window.addEventListener("scroll", () => { if (tipEl) tipEl.classList.remove("show"); }, true);
 })();
+
+// Sidebar collapse toggle
+(function () {
+  const apply = (collapsed) => {
+    document.getElementById("appShell")?.classList.toggle("sidebar-collapsed", collapsed);
+    try { localStorage.setItem("sidebarCollapsed", collapsed ? "1" : "0"); } catch (e) {}
+  };
+  document.addEventListener("DOMContentLoaded", () => {
+    const initial = (() => { try { return localStorage.getItem("sidebarCollapsed") === "1"; } catch (e) { return false; }})();
+    apply(initial);
+    document.getElementById("sidebarToggle")?.addEventListener("click", () => {
+      const collapsed = !document.getElementById("appShell")?.classList.contains("sidebar-collapsed");
+      apply(collapsed);
+    });
+    document.getElementById("sidebarExpand")?.addEventListener("click", () => apply(false));
+  });
+})();
