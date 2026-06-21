@@ -164,15 +164,12 @@ window.addEventListener("DOMContentLoaded", () => {
   if (dlQualiBtn)
     dlQualiBtn.addEventListener("click", handleDownloadQualiTemplate);
 
-  document
-    .getElementById("searchTrack")
-    .addEventListener("input", () => renderSavedSessions(allSessions));
-  document
-    .getElementById("filterCategory")
-    .addEventListener("change", () => renderSavedSessions(allSessions));
-  document
-    .getElementById("sortSessions")
-    .addEventListener("change", () => renderSavedSessions(allSessions));
+  const _st = document.getElementById("searchTrack");
+  if (_st) _st.addEventListener("input", () => renderSavedSessions(allSessions));
+  const _fc = document.getElementById("filterCategory");
+  if (_fc) _fc.addEventListener("change", () => renderSavedSessions(allSessions));
+  const _ss = document.getElementById("sortSessions");
+  if (_ss) _ss.addEventListener("change", () => renderSavedSessions(allSessions));
 });
 
 async function handleDownloadTemplate() {
@@ -1037,11 +1034,9 @@ function renderSavedSessions(sessions) {
       <span class="stat-value">⚡ ${sprintPoles}</span>
     </div>
   `;
-  const searchQuery = document
-    .getElementById("searchTrack")
-    .value.toLowerCase();
-  const catFilter = document.getElementById("filterCategory").value;
-  const sortVal = document.getElementById("sortSessions").value;
+  const searchQuery = (document.getElementById("searchTrack")?.value || "").toLowerCase();
+  const catFilter = document.getElementById("filterCategory")?.value || "all";
+  const sortVal = document.getElementById("sortSessions")?.value || "date_desc";
 
   // Group sessions by Track + Season + Event type (GP vs Sprint)
   const trackGroups = {};
