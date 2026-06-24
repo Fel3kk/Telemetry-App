@@ -164,15 +164,12 @@ window.addEventListener("DOMContentLoaded", () => {
   if (dlQualiBtn)
     dlQualiBtn.addEventListener("click", handleDownloadQualiTemplate);
 
-  document
-    .getElementById("searchTrack")
-    .addEventListener("input", () => renderSavedSessions(allSessions));
-  document
-    .getElementById("filterCategory")
-    .addEventListener("change", () => renderSavedSessions(allSessions));
-  document
-    .getElementById("sortSessions")
-    .addEventListener("change", () => renderSavedSessions(allSessions));
+  const _st = document.getElementById("searchTrack");
+  if (_st) _st.addEventListener("input", () => renderSavedSessions(allSessions));
+  const _fc = document.getElementById("filterCategory");
+  if (_fc) _fc.addEventListener("change", () => renderSavedSessions(allSessions));
+  const _ss = document.getElementById("sortSessions");
+  if (_ss) _ss.addEventListener("change", () => renderSavedSessions(allSessions));
 });
 
 async function handleDownloadTemplate() {
@@ -1011,14 +1008,17 @@ function renderSavedSessions(sessions) {
 
   grid.innerHTML = "";
 
-  // Render summary cards below the session grid instead of above it
+  // Render summary cards at the TOP of the main pane
   let summaryContainer = document.getElementById("seasonSummaryCards");
   if (!summaryContainer) {
     summaryContainer = document.createElement("div");
     summaryContainer.id = "seasonSummaryCards";
     summaryContainer.className = "season-summary";
   }
-  grid.insertAdjacentElement("afterend", summaryContainer);
+  const summaryHost = document.getElementById("seasonStatsHost");
+  if (summaryHost && summaryContainer.parentElement !== summaryHost) {
+    summaryHost.appendChild(summaryContainer);
+  }
   summaryContainer.innerHTML = `
     <div class="stat-card">
       <span class="stat-label">Race Wins</span>
@@ -1037,125 +1037,90 @@ function renderSavedSessions(sessions) {
       <span class="stat-value">⚡ ${sprintPoles}</span>
     </div>
   `;
-  const searchQuery = document
-    .getElementById("searchTrack")
-    .value.toLowerCase();
-  const catFilter = document.getElementById("filterCategory").value;
-  const sortVal = document.getElementById("sortSessions").value;
 
-  // Group sessions by Track + Season + Event type (GP vs Sprint)
-  const trackGroups = {};
-  sessions.forEach((s) => {
-    if (s.season !== currentSeason) return;
+  // Build flat list of sessions for the active season, sorted newest first
+  const displaySessions = sessions
+    .filter((s) => s.season === currentSeason)
+    .filter((s) => s.category !== "Qualifying" && s.category !== "Sprint Shootout")
+    .slice()
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
-    // Separate GP (Race/Quali) from Sprint (Sprint/Shootout) into different cards
-    // while keeping Qualifying data attached to its corresponding main session.
-    let eventGroup = s.category;
-    if (s.category === "Qualifying") eventGroup = "Race";
-    if (s.category === "Sprint Shootout") eventGroup = "Sprint";
-
-    const key = `${normalizeTrackName(s.track_name)}_${s.season}_${eventGroup}`;
-    if (!trackGroups[key]) trackGroups[key] = [];
-    trackGroups[key].push(s);
+  // Group by date (YYYY-MM-DD) so we can render date headers
+  const groupsByDate = new Map();
+  displaySessions.forEach((s) => {
+    const d = new Date(s.created_at);
+    const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+    if (!groupsByDate.has(key)) groupsByDate.set(key, { date: d, items: [] });
+    groupsByDate.get(key).items.push(s);
   });
 
-  // Priority for which session represents the "Card" in the sidebar
-  const priority = {
-    Race: 0,
-    Sprint: 1,
-    "Sprint Shootout": 2,
-    Qualifying: 3,
-    Practice: 4,
+  const fmtTime = (d) =>
+    `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  const fmtDateHeader = (d) =>
+    d
+      .toLocaleDateString(undefined, {
+        weekday: "short",
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      })
+      .toUpperCase();
+
+  const catLabel = (c) => {
+    if (!c) return "";
+    if (c === "Sprint Shootout") return "SHOOTOUT";
+    return c.toUpperCase();
   };
 
-  let displaySessions = [];
-  for (const key in trackGroups) {
-    const group = trackGroups[key];
+  for (const { date, items } of groupsByDate.values()) {
+    const header = document.createElement("div");
+    header.className = "session-date-header";
+    header.textContent = fmtDateHeader(date);
+    grid.appendChild(header);
 
-    // Sort group so Race > Sprint > Quali
-    group.sort(
-      (a, b) => (priority[a.category] ?? 99) - (priority[b.category] ?? 99),
-    );
+    items.forEach((session) => {
+      const trackKey = (session.track_name || "").toLowerCase();
+      const flag = trackToFlag[trackKey] || "🏁";
+      const weatherIcon = determineWeatherIcon(session);
+      const isWin =
+        session.category === "Race" &&
+        Number(session.finishing_position) === 1;
+      const winMarker = isWin
+        ? '<span class="result-tag win-marker mini">WIN</span>'
+        : "";
+      const t = new Date(session.created_at);
 
-    const rep = group[0]; // Representative session (usually the Race)
-
-    const matchSearch = (rep.track_name || "")
-      .toLowerCase()
-      .includes(searchQuery);
-    const matchCat = catFilter === "all" || rep.category === catFilter;
-
-    if (matchSearch && matchCat) {
-      displaySessions.push(rep);
-    }
-  }
-
-  if (sortVal === "date_desc")
-    displaySessions.sort(
-      (a, b) => new Date(b.created_at) - new Date(a.created_at),
-    );
-  if (sortVal === "date_asc")
-    displaySessions.sort(
-      (a, b) => new Date(a.created_at) - new Date(b.created_at),
-    );
-
-  displaySessions.forEach((session) => {
-    const trackKey = (session.track_name || "").toLowerCase();
-    const flag = `<span class="flag-icon" title="${session.track_name}">${trackToFlag[trackKey] || "🏁"}</span>`;
-
-    const isWin = Number(session.finishing_position) === 1;
-    const winMarker = isWin
-      ? '<span class="result-tag win-marker">🏁 WIN</span>'
-      : "";
-    const startPos = session.starting_position || 0;
-    const isPole = startPos === 1;
-    const poleMarker = isPole
-      ? '<span class="result-tag pole-marker">🥇 POLE</span>'
-      : "";
-    const weatherIcon = determineWeatherIcon(session);
-
-    const finPos = session.finishing_position || 0;
-    const diff = startPos - finPos;
-    const diffText = diff > 0 ? `+${diff}` : diff < 0 ? diff : "0";
-    const diffClass = diff > 0 ? "pos-gain" : diff < 0 ? "pos-loss" : "";
-
-    const card = document.createElement("div");
-    card.className = `session-card ${currentData && currentData.id === session.id ? "active" : ""}`;
-
-    card.innerHTML = `
-      <button class="delete-btn" title="Delete">🗑️</button>
-      <div class="session-badges">
-        <span class="category-badge">${session.category}</span>
-        ${winMarker}
-        ${poleMarker}
-      </div>
-      <div class="track-title" style="margin-bottom: 2px; font-size: 0.85rem;">${flag} ${session.track_name} ${weatherIcon}</div>
-      <div style="display: flex; justify-content: space-between; align-items: flex-end;">
-        <div style="font-size: 0.75em; color: #888; line-height: 1.2;">
-          ${new Date(session.created_at).toLocaleDateString()}<br>
-          ${session.driver_name}
-        </div>
-        <div style="text-align: right;">
-          <div style="font-size: 0.65em; color: #aaa; text-transform: uppercase;">Pos</div>
-          <div style="font-size: 1.05em; font-weight: bold;">
-            ${startPos || "?"}→${finPos || "?"} 
-            <span class="${diffClass}" style="font-size: 0.8em; margin-left: 2px;">(${diffText})</span>
+      const card = document.createElement("div");
+      card.className = `session-row ${currentData && currentData.id === session.id ? "active" : ""}`;
+      card.innerHTML = `
+        <button class="delete-btn" title="Delete">🗑️</button>
+        <div class="sr-left">
+          <div class="sr-track">
+            <span class="flag-icon">${flag}</span>
+            <span class="sr-track-name">${session.track_name || "Unknown"}</span>
           </div>
+          <div class="sr-time">${fmtTime(t)}</div>
         </div>
-      </div>
-    `;
+        <div class="sr-right">
+          <span class="sr-cat">🏁 ${catLabel(session.category)}</span>
+          <span class="sr-weather">${weatherIcon}</span>
+          ${winMarker}
+        </div>
+      `;
 
-    card.querySelector(".delete-btn").onclick = (e) =>
-      deleteSession(session.id, e);
+      card.querySelector(".delete-btn").onclick = (e) =>
+        deleteSession(session.id, e);
 
-    card.addEventListener("click", (e) => {
-      if (e.target.closest(".delete-btn")) return;
-      currentData = session;
-      renderContent();
-      renderSavedSessions(allSessions);
+      card.addEventListener("click", (e) => {
+        if (e.target.closest(".delete-btn")) return;
+        currentData = session;
+        renderContent();
+        renderSavedSessions(allSessions);
+      });
+
+      grid.appendChild(card);
     });
-
-    grid.appendChild(card);
-  });
+  }
 
   renderStandingsTable();
 
@@ -1427,6 +1392,14 @@ function renderPracticeTable() {
     }
     lastCompound = currentComp;
 
+    const prCompKey = String(lap.current_tyre_compound).toUpperCase();
+    const prDotColor = COMPOUND_COLORS[prCompKey] || "#888";
+    const prRgba = (hex, a) => {
+      const r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
+      return `rgba(${r},${g},${b},${a})`;
+    };
+    const prCompoundBadge = `<span class="compound-badge" style="background:${prRgba(prDotColor, 0.12)};border-color:${prRgba(prDotColor, 0.45)};color:${prDotColor}"><span class="compound-dot" style="background-color:${prDotColor}"></span>${lap.current_tyre_compound}</span>`;
+
     row.innerHTML = `
             <td class="text-center"><input type="checkbox" class="lap-select-cb" ${selectedPracticeLaps.has(lap.lap) ? "checked" : ""}></td>
             <td class="text-center" style="padding: 8px 4px;">${lap.lap}</td>
@@ -1435,7 +1408,7 @@ function renderPracticeTable() {
             <td class="text-center group-start" style="padding: 8px 4px;">${lap.s1}</td>
             <td class="text-center" style="padding: 8px 4px;">${lap.s2}</td>
             <td class="text-center group-end" style="padding: 8px 4px;">${lap.s3}</td>
-            <td class="text-center" style="padding: 8px 4px;">${lap.current_tyre_compound}</td>
+            <td class="text-center" style="padding: 8px 4px;">${prCompoundBadge}</td>
             <td class="text-center" style="padding: 8px 4px;">${lap.fuel_kg.toFixed(2)}</td>
             <td class="text-center" style="padding: 8px 4px;">${fuelConsumed.toFixed(2)}</td>
             <td class="text-center group-start ${getWearClass(lap.tyre_wear.FL)}" style="padding: 8px 4px;">${lap.tyre_wear.FL.toFixed(2)}</td>
@@ -1567,9 +1540,11 @@ function renderQualiResults() {
     const tableDiv = document.createElement("div");
     tableDiv.className = "table-container";
 
+    const weatherIcon = determineWeatherIcon(session);
     let tableHtml = `
-      <h3 style="margin-bottom: 12px; color: var(--accent-red); font-size: 0.9rem; text-transform: uppercase;">
-        ⏱️ ${segmentTitle}
+      <h3 style="margin-bottom: 12px; color: var(--accent-red); font-size: 0.9rem; text-transform: uppercase; display:flex; align-items:center; gap:8px;">
+        <span>⏱️ ${segmentTitle}</span>
+        <span style="font-size:1.1rem;">${weatherIcon}</span>
       </h3>
       <table>
         <thead>
@@ -1645,6 +1620,7 @@ function renderQualiResults() {
     tableDiv.innerHTML = tableHtml;
     segmentsGridContainer.appendChild(tableDiv);
   });
+  enableTableRowReorder("#quali-results-container table");
 }
 
 function updateQualiGapButton() {
@@ -1665,6 +1641,54 @@ function renderSessionInfo() {
   const lastFuel = laps.length > 0 ? laps[laps.length - 1].fuel_kg : startFuel;
   const totalFuelConsumed = Math.max(0, startFuel - lastFuel);
   const avgFuelPerLap = laps.length > 0 ? totalFuelConsumed / laps.length : 0;
+
+  // Consistency rating: coefficient of variation across clean racing laps.
+  // Excludes lap 1, pit (in) laps, out-laps (lap after a pit), and any
+  // SC/VSC/Red Flag lap. Outliers slower than 107% of the fastest lap are
+  // trimmed before measuring spread so one lock-up doesn't dominate.
+  const pitLapNumbers = new Set(
+    laps
+      .filter((l) => Number(l.pit_status || 0) === 1)
+      .map((l) => Number(l.lap)),
+  );
+  const isCleanForConsistency = (l) => {
+    if (!l) return false;
+    const lapNum = Number(l.lap);
+    if (lapNum === 1) return false;
+    if (Number(l.pit_status || 0) === 1) return false;
+    if (Number(l.sc_status || 0) > 0) return false; // SC, VSC, Red
+    if (pitLapNumbers.has(lapNum - 1)) return false; // out-lap
+    return true;
+  };
+  const cleanLapSeconds = laps
+    .filter(isCleanForConsistency)
+    .map((l) => timeStringToSeconds(l.lap_time))
+    .filter((t) => typeof t === "number" && t > 0);
+  let consistencyHtml = "—";
+  let consistencyTitle =
+    "Needs ≥3 clean racing laps (excludes lap 1, in/out laps, SC, VSC, Red)";
+  if (cleanLapSeconds.length >= 3) {
+    const fast = Math.min(...cleanLapSeconds);
+    const trimmed = cleanLapSeconds.filter((t) => t <= fast * 1.07);
+    const sample = trimmed.length >= 3 ? trimmed : cleanLapSeconds;
+    const dropped = cleanLapSeconds.length - sample.length;
+    const mean = sample.reduce((a, b) => a + b, 0) / sample.length;
+    const variance =
+      sample.reduce((a, b) => a + (b - mean) * (b - mean), 0) / sample.length;
+    const stddev = Math.sqrt(variance);
+    const slow = Math.max(...sample);
+    const cv = stddev / mean;
+    const rating = Math.max(0, Math.min(100, 100 - cv * 2000));
+    const tier =
+      rating >= 92 ? "elite" : rating >= 82 ? "good" : rating >= 68 ? "mid" : "low";
+    consistencyHtml = `<span class="consistency-pill consistency-${tier}">${rating.toFixed(1)}<span class="consistency-unit">/100</span></span>`;
+    consistencyTitle =
+      `σ ${stddev.toFixed(3)}s · Mean ${mean.toFixed(3)}s · Spread ${(slow - fast).toFixed(3)}s · ${sample.length} laps used` +
+      (dropped > 0
+        ? ` (${dropped} outlier${dropped > 1 ? "s" : ""} >107% trimmed)`
+        : "") +
+      ` · excludes lap 1, in/out laps, SC/VSC/Red`;
+  }
 
   const statusCounts = laps.reduce(
     (counts, lap) => {
@@ -1735,6 +1759,10 @@ function renderSessionInfo() {
         <div class="info-item">
             <div class="info-label">Avg Fuel / Lap</div>
             <div class="info-value">${avgFuelPerLap.toFixed(3)} kg</div>
+        </div>
+        <div class="info-item" title="${consistencyTitle.replace(/"/g, "&quot;")}">
+            <div class="info-label" style="display:flex;align-items:center;gap:6px;">Consistency Rating<span class="hint-icon" data-tooltip="Rating = max(0, min(100, 100 − CV × 2000)) where CV = σ / mean on clean laps (excl. lap 1, in/out laps, SC/VSC/Red, outliers >107% trimmed)">?</span></div>
+            <div class="info-value">${consistencyHtml}</div>
         </div>
     `;
   document.getElementById("sessionInfo").innerHTML = html;
@@ -1867,8 +1895,21 @@ const pitLinesPlugin = {
     ctx.lineWidth = 1.4;
     ctx.fillStyle = color;
     ctx.font = "10px 'JetBrains Mono', monospace";
+    // Resolve a lap number to a pixel using the chart's actual label array.
+    // Chart.js category scales treat the first arg to getPixelForValue() as
+    // an index, so passing the lap number directly draws the line offset by
+    // (labels[0] - 0) ticks — usually 1, sometimes 2 if the telemetry skips a
+    // lap. Look up the label's real index to stay aligned with the data.
+    const labels = (chart.data && chart.data.labels) || [];
+    const resolveX = (lap) => {
+      if (labels.length) {
+        const idx = labels.findIndex((v) => Number(v) === Number(lap));
+        if (idx >= 0) return x.getPixelForValue(idx);
+      }
+      return x.getPixelForValue(lap);
+    };
     laps.forEach((lap) => {
-      const xPos = x.getPixelForValue(lap);
+      const xPos = resolveX(lap);
       if (xPos < chartArea.left || xPos > chartArea.right) return;
       ctx.beginPath();
       ctx.moveTo(xPos, chartArea.top);
@@ -2764,6 +2805,15 @@ function createChart(
       const laps = currentData.lap_history;
       const barWidth = x.width / laps.length;
 
+      // Chart.js category scales treat the first arg to getPixelForValue() as
+      // an index, so passing the actual lap number draws everything offset by
+      // (labels[0]) ticks. Convert lap → label index instead.
+      const chartLabels = (chart.data && chart.data.labels) || [];
+      const pixelForLap = (lapNum) => {
+        const idx = chartLabels.findIndex((v) => Number(v) === Number(lapNum));
+        return x.getPixelForValue(idx >= 0 ? idx : lapNum);
+      };
+
       ctx.save();
       // 1. Background overlays for SC / VSC / Red Flag — grouped per period
       // with half-lap precision at the start/end boundaries.
@@ -2779,8 +2829,8 @@ function createChart(
       };
       const periods = computeSafetyCarPeriods(laps);
       periods.forEach((p) => {
-        const xFirst = x.getPixelForValue(p.firstLap);
-        const xLast = x.getPixelForValue(p.lastLap);
+        const xFirst = pixelForLap(p.firstLap);
+        const xLast = pixelForLap(p.lastLap);
         const xLeft = xFirst + p.startOffset * barWidth;
         const xRight = xLast + p.endOffset * barWidth;
         const w = Math.max(2, xRight - xLeft);
@@ -2811,7 +2861,7 @@ function createChart(
 
       // 2. Vertical lines for pit stops (kept per-lap)
       laps.forEach((lap) => {
-        const xPos = x.getPixelForValue(lap.lap);
+        const xPos = pixelForLap(lap.lap);
         if (Number(lap.pit_status) === 1) {
           ctx.strokeStyle = "rgba(255, 255, 255, 0.6)";
           ctx.lineWidth = 2;
@@ -2932,7 +2982,11 @@ function createChart(
                   scales: { x },
                 } = chart;
 
-                const xPos = x.getPixelForValue(fastestLapLap);
+                const chartLabels = (chart.data && chart.data.labels) || [];
+                const flIdx = chartLabels.findIndex(
+                  (v) => Number(v) === Number(fastestLapLap),
+                );
+                const xPos = x.getPixelForValue(flIdx >= 0 ? flIdx : fastestLapLap);
                 ctx.save();
                 ctx.strokeStyle = "rgba(170, 88, 255, 0.95)";
                 ctx.fillStyle = "rgba(170, 88, 255, 0.95)";
@@ -3034,6 +3088,14 @@ function renderTable() {
     }
     lastCompound = currentComp;
 
+    const rtCompKey = String(lap.current_tyre_compound).toUpperCase();
+    const rtDotColor = COMPOUND_COLORS[rtCompKey] || "#888";
+    const rtRgba = (hex, a) => {
+      const r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
+      return `rgba(${r},${g},${b},${a})`;
+    };
+    const rtCompoundBadge = `<span class="compound-badge" style="background:${rtRgba(rtDotColor, 0.12)};border-color:${rtRgba(rtDotColor, 0.45)};color:${rtDotColor}"><span class="compound-dot" style="background-color:${rtDotColor}"></span>${lap.current_tyre_compound}</span>`;
+
     row.innerHTML = `
             <td class="text-center" style="padding: 8px 4px;">${lap.lap}</td>
             <td class="text-center" style="padding: 8px 4px;">${statusLabel}</td>
@@ -3041,7 +3103,7 @@ function renderTable() {
             <td class="text-center group-start" style="padding: 8px 4px;">${lap.s1}</td>
             <td class="text-center" style="padding: 8px 4px;">${lap.s2}</td>
             <td class="text-center group-end" style="padding: 8px 4px;">${lap.s3}</td>
-            <td class="text-center" style="padding: 8px 4px;">${lap.current_tyre_compound}</td>
+            <td class="text-center" style="padding: 8px 4px;">${rtCompoundBadge}</td>
             <td class="text-center" style="padding: 8px 4px;">${lap.fuel_kg.toFixed(2)}</td>
             <td class="text-center" style="padding: 8px 4px;">${fuelConsumed.toFixed(2)}</td>
             <td class="text-center group-start ${getWearClass(lap.tyre_wear.FL)}" style="padding: 8px 4px;">${lap.tyre_wear.FL.toFixed(2)}</td>
@@ -3182,6 +3244,7 @@ function renderStandingsTable() {
   }
 
   container.innerHTML = html;
+  enableTableRowReorder("#standings-container .standings-table");
   // Render driver assignment UI below the standings
   try {
     renderDriverAssignments(driverNames);
@@ -3480,12 +3543,25 @@ function secondsToTimeString(seconds) {
 // Collapsible sections helpers
 function initCollapsibleSections() {
   try {
+    const tabContainer = document.querySelector(".collapsible-tabs");
     const tabs = Array.from(document.querySelectorAll(".section-tab"));
     const sections = Array.from(
       document.querySelectorAll(".collapsible-section"),
     );
     const activeKey = "active_collapsible_section";
+    const orderKey = "collapsible_tab_order_v1";
     const storedActive = localStorage.getItem(activeKey);
+
+    // Restore saved tab order
+    try {
+      const savedOrder = JSON.parse(localStorage.getItem(orderKey) || "null");
+      if (Array.isArray(savedOrder) && tabContainer) {
+        savedOrder.forEach((target) => {
+          const tab = tabs.find((t) => t.dataset.target === target);
+          if (tab) tabContainer.appendChild(tab);
+        });
+      }
+    } catch (_) {}
 
     function activateSection(targetId) {
       sections.forEach((section) => {
@@ -3499,10 +3575,26 @@ function initCollapsibleSections() {
 
     tabs.forEach((tab) => {
       const targetId = tab.dataset.target;
-      tab.addEventListener("click", () => {
+      tab.addEventListener("click", (e) => {
+        // Ignore clicks that immediately follow a drag
+        if (tab.dataset.justDragged === "1") {
+          delete tab.dataset.justDragged;
+          return;
+        }
         activateSection(targetId);
       });
     });
+
+    if (tabContainer) {
+      enableDragReorder(tabContainer, ".section-tab", {
+        onReorder: () => {
+          const order = Array.from(
+            tabContainer.querySelectorAll(".section-tab"),
+          ).map((t) => t.dataset.target);
+          localStorage.setItem(orderKey, JSON.stringify(order));
+        },
+      });
+    }
 
     const defaultSection =
       storedActive && document.getElementById(storedActive)
@@ -3513,6 +3605,57 @@ function initCollapsibleSections() {
     console.warn("initCollapsibleSections failed", err);
   }
 }
+
+// Generic native HTML5 drag-and-drop reorder helper.
+// Marks all matching children as draggable, swaps DOM order on drop,
+// and calls opts.onReorder() afterwards. Safe to call repeatedly on the
+// same container (re-binds listeners cleanly via dataset flag).
+function enableDragReorder(container, itemSelector, opts = {}) {
+  if (!container) return;
+  const items = Array.from(container.querySelectorAll(itemSelector));
+  let dragging = null;
+  items.forEach((item) => {
+    if (item.dataset.dragBound === "1") return;
+    item.dataset.dragBound = "1";
+    item.setAttribute("draggable", "true");
+    item.addEventListener("dragstart", (e) => {
+      dragging = item;
+      item.classList.add("dragging");
+      try {
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", "");
+      } catch (_) {}
+    });
+    item.addEventListener("dragend", () => {
+      if (dragging) dragging.dataset.justDragged = "1";
+      item.classList.remove("dragging");
+      dragging = null;
+      if (typeof opts.onReorder === "function") opts.onReorder();
+    });
+    item.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      if (!dragging || dragging === item) return;
+      const rect = item.getBoundingClientRect();
+      // Decide horizontal vs vertical by the longer axis of the item
+      const horizontal = rect.width >= rect.height;
+      const before = horizontal
+        ? e.clientX < rect.left + rect.width / 2
+        : e.clientY < rect.top + rect.height / 2;
+      if (before) item.parentNode.insertBefore(dragging, item);
+      else item.parentNode.insertBefore(dragging, item.nextSibling);
+    });
+  });
+}
+
+// Apply drag-reorder to a freshly rendered table body. Call after innerHTML
+// updates that rebuild the rows.
+function enableTableRowReorder(tableSelector) {
+  document.querySelectorAll(tableSelector + " tbody").forEach((tbody) => {
+    enableDragReorder(tbody, "tr");
+    tbody.classList.add("reorderable-rows");
+  });
+}
+
 
 // ============================================================
 //  Race Story (player-focused) — position, overtakes, stints, speed traps
@@ -3881,3 +4024,61 @@ function renderPaceDeltaChart() {
     },
   });
 }
+
+// Global floating tooltip for .hint-icon elements (escapes overflow:hidden parents)
+(function initHintTooltip() {
+  let tipEl = null;
+  function ensureEl() {
+    if (!tipEl) {
+      tipEl = document.createElement("div");
+      tipEl.id = "global-hint-tooltip";
+      document.body.appendChild(tipEl);
+    }
+    return tipEl;
+  }
+  function position(target) {
+    const el = ensureEl();
+    const r = target.getBoundingClientRect();
+    el.style.left = "0px";
+    el.style.top = "0px";
+    const tw = el.offsetWidth;
+    const th = el.offsetHeight;
+    let left = r.left + r.width / 2 - tw / 2;
+    let top = r.top - th - 8;
+    if (top < 8) top = r.bottom + 8;
+    left = Math.max(8, Math.min(left, window.innerWidth - tw - 8));
+    el.style.left = left + "px";
+    el.style.top = top + "px";
+  }
+  document.addEventListener("mouseover", (e) => {
+    const t = e.target.closest(".hint-icon");
+    if (!t) return;
+    const el = ensureEl();
+    el.textContent = t.getAttribute("data-tooltip") || "";
+    el.classList.add("show");
+    position(t);
+  });
+  document.addEventListener("mouseout", (e) => {
+    const t = e.target.closest(".hint-icon");
+    if (!t) return;
+    if (tipEl) tipEl.classList.remove("show");
+  });
+  window.addEventListener("scroll", () => { if (tipEl) tipEl.classList.remove("show"); }, true);
+})();
+
+// Sidebar collapse toggle
+(function () {
+  const apply = (collapsed) => {
+    document.getElementById("appShell")?.classList.toggle("sidebar-collapsed", collapsed);
+    try { localStorage.setItem("sidebarCollapsed", collapsed ? "1" : "0"); } catch (e) {}
+  };
+  document.addEventListener("DOMContentLoaded", () => {
+    const initial = (() => { try { return localStorage.getItem("sidebarCollapsed") === "1"; } catch (e) { return false; }})();
+    apply(initial);
+    document.getElementById("sidebarToggle")?.addEventListener("click", () => {
+      const collapsed = !document.getElementById("appShell")?.classList.contains("sidebar-collapsed");
+      apply(collapsed);
+    });
+    document.getElementById("sidebarExpand")?.addEventListener("click", () => apply(false));
+  });
+})();
