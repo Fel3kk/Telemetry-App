@@ -1553,8 +1553,13 @@ body.light-theme #driver-assignments-container { background: #ffffff; }
   position: sticky; top: 0; z-index: 30;
   padding: 12px 18px;
   gap: 8px;
+<<<<<<< HEAD
   flex-wrap: wrap;
   overflow-x: visible;
+=======
+  flex-wrap: nowrap;
+  overflow-x: auto;
+>>>>>>> 4ed37d007453f367dee33902bbecff483a802cec
   background: linear-gradient(180deg, var(--bg-2) 92%, transparent);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
@@ -1563,8 +1568,13 @@ body.light-theme #driver-assignments-container { background: #ffffff; }
 .sticky-tabs::-webkit-scrollbar { height: 4px; }
 .sticky-tabs::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 2px; }
 .sticky-tabs .section-tab {
+<<<<<<< HEAD
   flex: 1 1 0;
   min-width: 0;
+=======
+  flex: 0 0 auto;
+  min-width: auto;
+>>>>>>> 4ed37d007453f367dee33902bbecff483a802cec
   padding: 9px 14px;
   font-size: 0.72em;
   letter-spacing: 0.1em;

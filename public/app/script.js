@@ -1041,7 +1041,10 @@ function renderSavedSessions(sessions) {
   // Build flat list of sessions for the active season, sorted newest first
   const displaySessions = sessions
     .filter((s) => s.season === currentSeason)
+<<<<<<< HEAD
     .filter((s) => s.category !== "Qualifying" && s.category !== "Sprint Shootout")
+=======
+>>>>>>> 4ed37d007453f367dee33902bbecff483a802cec
     .slice()
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
