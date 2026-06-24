@@ -1403,7 +1403,6 @@ body.light-theme #driver-assignments-container { background: #ffffff; }
   position: relative; line-height: 1;
   border: 1px solid var(--text);
 }
-<<<<<<< HEAD
 .hint-icon::after { content: none; }
 
 #global-hint-tooltip {
@@ -1554,8 +1553,13 @@ body.light-theme #driver-assignments-container { background: #ffffff; }
   position: sticky; top: 0; z-index: 30;
   padding: 12px 18px;
   gap: 8px;
+<<<<<<< HEAD
   flex-wrap: wrap;
   overflow-x: visible;
+=======
+  flex-wrap: nowrap;
+  overflow-x: auto;
+>>>>>>> 4ed37d007453f367dee33902bbecff483a802cec
   background: linear-gradient(180deg, var(--bg-2) 92%, transparent);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
@@ -1564,8 +1568,13 @@ body.light-theme #driver-assignments-container { background: #ffffff; }
 .sticky-tabs::-webkit-scrollbar { height: 4px; }
 .sticky-tabs::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 2px; }
 .sticky-tabs .section-tab {
+<<<<<<< HEAD
   flex: 1 1 0;
   min-width: 0;
+=======
+  flex: 0 0 auto;
+  min-width: auto;
+>>>>>>> 4ed37d007453f367dee33902bbecff483a802cec
   padding: 9px 14px;
   font-size: 0.72em;
   letter-spacing: 0.1em;
@@ -1715,17 +1724,3 @@ body.light-theme #driver-assignments-container { background: #ffffff; }
 
 /* Tighten old sidebar season-summary (no longer used there) */
 .sessions-block #seasonSummaryCards { display: none; }
-=======
-.hint-icon::after {
-  content: attr(data-tooltip);
-  position: absolute; bottom: 140%; left: 50%; transform: translateX(-50%);
-  background: var(--bg-3); color: var(--text);
-  border: 1px solid var(--border-strong); border-radius: 8px;
-  padding: 8px 12px; font-size: 0.82em; font-weight: 400;
-  white-space: nowrap; line-height: 1.45;
-  box-shadow: var(--shadow-md); pointer-events: none;
-  opacity: 0; visibility: hidden; transition: opacity 0.2s, visibility 0.2s;
-  z-index: 9999; max-width: 320px; text-wrap: auto;
-}
-.hint-icon:hover::after { opacity: 1; visibility: visible; }
->>>>>>> 4ed37d007453f367dee33902bbecff483a802cec
