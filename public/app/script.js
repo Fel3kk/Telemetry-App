@@ -3977,6 +3977,7 @@ function secondsToTimeString(seconds) {
 
 // Collapsible sections helpers
 function initCollapsibleSections() {
+
   try {
     const tabContainer = document.querySelector(".collapsible-tabs");
     const tabs = Array.from(
