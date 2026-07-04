@@ -197,7 +197,9 @@ window.addEventListener("DOMContentLoaded", () => {
   // Load sessions then attempt to auto-load driver teams for the selected season.
   // This runs after the UI is wired so slow/failed DB startup cannot freeze clicks.
   loadDatabaseBackedData();
-  window.addEventListener("supabase-ready", () => loadDatabaseBackedData(), {
+  loadTrackNotes();
+  window.addEventListener("supabase-ready", () => { loadDatabaseBackedData(); loadTrackNotes(); }, {
+
     once: true,
   });
 
