@@ -3393,9 +3393,10 @@ function computeSeasonStandings(season) {
           (s.category || "").toLowerCase() === "sprint"),
     );
   sessions.forEach((session) => {
-    if (!session.results) return;
-    session.results.forEach((res) => {
+    const seen = new Set();
+    (session.results || []).forEach((res) => {
       const name = res.name;
+      if (!name) return;
       if (!drivers[name]) drivers[name] = { points: 0, wins: 0, podiums: 0, races: 0, fastest_laps: 0 };
       const pos = parseInt(res.position);
       const cat = (session.category || "").toLowerCase();
@@ -3403,27 +3404,36 @@ function computeSeasonStandings(season) {
       if (cat === "race") pts = [0, 25, 18, 15, 12, 10, 8, 6, 4, 2, 1][pos] || 0;
       else if (cat === "sprint") pts = [0, 8, 7, 6, 5, 4, 3, 2, 1][pos] || 0;
       drivers[name].points += pts;
-      drivers[name].races += 1;
+      if (!seen.has(name)) {
+        drivers[name].races += 1;
+        seen.add(name);
+      }
       if (cat === "race") {
         if (pos === 1) drivers[name].wins += 1;
         if (pos >= 1 && pos <= 3) drivers[name].podiums += 1;
       }
     });
+    // DNF fallback: include drivers from race_story classification whose result-status is not FINISHED
+    const rsClass = session.race_story?.classification || [];
+    rsClass.forEach((e) => {
+      const name = (e.name || "").toUpperCase();
+      if (!name || seen.has(name)) return;
+      const isDNF = e.status && !/FINISHED/i.test(e.status);
+      if (!isDNF && e.position) return;
+      if (!drivers[name]) drivers[name] = { points: 0, wins: 0, podiums: 0, races: 0, fastest_laps: 0 };
+      drivers[name].races += 1;
+      seen.add(name);
+    });
     // Fastest lap credit (race only)
     const flName = ((session.race_story?.fastest_lap?.name) || "").toUpperCase();
     if (flName && (session.category || "").toLowerCase() === "race") {
-      if (!drivers[flName]) drivers[flName] = { points: 0, wins: 0, podiums: 0, races: 0, fastest_laps: 0, dotd: 0 };
+      if (!drivers[flName]) drivers[flName] = { points: 0, wins: 0, podiums: 0, races: 0, fastest_laps: 0 };
       drivers[flName].fastest_laps += 1;
-    }
-    // Driver of the Day credit (race only)
-    const dotdName = (session.race_story?.driver_of_the_day || "").toUpperCase();
-    if (dotdName && (session.category || "").toLowerCase() === "race") {
-      if (!drivers[dotdName]) drivers[dotdName] = { points: 0, wins: 0, podiums: 0, races: 0, fastest_laps: 0, dotd: 0 };
-      drivers[dotdName].dotd += 1;
     }
   });
   return drivers;
 }
+
 
 function renderRecordsTable() {
   const container = document.getElementById("records-container");
