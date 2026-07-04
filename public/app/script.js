@@ -4252,8 +4252,8 @@ function renderFinalClassification(rs) {
         <span class="fc-fl-driver">${(fl.name || "").toUpperCase()}</span>
         ${fl.lap_time_str ? `<span class="fc-fl-time">${fl.lap_time_str}</span>` : ""}
         ${fl.lap ? `<span class="fc-fl-meta">Lap ${fl.lap}</span>` : ""}
-        ${rs.driver_of_the_day ? `<span class="fc-dotd-chip">🌟 DRIVER OF THE DAY</span><span class="fc-dotd-driver">${String(rs.driver_of_the_day).toUpperCase()}</span>` : ""}
       </div>`
+
     : "";
 
   el.innerHTML = `
