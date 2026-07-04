@@ -71,6 +71,9 @@
         <button class="section-tab active" data-target="section-standings">
           🏆 Standings
         </button>
+        <button class="section-tab" data-target="section-records">
+          📚 Records
+        </button>
         <button class="section-tab" data-target="section-quali-results">
           ⏱️ Qualifying
         </button>
@@ -98,6 +101,15 @@
           </div>
           <div class="section-body">
             <div id="standings-container"></div>
+          </div>
+        </div>
+
+        <div class="collapsible-section" id="section-records">
+          <div class="section-header">
+            <h2 style="margin: 0; font-size: 1.05rem">📚 All-Time Records</h2>
+          </div>
+          <div class="section-body">
+            <div id="records-container"></div>
           </div>
         </div>
 
@@ -158,6 +170,10 @@
                 <div class="chart-container full-width auto-height">
                   <div class="chart-title">🚀 Speed Trap Leaderboard</div>
                   <div id="topSpeedList" class="speed-trap-list"></div>
+                </div>
+                <div class="chart-container full-width auto-height">
+                  <div class="chart-title">🏁 Final Classification</div>
+                  <div id="finalClassification" class="final-classification"></div>
                 </div>
               </div>
             </div>

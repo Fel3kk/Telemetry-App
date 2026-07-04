@@ -512,7 +512,7 @@ function buildRaceStory(rootData, playerName, playerTeam, classification_data) {
   if (!playerPos && !classification_data?.length) return null;
 
   const position_history = (playerPos?.["driver-position-history"] || [])
-    .filter((p) => p["lap-number"] >= 1)
+    .filter((p) => p["lap-number"] >= 0)
     .map((p) => ({ lap: p["lap-number"], position: p.position }));
 
   // Podium = top 3 by final-classification.position
@@ -535,7 +535,7 @@ function buildRaceStory(rootData, playerName, playerTeam, classification_data) {
       team: entry.team || "",
       final: entry["final-classification"]?.position,
       history: (ph["driver-position-history"] || [])
-        .filter((p) => p["lap-number"] >= 1)
+        .filter((p) => p["lap-number"] >= 0)
         .map((p) => ({ lap: p["lap-number"], position: p.position })),
     });
   });
@@ -587,6 +587,56 @@ function buildRaceStory(rootData, playerName, playerTeam, classification_data) {
       kmph: Math.round(s["speed-trap-record-kmph"] || 0),
     }));
 
+  // Fastest lap of the race (overall, across all drivers)
+  let fastest_lap = null;
+  (classification_data || []).forEach((e) => {
+    const name = String(e["driver-name"] || "").toUpperCase();
+    const team = e.team || "";
+    const laps = e["lap-time-history"]?.["lap-history-data"] || [];
+    laps.forEach((l, i) => {
+      const ms = l["lap-time-in-ms"] || 0;
+      const valid = (l["lap-valid-bit-flags"] === undefined) || (l["lap-valid-bit-flags"] & 1);
+      if (ms > 0 && valid && (!fastest_lap || ms < fastest_lap.time_ms)) {
+        const totalSec = ms / 1000;
+        const m = Math.floor(totalSec / 60);
+        const s = (totalSec - m * 60).toFixed(3).padStart(6, "0");
+        fastest_lap = { name, team, lap: i + 1, time_ms: ms, lap_time_str: `${m}:${s}` };
+      }
+    });
+  });
+
+  // Driver of the Day — pulled from common field names if game records it
+  let driver_of_the_day = null;
+  (classification_data || []).forEach((e) => {
+    const fc = e["final-classification"] || {};
+    if (fc["driver-of-the-day"] || fc["is-driver-of-the-day"] || e["driver-of-the-day"]) {
+      driver_of_the_day = String(e["driver-name"] || "").toUpperCase();
+    }
+  });
+  const rootDOTD = rootData?.["driver-of-the-day"] || rootData?.["records"]?.["driver-of-the-day"];
+  if (!driver_of_the_day && rootDOTD) driver_of_the_day = String(rootDOTD).toUpperCase();
+
+  // Final classification (every driver) with total time, best lap, status
+  const classification = (classification_data || [])
+    .map((e) => {
+      const fc = e["final-classification"] || {};
+      return {
+        position: fc.position || null,
+        name: String(e["driver-name"] || "").toUpperCase(),
+        team: e.team || "",
+        laps: fc["num-laps"] || 0,
+        time_s: fc["total-race-time"] || 0,
+        time_str: fc["total-race-time-str"] || "",
+        best_lap_ms: fc["best-lap-time-ms"] || 0,
+        best_lap_str: fc["best-lap-time-str"] || "",
+        status: fc["result-status"] || "",
+        points: fc.points || 0,
+        pits: fc["num-pit-stops"] || 0,
+      };
+    })
+    .filter((e) => e.position)
+    .sort((a, b) => a.position - b.position);
+
   return {
     player_name: playerName,
     player_team: playerTeam,
@@ -596,6 +646,9 @@ function buildRaceStory(rootData, playerName, playerTeam, classification_data) {
     overtakes_suffered,
     pace_delta,
     speed_traps,
+    fastest_lap,
+    driver_of_the_day,
+    classification,
   };
 }
 
@@ -930,12 +983,47 @@ async function saveSessions(sessions) {
     race_story: session.race_story || null,
   }));
 
+  // Overwrite: delete any existing row matching driver+track+season+category, then insert
+  for (const row of dataToInsert) {
+    try {
+      await db.from("telemetry_sessions").delete().match({
+        driver_name: row.driver_name,
+        track_name: row.track_name,
+        season: row.season,
+        category: row.category,
+      });
+    } catch (err) {
+      console.warn("Pre-delete for overwrite failed (continuing):", err);
+    }
+  }
+
   const { error } = await db
     .from("telemetry_sessions")
     .insert(dataToInsert);
 
   if (error) throw error;
   await loadSavedSessions();
+}
+
+// Compute Win / Pole / Fastest-lap / Grand-slam flags for a saved session
+function getSessionBadges(session) {
+  const cat = (session.category || "").toLowerCase();
+  const isRaceLike = cat === "race" || cat === "sprint";
+  if (!isRaceLike) return { win: false, pole: false, fl: false, grandSlam: false };
+  const finish = Number(session.finishing_position ?? session.finishing_pos);
+  const start = Number(session.starting_position ?? session.starting_pos);
+  const rs = session.race_story || {};
+  const playerName = (rs.player_name || session.driver_name || "").toUpperCase();
+  const win = finish === 1;
+  const pole = start === 1;
+  const fl =
+    !!(rs.fastest_lap && (rs.fastest_lap.name || "").toUpperCase() === playerName);
+  const ledEveryLap =
+    Array.isArray(rs.position_history) &&
+    rs.position_history.length > 1 &&
+    rs.position_history.filter((p) => p.lap >= 1).every((p) => p.position === 1);
+  const grandSlam = cat === "race" && win && pole && fl && ledEveryLap;
+  return { win, pole, fl, grandSlam };
 }
 
 async function clearSessionStatus(statusType) {
@@ -1087,82 +1175,54 @@ function renderSavedSessions(sessions) {
     .slice()
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
-  // Group by date (YYYY-MM-DD) so we can render date headers
-  const groupsByDate = new Map();
-  displaySessions.forEach((s) => {
-    const d = new Date(s.created_at);
-    const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-    if (!groupsByDate.has(key)) groupsByDate.set(key, { date: d, items: [] });
-    groupsByDate.get(key).items.push(s);
-  });
-
-  const fmtTime = (d) =>
-    `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-  const fmtDateHeader = (d) =>
-    d
-      .toLocaleDateString(undefined, {
-        weekday: "short",
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-      })
-      .toUpperCase();
-
   const catLabel = (c) => {
     if (!c) return "";
     if (c === "Sprint Shootout") return "SHOOTOUT";
     return c.toUpperCase();
   };
 
-  for (const { date, items } of groupsByDate.values()) {
-    const header = document.createElement("div");
-    header.className = "session-date-header";
-    header.textContent = fmtDateHeader(date);
-    grid.appendChild(header);
+  displaySessions.forEach((session) => {
+    const trackKey = (session.track_name || "").toLowerCase();
+    const flag = trackToFlag[trackKey] || "🏁";
+    const weatherIcon = determineWeatherIcon(session);
+    const badges = getSessionBadges(session);
+    const badgeHtml = [
+      badges.grandSlam ? '<span class="result-tag mini tag-gs" title="Grand Slam">GS</span>' : "",
+      badges.win ? '<span class="result-tag mini tag-w" title="Win">W</span>' : "",
+      badges.pole ? '<span class="result-tag mini tag-p" title="Pole">P</span>' : "",
+      badges.fl ? '<span class="result-tag mini tag-fl" title="Fastest Lap">FL</span>' : "",
+    ].join("");
 
-    items.forEach((session) => {
-      const trackKey = (session.track_name || "").toLowerCase();
-      const flag = trackToFlag[trackKey] || "🏁";
-      const weatherIcon = determineWeatherIcon(session);
-      const isWin =
-        session.category === "Race" &&
-        Number(session.finishing_position) === 1;
-      const winMarker = isWin
-        ? '<span class="result-tag win-marker mini">WIN</span>'
-        : "";
-      const t = new Date(session.created_at);
-
-      const card = document.createElement("div");
-      card.className = `session-row ${currentData && currentData.id === session.id ? "active" : ""}`;
-      card.innerHTML = `
-        <button class="delete-btn" title="Delete">🗑️</button>
-        <div class="sr-left">
-          <div class="sr-track">
-            <span class="flag-icon">${flag}</span>
-            <span class="sr-track-name">${session.track_name || "Unknown"}</span>
-          </div>
-          <div class="sr-time">${fmtTime(t)}</div>
+    const card = document.createElement("div");
+    card.className = `session-row ${currentData && currentData.id === session.id ? "active" : ""}`;
+    card.innerHTML = `
+      <button class="delete-btn" title="Delete">🗑️</button>
+      <div class="sr-left">
+        <div class="sr-track">
+          <span class="flag-icon">${flag}</span>
+          <span class="sr-track-name">${session.track_name || "Unknown"}</span>
         </div>
-        <div class="sr-right">
-          <span class="sr-cat">🏁 ${catLabel(session.category)}</span>
-          <span class="sr-weather">${weatherIcon}</span>
-          ${winMarker}
-        </div>
-      `;
+      </div>
+      <div class="sr-right">
+        <span class="sr-cat">🏁 ${catLabel(session.category)}</span>
+        <span class="sr-weather">${weatherIcon}</span>
+        ${badgeHtml}
+      </div>
+    `;
 
-      card.querySelector(".delete-btn").onclick = (e) =>
-        deleteSession(session.id, e);
+    card.querySelector(".delete-btn").onclick = (e) =>
+      deleteSession(session.id, e);
 
-      card.addEventListener("click", (e) => {
-        if (e.target.closest(".delete-btn")) return;
-        currentData = session;
-        renderContent();
-        renderSavedSessions(allSessions);
-      });
-
-      grid.appendChild(card);
+    card.addEventListener("click", (e) => {
+      if (e.target.closest(".delete-btn")) return;
+      currentData = session;
+      renderContent();
+      renderSavedSessions(allSessions);
     });
-  }
+
+    grid.appendChild(card);
+  });
+
 
   renderStandingsTable();
 
@@ -3220,37 +3280,50 @@ function renderStandingsTable() {
 
   const teamsAssigned = getDriverTeams(); // This is used for constructor standings
 
-  let html = `<div class="table-responsive"><table class="table table-sm table-dark table-striped standings-table" style="font-size: 0.7rem;"><thead><tr><th style="padding: 12px 4px; width: 40px;" class="text-center">#</th><th style="padding: 12px 4px; width: 180px;" class="text-start">Driver</th>`;
+  let html = `<div class="table-responsive standings-wrap"><table class="standings-table standings-v2"><thead><tr><th class="col-rank">#</th><th class="col-driver">Driver</th>`;
 
   scoringSessions.forEach((s, i) => {
     const flag = getFlagHtml(s, i + 1);
     const typeLabel = (s.category || "").toLowerCase() === "sprint" ? "S" : "R";
-    html += `<th title="${s.track_name} - ${s.category}" class="text-center" style="padding: 12px 2px;">${flag}<br><small style="font-size: 0.6em; opacity: 0.8;">${typeLabel}</small></th>`;
+    const code = (s.track_code || s.track_name || "").toString().slice(0, 3).toUpperCase();
+    html += `<th title="${s.track_name} - ${s.category}" class="col-race"><div class="race-head"><span class="race-flag">${flag}</span><span class="race-code">${code}</span><span class="race-type race-type-${typeLabel.toLowerCase()}">${typeLabel}</span></div></th>`;
   });
 
-  html += `<th class="text-end" style="padding: 12px 4px;">Pts</th><th class="text-end" style="padding: 12px 4px;">Gap</th></tr></thead><tbody>`;
+  html += `<th class="col-pts">Pts</th><th class="col-gap">Gap</th></tr></thead><tbody>`;
 
   driverNames.forEach((name, idx) => {
     const d = driversMap[name];
     const team = teamsAssigned[name] || "Unassigned";
     const teamColor = TEAM_COLORS[team] || "#444";
-    html += `<tr class="standings-row"><td class="text-center" style="padding: 10px 2px;">${idx + 1}</td><td class="text-start team-accent-cell" style="padding: 10px 4px; white-space: nowrap; border-left: 4px solid ${teamColor} !important;"><strong>${name.toUpperCase()}</strong><span class="team-name-sub">${team}</span></td>`;
+    const leaderClass = idx === 0 ? " is-leader" : "";
+    html += `<tr class="standings-row${leaderClass}"><td class="col-rank rank-cell"><span class="rank-num">${idx + 1}</span></td><td class="col-driver driver-cell" style="--team-color:${teamColor};"><span class="driver-name">${name.toUpperCase()}</span><span class="driver-team">${team}</span></td>`;
 
     // Ensure the driver exists in the row even if they missed a race
     scoringSessions.forEach((s) => {
       const pos = d.positions[s.id || s.created_at];
-      html += `<td class="text-center pos-${pos}" style="padding: 10px 2px;">${pos || "-"}</td>`;
+      const posNum = parseInt(pos);
+      let pillClass = "";
+      let label = pos;
+      if (posNum >= 1 && posNum <= 3) {
+        pillClass = ` pos-${posNum}`;
+      } else if (!pos) {
+        // Driver missing from this session's results — treat as DNF
+        pillClass = " is-dnf";
+        label = "DNF";
+      }
+      html += `<td class="pos-cell"><span class="pos-pill${pillClass}" title="${label === "DNF" ? "Did Not Finish / no data" : ""}">${label}</span></td>`;
     });
 
     // Calculate gap to the driver ahead
     const gap =
       idx === 0
-        ? "-"
-        : `-${Math.abs(driversMap[driverNames[idx - 1]].points - d.points)}`;
+        ? "—"
+        : `−${Math.abs(driversMap[driverNames[idx - 1]].points - d.points)}`;
 
-    html += `<td class="text-end" style="padding: 10px 4px;"><strong>${d.points}</strong></td>`;
-    html += `<td class="text-end" style="color: #aaa; font-size: 0.85em; padding: 10px 4px;">${gap}</td></tr>`;
+    html += `<td class="col-pts pts-cell">${d.points}</td>`;
+    html += `<td class="col-gap gap-cell">${gap}</td></tr>`;
   });
+
 
   html += `</tbody></table></div>`;
   // Build constructor standings based on assigned teams
@@ -3293,7 +3366,279 @@ function renderStandingsTable() {
   } catch (err) {
     console.error("Failed to render driver assignments", err);
   }
+  try {
+    renderRecordsTable();
+  } catch (err) {
+    console.error("Failed to render records", err);
+  }
 }
+
+// ------- All-time Records / Stats -------
+function getTeamsForSeason(season) {
+  try {
+    const raw = JSON.parse(localStorage.getItem("driverTeamsBySeason") || "{}");
+    return raw[String(season)] || {};
+  } catch (_) {
+    return {};
+  }
+}
+
+function computeSeasonStandings(season) {
+  const drivers = {};
+  const sessions = allSessions
+    .filter(
+      (s) =>
+        s.season === season &&
+        ((s.category || "").toLowerCase() === "race" ||
+          (s.category || "").toLowerCase() === "sprint"),
+    );
+  sessions.forEach((session) => {
+    if (!session.results) return;
+    session.results.forEach((res) => {
+      const name = res.name;
+      if (!drivers[name]) drivers[name] = { points: 0, wins: 0, podiums: 0, races: 0, fastest_laps: 0 };
+      const pos = parseInt(res.position);
+      const cat = (session.category || "").toLowerCase();
+      let pts = 0;
+      if (cat === "race") pts = [0, 25, 18, 15, 12, 10, 8, 6, 4, 2, 1][pos] || 0;
+      else if (cat === "sprint") pts = [0, 8, 7, 6, 5, 4, 3, 2, 1][pos] || 0;
+      drivers[name].points += pts;
+      drivers[name].races += 1;
+      if (cat === "race") {
+        if (pos === 1) drivers[name].wins += 1;
+        if (pos >= 1 && pos <= 3) drivers[name].podiums += 1;
+      }
+    });
+    // Fastest lap credit (race only)
+    const flName = ((session.race_story?.fastest_lap?.name) || "").toUpperCase();
+    if (flName && (session.category || "").toLowerCase() === "race") {
+      if (!drivers[flName]) drivers[flName] = { points: 0, wins: 0, podiums: 0, races: 0, fastest_laps: 0, dotd: 0 };
+      drivers[flName].fastest_laps += 1;
+    }
+    // Driver of the Day credit (race only)
+    const dotdName = (session.race_story?.driver_of_the_day || "").toUpperCase();
+    if (dotdName && (session.category || "").toLowerCase() === "race") {
+      if (!drivers[dotdName]) drivers[dotdName] = { points: 0, wins: 0, podiums: 0, races: 0, fastest_laps: 0, dotd: 0 };
+      drivers[dotdName].dotd += 1;
+    }
+  });
+  return drivers;
+}
+
+function renderRecordsTable() {
+  const container = document.getElementById("records-container");
+  if (!container) return;
+  if (!allSessions || allSessions.length === 0) {
+    container.innerHTML = `<div class="empty-hint" style="padding:18px;color:#888;">No saved sessions yet — upload some races to build all-time records.</div>`;
+    return;
+  }
+
+  const seasons = Array.from(
+    new Set(allSessions.map((s) => s.season).filter((x) => x != null)),
+  ).sort((a, b) => a - b);
+
+  // Driver aggregates across all seasons
+  const driverAgg = {};
+  const teamAgg = {};
+  const driverChampions = {};
+  const constructorChampions = {};
+
+  seasons.forEach((season) => {
+    const standings = computeSeasonStandings(season);
+    const teams = getTeamsForSeason(season);
+
+    Object.entries(standings).forEach(([name, s]) => {
+      if (!driverAgg[name]) {
+        driverAgg[name] = { points: 0, wins: 0, podiums: 0, races: 0, fastest_laps: 0, dotd: 0, titles: 0, seasons: new Set(), lastTeam: null };
+      }
+      driverAgg[name].points += s.points;
+      driverAgg[name].wins += s.wins;
+      driverAgg[name].podiums += s.podiums;
+      driverAgg[name].races += s.races;
+      driverAgg[name].fastest_laps += s.fastest_laps || 0;
+      driverAgg[name].dotd += s.dotd || 0;
+      driverAgg[name].seasons.add(season);
+      if (teams[name]) driverAgg[name].lastTeam = teams[name];
+    });
+
+    // Driver champion of season
+    const driverRanked = Object.entries(standings).sort((a, b) => b[1].points - a[1].points);
+    if (driverRanked.length && driverRanked[0][1].points > 0) {
+      const champ = driverRanked[0][0];
+      driverAgg[champ].titles += 1;
+      driverChampions[season] = champ;
+    }
+
+    // Constructor aggregates for this season
+    const teamSeason = {};
+    Object.entries(standings).forEach(([name, s]) => {
+      const team = teams[name] || "Unassigned";
+      if (!teamSeason[team]) teamSeason[team] = { points: 0, wins: 0, podiums: 0 };
+      teamSeason[team].points += s.points;
+      teamSeason[team].wins += s.wins;
+      teamSeason[team].podiums += s.podiums;
+    });
+    Object.entries(teamSeason).forEach(([team, s]) => {
+      if (team === "Unassigned") return;
+      if (!teamAgg[team]) {
+        teamAgg[team] = { points: 0, wins: 0, podiums: 0, titles: 0, seasons: new Set() };
+      }
+      teamAgg[team].points += s.points;
+      teamAgg[team].wins += s.wins;
+      teamAgg[team].podiums += s.podiums;
+      teamAgg[team].seasons.add(season);
+    });
+    const teamRanked = Object.entries(teamSeason)
+      .filter(([t]) => t !== "Unassigned")
+      .sort((a, b) => b[1].points - a[1].points);
+    if (teamRanked.length && teamRanked[0][1].points > 0) {
+      const champTeam = teamRanked[0][0];
+      teamAgg[champTeam].titles += 1;
+      constructorChampions[season] = champTeam;
+    }
+  });
+
+  const isSeasonComplete = (() => {
+    // Heuristic: mark current/most-recent season as "in progress" if it equals max season
+    // Champions list shows finalized seasons only — we'll show all with a "*" for current.
+    return null;
+  })();
+  const currentMaxSeason = seasons[seasons.length - 1];
+
+  const driverRows = Object.entries(driverAgg)
+    .sort((a, b) => b[1].points - a[1].points)
+    .map(([name, d], idx) => {
+      const team = d.lastTeam || "Unassigned";
+      const color = TEAM_COLORS[team] || "#444";
+      const titleBadge = d.titles > 0
+        ? `<span class="rec-title-badge" title="${d.titles} championship${d.titles > 1 ? "s" : ""}">★ ${d.titles}</span>`
+        : "";
+      return `<tr class="standings-row${idx === 0 ? " is-leader" : ""}">
+        <td class="col-rank rank-cell"><span class="rank-num">${idx + 1}</span></td>
+        <td class="col-driver driver-cell" style="--team-color:${color};">
+          <span class="driver-name">${name.toUpperCase()} ${titleBadge}</span>
+          <span class="driver-team">${team}</span>
+        </td>
+        <td class="pts-cell">${d.points}</td>
+        <td class="rec-num">${d.wins}</td>
+        <td class="rec-num">${d.podiums}</td>
+        <td class="rec-num">${d.fastest_laps || 0}</td>
+        <td class="rec-num">${d.dotd || 0}</td>
+        <td class="rec-num">${d.races}</td>
+        <td class="rec-num">${d.seasons.size}</td>
+      </tr>`;
+    })
+    .join("");
+
+  const teamRows = Object.entries(teamAgg)
+    .sort((a, b) => b[1].points - a[1].points)
+    .map(([team, t], idx) => {
+      const color = TEAM_COLORS[team] || "#444";
+      const titleBadge = t.titles > 0
+        ? `<span class="rec-title-badge" title="${t.titles} constructor title${t.titles > 1 ? "s" : ""}">★ ${t.titles}</span>`
+        : "";
+      return `<tr class="standings-row${idx === 0 ? " is-leader" : ""}">
+        <td class="col-rank rank-cell"><span class="rank-num">${idx + 1}</span></td>
+        <td class="driver-cell" style="--team-color:${color};">
+          <span class="driver-name">${team.toUpperCase()} ${titleBadge}</span>
+          <span class="driver-team">${t.seasons.size} season${t.seasons.size > 1 ? "s" : ""}</span>
+        </td>
+        <td class="pts-cell">${t.points}</td>
+        <td class="rec-num">${t.wins}</td>
+        <td class="rec-num">${t.podiums}</td>
+      </tr>`;
+    })
+    .join("");
+
+  const champRows = seasons
+    .slice()
+    .reverse()
+    .map((season) => {
+      const dChamp = driverChampions[season] || "—";
+      const cChamp = constructorChampions[season] || "—";
+      const isCurrent = season === currentMaxSeason;
+      const dColor = TEAM_COLORS[(getTeamsForSeason(season)[dChamp]) || ""] || "#444";
+      const cColor = TEAM_COLORS[cChamp] || "#444";
+      return `<tr>
+        <td class="rec-season">S${season}${isCurrent ? '<span class="rec-current">live</span>' : ""}</td>
+        <td><span class="rec-champ-dot" style="background:${dColor};"></span>${dChamp.toUpperCase()}</td>
+        <td><span class="rec-champ-dot" style="background:${cColor};"></span>${cChamp}</td>
+      </tr>`;
+    })
+    .join("");
+
+  container.innerHTML = `
+    <div class="records-wrap">
+      <div class="records-legend">
+        <span><b>Pts</b> Total points</span>
+        <span><b>Wins</b> Race wins (P1 in Race or Sprint)</span>
+        <span><b>Pod</b> Podiums (P1–P3)</span>
+        <span><b>FL</b> Fastest laps</span>
+        <span><b>DOTD</b> Driver of the Day</span>
+        <span><b>GP</b> Grands Prix entered</span>
+        <span><b>Sn</b> Seasons active</span>
+        <span><b>★</b> Championship titles</span>
+      </div>
+      <div class="records-block">
+        <h3 class="records-title">Driver Records — All Seasons</h3>
+        <div class="table-responsive standings-wrap">
+          <table class="standings-table standings-v2 records-table">
+            <thead>
+              <tr>
+                <th class="col-rank">#</th>
+                <th class="col-driver">Driver</th>
+                <th class="col-pts" title="Total points">Pts</th>
+                <th class="rec-num" title="Race wins">Wins</th>
+                <th class="rec-num" title="Podiums (P1–P3)">Pod</th>
+                <th class="rec-num" title="Fastest Laps">FL</th>
+                <th class="rec-num" title="Driver of the Day">DOTD</th>
+                <th class="rec-num" title="Grands Prix entered">GP</th>
+                <th class="rec-num" title="Seasons active">Sn</th>
+              </tr>
+            </thead>
+            <tbody>${driverRows || `<tr><td colspan="9" class="rec-empty">No race results yet.</td></tr>`}</tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="records-block">
+        <h3 class="records-title">Constructor Records — All Seasons</h3>
+        <div class="table-responsive standings-wrap">
+          <table class="standings-table standings-v2 records-table">
+            <thead>
+              <tr>
+                <th class="col-rank">#</th>
+                <th class="col-driver">Team</th>
+                <th class="col-pts" title="Total points">Pts</th>
+                <th class="rec-num" title="Race wins">Wins</th>
+                <th class="rec-num" title="Podiums (P1–P3)">Pod</th>
+              </tr>
+            </thead>
+            <tbody>${teamRows || `<tr><td colspan="5" class="rec-empty">Assign drivers to teams to build constructor records.</td></tr>`}</tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="records-block">
+        <h3 class="records-title">Champions by Season</h3>
+        <div class="table-responsive standings-wrap">
+          <table class="standings-table standings-v2 records-table records-champs">
+            <thead>
+              <tr>
+                <th>Season</th>
+                <th>Drivers' Champion</th>
+                <th>Constructors' Champion</th>
+              </tr>
+            </thead>
+            <tbody>${champRows || `<tr><td colspan="3" class="rec-empty">No completed seasons yet.</td></tr>`}</tbody>
+          </table>
+        </div>
+        <div class="rec-footnote">The latest season is marked "live" — its champion may still change.</div>
+      </div>
+    </div>
+  `;
+}
+
 
 // Driver team assignment helpers
 function getDriverTeams() {
@@ -3594,7 +3939,9 @@ function secondsToTimeString(seconds) {
 function initCollapsibleSections() {
   try {
     const tabContainer = document.querySelector(".collapsible-tabs");
-    const tabs = Array.from(document.querySelectorAll(".section-tab"));
+    const tabs = Array.from(
+      document.querySelectorAll(".section-tab[data-target]"),
+    );
     const sections = Array.from(
       document.querySelectorAll(".collapsible-section"),
     );
@@ -3636,10 +3983,10 @@ function initCollapsibleSections() {
     });
 
     if (tabContainer) {
-      enableDragReorder(tabContainer, ".section-tab", {
+      enableDragReorder(tabContainer, ".section-tab[data-target]", {
         onReorder: () => {
           const order = Array.from(
-            tabContainer.querySelectorAll(".section-tab"),
+            tabContainer.querySelectorAll(".section-tab[data-target]"),
           ).map((t) => t.dataset.target);
           localStorage.setItem(orderKey, JSON.stringify(order));
         },
@@ -3697,14 +4044,12 @@ function enableDragReorder(container, itemSelector, opts = {}) {
   });
 }
 
-// Apply drag-reorder to a freshly rendered table body. Call after innerHTML
-// updates that rebuild the rows.
-function enableTableRowReorder(tableSelector) {
-  document.querySelectorAll(tableSelector + " tbody").forEach((tbody) => {
-    enableDragReorder(tbody, "tr");
-    tbody.classList.add("reorderable-rows");
-  });
+// Drag-to-reorder for table rows is intentionally disabled — kept as a no-op
+// so existing call sites don't need to change.
+function enableTableRowReorder(_tableSelector) {
+  /* no-op */
 }
+
 
 
 // ============================================================
@@ -3748,11 +4093,36 @@ function renderRaceStory() {
   empty.style.display = "none";
   wrap.style.display = "block";
 
+  // Backfill lap 0 (grid position) for sessions saved before lap-0 support.
+  const startPos =
+    currentData.starting_position ?? currentData.starting_pos ?? null;
+  if (
+    startPos &&
+    rs.position_history.length &&
+    rs.position_history[0].lap !== 0
+  ) {
+    rs.position_history.unshift({ lap: 0, position: Number(startPos) });
+  }
+  (rs.podium || []).forEach((p) => {
+    if (p.history?.length && p.history[0].lap !== 0 && p.history[0].lap === 1) {
+      // Keep podium aligned visually; reuse lap-1 position as lap-0 fallback.
+      p.history.unshift({ lap: 0, position: p.history[0].position });
+    }
+  });
+
   // Headline
   const start = rs.position_history[0]?.position;
   const end = rs.position_history[rs.position_history.length - 1]?.position;
   const gained = (start ?? 0) - (end ?? 0);
   const headline = document.getElementById("raceStoryHeadline");
+  const badges = getSessionBadges(currentData);
+  const fl = rs.fastest_lap;
+  const fmtFl = (ms) => {
+    if (!ms) return "";
+    const m = Math.floor(ms / 60000);
+    const s = ((ms % 60000) / 1000).toFixed(3).padStart(6, "0");
+    return `${m}:${s}`;
+  };
   if (headline) {
     headline.innerHTML = `
       <span class="rs-pill"><b>${rs.player_name}</b></span>
@@ -3763,6 +4133,8 @@ function renderRaceStory() {
       </span>
       <span class="rs-pill">Overtakes made ${rs.overtakes_made.length}</span>
       <span class="rs-pill">Lost ${rs.overtakes_suffered.length}</span>
+      ${fl ? `<span class="rs-pill ${badges.fl ? "rs-pos" : ""}">⏱ Fastest lap: ${fl.name} (L${fl.lap} ${fmtFl(fl.time_ms)})</span>` : ""}
+      ${badges.grandSlam ? `<span class="rs-pill rs-grand-slam">👑 GRAND SLAM</span>` : ""}
     `;
   }
 
@@ -3770,6 +4142,107 @@ function renderRaceStory() {
   renderOvertakesChart(rs);
   renderStintStrip();
   renderTopSpeedList(rs);
+  renderFinalClassification(rs);
+}
+
+function renderFinalClassification(rs) {
+  const el = document.getElementById("finalClassification");
+  if (!el) return;
+  const list = rs.classification || [];
+  if (!list.length) {
+    el.innerHTML = `<div class="race-story-empty">No classification data.</div>`;
+    return;
+  }
+  const fl = rs.fastest_lap;
+  const flName = fl ? (fl.name || "").toUpperCase() : "";
+  const leader = list[0];
+  const fmtGap = (sec) => {
+    if (!isFinite(sec) || sec <= 0) return "—";
+    if (sec < 60) return `+${sec.toFixed(3)}`;
+    const m = Math.floor(sec / 60);
+    const s = (sec - m * 60).toFixed(3).padStart(6, "0");
+    return `+${m}:${s}`;
+  };
+
+  const rows = list
+    .map((e, i) => {
+      const isLeader = i === 0;
+      const isPlayer = e.name === (rs.player_name || "").toUpperCase();
+      const isFL = flName && e.name === flName;
+      const dnf = e.status && !/FINISHED/i.test(e.status);
+      let gapLeader = "—";
+      let gapNext = "—";
+      if (isLeader) {
+        gapLeader = "LEADER";
+        gapNext = "—";
+      } else if (dnf) {
+        gapLeader = e.status || "DNF";
+        gapNext = "—";
+      } else if (e.laps < leader.laps) {
+        const lapDiff = leader.laps - e.laps;
+        gapLeader = `+${lapDiff} lap${lapDiff > 1 ? "s" : ""}`;
+        const prev = list[i - 1];
+        if (prev && prev.laps > e.laps) {
+          const d = prev.laps - e.laps;
+          gapNext = `+${d} lap${d > 1 ? "s" : ""}`;
+        } else if (prev) {
+          gapNext = fmtGap(e.time_s - prev.time_s);
+        }
+      } else {
+        gapLeader = fmtGap(e.time_s - leader.time_s);
+        const prev = list[i - 1];
+        gapNext = prev ? fmtGap(e.time_s - prev.time_s) : "—";
+      }
+      const color = teamColorFor(e.team) || "#444";
+      const pos = e.position;
+      const posClass =
+        pos === 1 ? "p1" : pos === 2 ? "p2" : pos === 3 ? "p3" : "";
+      return `<tr class="fc-row${isPlayer ? " is-player" : ""}${isFL ? " is-fl" : ""}${dnf ? " is-dnf" : ""}" style="--team-color:${color};">
+        <td class="fc-pos"><span class="fc-pos-pill ${posClass}">${pos}</span></td>
+        <td class="fc-driver">
+          <span class="fc-name">${e.name}${isFL ? ' <span class="fc-fl-badge" title="Fastest Lap">FL</span>' : ""}</span>
+          <span class="fc-team">${e.team}</span>
+        </td>
+        <td class="fc-laps">${e.laps}</td>
+        <td class="fc-time">${e.time_str || (dnf ? (e.status || "—") : "—")}</td>
+        <td class="fc-gap">${gapLeader}</td>
+        <td class="fc-gap">${gapNext}</td>
+        <td class="fc-best">${e.best_lap_str || "—"}</td>
+        <td class="fc-pits">${e.pits}</td>
+        <td class="fc-pts">${e.points}</td>
+      </tr>`;
+    })
+    .join("");
+
+  const flBanner = fl
+    ? `<div class="fc-fl-banner">
+        <span class="fc-fl-chip">⚡ FASTEST LAP</span>
+        <span class="fc-fl-driver">${(fl.name || "").toUpperCase()}</span>
+        ${fl.lap_time_str ? `<span class="fc-fl-time">${fl.lap_time_str}</span>` : ""}
+        ${fl.lap ? `<span class="fc-fl-meta">Lap ${fl.lap}</span>` : ""}
+        ${rs.driver_of_the_day ? `<span class="fc-dotd-chip">🌟 DRIVER OF THE DAY</span><span class="fc-dotd-driver">${String(rs.driver_of_the_day).toUpperCase()}</span>` : ""}
+      </div>`
+    : "";
+
+  el.innerHTML = `
+    ${flBanner}
+    <table class="fc-table">
+      <thead>
+        <tr>
+          <th>Pos</th>
+          <th>Driver</th>
+          <th>Laps</th>
+          <th>Time</th>
+          <th>Gap (Leader)</th>
+          <th>Interval</th>
+          <th>Best Lap</th>
+          <th>Pits</th>
+          <th>Pts</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
 }
 
 function renderPositionChart(rs) {
@@ -3834,7 +4307,7 @@ function renderPositionChart(rs) {
         },
       },
       scales: {
-        x: { title: { display: true, text: "Lap" } },
+        x: { title: { display: true, text: "Lap" }, min: 0, ticks: { stepSize: 1, precision: 0 } },
         y: {
           reverse: true,
           min: 1,
