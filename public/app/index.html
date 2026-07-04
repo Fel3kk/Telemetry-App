@@ -80,6 +80,9 @@
         <button class="section-tab" data-target="section-assignments">
           🏎️ Teams
         </button>
+        <button class="section-tab" data-target="section-notes">
+          📝 Notes
+        </button>
         <button class="section-tab" data-target="section-race-story">
           🎬 Race Story
         </button>
@@ -93,6 +96,7 @@
           🏁 Practice
         </button>
       </div>
+
 
       <div class="collapsible-content">
         <div class="collapsible-section" id="section-standings">
@@ -143,7 +147,18 @@
           </div>
         </div>
 
+        <div class="collapsible-section" id="section-notes">
+          <div class="section-header">
+            <h2 style="margin: 0; font-size: 1.05rem">📝 Track Notes</h2>
+            <span id="notesStatus" class="notes-status" style="margin-left:12px;font-size:.8rem;color:var(--secondary-text)"></span>
+          </div>
+          <div class="section-body">
+            <div id="notesGrid" class="notes-grid"></div>
+          </div>
+        </div>
+
         <div class="collapsible-section" id="section-race-story">
+
           <div class="section-header">
             <h2 style="margin: 0; font-size: 1.05rem">🎬 Race Story</h2>
           </div>
@@ -153,6 +168,7 @@
             </div>
             <div id="raceStoryContent" style="display:none">
               <div class="race-story-headline" id="raceStoryHeadline"></div>
+              <div id="raceStoryFastestLap" class="rs-fl-hero"></div>
               <div class="charts-grid">
                 <div class="chart-container full-width">
                   <div class="chart-title">📈 Position Changes Through the Race</div>
@@ -177,6 +193,7 @@
                 </div>
               </div>
             </div>
+
           </div>
         </div>
 

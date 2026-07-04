@@ -125,6 +125,37 @@ const F1_2026_CALENDAR = [
   "abu_dhabi",
 ];
 
+// 26 tracks available for personal notes (F1 game roster incl. legacy tracks)
+const NOTES_TRACKS = [
+  { key: "melbourne", label: "Melbourne", flag: "🇦🇺" },
+  { key: "shanghai", label: "Shanghai", flag: "🇨🇳" },
+  { key: "suzuka", label: "Suzuka", flag: "🇯🇵" },
+  { key: "sakhir", label: "Bahrain", flag: "🇧🇭" },
+  { key: "jeddah", label: "Jeddah", flag: "🇸🇦" },
+  { key: "miami", label: "Miami", flag: "🇺🇸" },
+  { key: "imola", label: "Imola", flag: "🇮🇹" },
+  { key: "monaco", label: "Monaco", flag: "🇲🇨" },
+  { key: "montreal", label: "Montreal", flag: "🇨🇦" },
+  { key: "catalunya", label: "Catalunya", flag: "🇪🇸" },
+  { key: "austria", label: "Red Bull Ring", flag: "🇦🇹" },
+  { key: "silverstone", label: "Silverstone", flag: "🇬🇧" },
+  { key: "spa", label: "Spa", flag: "🇧🇪" },
+  { key: "hungaroring", label: "Hungaroring", flag: "🇭🇺" },
+  { key: "zandvoort", label: "Zandvoort", flag: "🇳🇱" },
+  { key: "monza", label: "Monza", flag: "🇮🇹" },
+  { key: "madring", label: "Madring", flag: "🇪🇸" },
+  { key: "baku", label: "Baku", flag: "🇦🇿" },
+  { key: "singapore", label: "Singapore", flag: "🇸🇬" },
+  { key: "texas", label: "COTA", flag: "🇺🇸" },
+  { key: "mexico", label: "Mexico City", flag: "🇲🇽" },
+  { key: "brazil", label: "Interlagos", flag: "🇧🇷" },
+  { key: "las_vegas", label: "Las Vegas", flag: "🇺🇸" },
+  { key: "losail", label: "Losail", flag: "🇶🇦" },
+  { key: "abu_dhabi", label: "Yas Marina", flag: "🇦🇪" },
+  { key: "portimao", label: "Portimão", flag: "🇵🇹" },
+];
+
+
 // Suggested team list for driver assignment (datalist/autofill)
 const DRIVER_TEAM_SUGGESTIONS = [
   "My Team",
@@ -166,7 +197,9 @@ window.addEventListener("DOMContentLoaded", () => {
   // Load sessions then attempt to auto-load driver teams for the selected season.
   // This runs after the UI is wired so slow/failed DB startup cannot freeze clicks.
   loadDatabaseBackedData();
-  window.addEventListener("supabase-ready", () => loadDatabaseBackedData(), {
+  loadTrackNotes();
+  window.addEventListener("supabase-ready", () => { loadDatabaseBackedData(); loadTrackNotes(); }, {
+
     once: true,
   });
 
@@ -3393,9 +3426,10 @@ function computeSeasonStandings(season) {
           (s.category || "").toLowerCase() === "sprint"),
     );
   sessions.forEach((session) => {
-    if (!session.results) return;
-    session.results.forEach((res) => {
+    const seen = new Set();
+    (session.results || []).forEach((res) => {
       const name = res.name;
+      if (!name) return;
       if (!drivers[name]) drivers[name] = { points: 0, wins: 0, podiums: 0, races: 0, fastest_laps: 0 };
       const pos = parseInt(res.position);
       const cat = (session.category || "").toLowerCase();
@@ -3403,27 +3437,36 @@ function computeSeasonStandings(season) {
       if (cat === "race") pts = [0, 25, 18, 15, 12, 10, 8, 6, 4, 2, 1][pos] || 0;
       else if (cat === "sprint") pts = [0, 8, 7, 6, 5, 4, 3, 2, 1][pos] || 0;
       drivers[name].points += pts;
-      drivers[name].races += 1;
+      if (!seen.has(name)) {
+        drivers[name].races += 1;
+        seen.add(name);
+      }
       if (cat === "race") {
         if (pos === 1) drivers[name].wins += 1;
         if (pos >= 1 && pos <= 3) drivers[name].podiums += 1;
       }
     });
+    // DNF fallback: include drivers from race_story classification whose result-status is not FINISHED
+    const rsClass = session.race_story?.classification || [];
+    rsClass.forEach((e) => {
+      const name = (e.name || "").toUpperCase();
+      if (!name || seen.has(name)) return;
+      const isDNF = e.status && !/FINISHED/i.test(e.status);
+      if (!isDNF && e.position) return;
+      if (!drivers[name]) drivers[name] = { points: 0, wins: 0, podiums: 0, races: 0, fastest_laps: 0 };
+      drivers[name].races += 1;
+      seen.add(name);
+    });
     // Fastest lap credit (race only)
     const flName = ((session.race_story?.fastest_lap?.name) || "").toUpperCase();
     if (flName && (session.category || "").toLowerCase() === "race") {
-      if (!drivers[flName]) drivers[flName] = { points: 0, wins: 0, podiums: 0, races: 0, fastest_laps: 0, dotd: 0 };
+      if (!drivers[flName]) drivers[flName] = { points: 0, wins: 0, podiums: 0, races: 0, fastest_laps: 0 };
       drivers[flName].fastest_laps += 1;
-    }
-    // Driver of the Day credit (race only)
-    const dotdName = (session.race_story?.driver_of_the_day || "").toUpperCase();
-    if (dotdName && (session.category || "").toLowerCase() === "race") {
-      if (!drivers[dotdName]) drivers[dotdName] = { points: 0, wins: 0, podiums: 0, races: 0, fastest_laps: 0, dotd: 0 };
-      drivers[dotdName].dotd += 1;
     }
   });
   return drivers;
 }
+
 
 function renderRecordsTable() {
   const container = document.getElementById("records-container");
@@ -3449,17 +3492,17 @@ function renderRecordsTable() {
 
     Object.entries(standings).forEach(([name, s]) => {
       if (!driverAgg[name]) {
-        driverAgg[name] = { points: 0, wins: 0, podiums: 0, races: 0, fastest_laps: 0, dotd: 0, titles: 0, seasons: new Set(), lastTeam: null };
+        driverAgg[name] = { points: 0, wins: 0, podiums: 0, races: 0, fastest_laps: 0, titles: 0, seasons: new Set(), lastTeam: null };
       }
       driverAgg[name].points += s.points;
       driverAgg[name].wins += s.wins;
       driverAgg[name].podiums += s.podiums;
       driverAgg[name].races += s.races;
       driverAgg[name].fastest_laps += s.fastest_laps || 0;
-      driverAgg[name].dotd += s.dotd || 0;
       driverAgg[name].seasons.add(season);
       if (teams[name]) driverAgg[name].lastTeam = teams[name];
     });
+
 
     // Driver champion of season
     const driverRanked = Object.entries(standings).sort((a, b) => b[1].points - a[1].points);
@@ -3523,10 +3566,10 @@ function renderRecordsTable() {
         <td class="rec-num">${d.wins}</td>
         <td class="rec-num">${d.podiums}</td>
         <td class="rec-num">${d.fastest_laps || 0}</td>
-        <td class="rec-num">${d.dotd || 0}</td>
         <td class="rec-num">${d.races}</td>
         <td class="rec-num">${d.seasons.size}</td>
       </tr>`;
+
     })
     .join("");
 
@@ -3574,8 +3617,7 @@ function renderRecordsTable() {
         <span><b>Wins</b> Race wins (P1 in Race or Sprint)</span>
         <span><b>Pod</b> Podiums (P1–P3)</span>
         <span><b>FL</b> Fastest laps</span>
-        <span><b>DOTD</b> Driver of the Day</span>
-        <span><b>GP</b> Grands Prix entered</span>
+        <span><b>GP</b> Grands Prix entered (incl. DNFs)</span>
         <span><b>Sn</b> Seasons active</span>
         <span><b>★</b> Championship titles</span>
       </div>
@@ -3591,13 +3633,13 @@ function renderRecordsTable() {
                 <th class="rec-num" title="Race wins">Wins</th>
                 <th class="rec-num" title="Podiums (P1–P3)">Pod</th>
                 <th class="rec-num" title="Fastest Laps">FL</th>
-                <th class="rec-num" title="Driver of the Day">DOTD</th>
-                <th class="rec-num" title="Grands Prix entered">GP</th>
+                <th class="rec-num" title="Grands Prix entered (incl. DNFs)">GP</th>
                 <th class="rec-num" title="Seasons active">Sn</th>
               </tr>
             </thead>
-            <tbody>${driverRows || `<tr><td colspan="9" class="rec-empty">No race results yet.</td></tr>`}</tbody>
+            <tbody>${driverRows || `<tr><td colspan="8" class="rec-empty">No race results yet.</td></tr>`}</tbody>
           </table>
+
         </div>
       </div>
 
@@ -3936,7 +3978,115 @@ function secondsToTimeString(seconds) {
 }
 
 // Collapsible sections helpers
+// ---------- Track Notes ----------
+const trackNotesCache = {}; // key -> notes text
+let trackNotesLoaded = false;
+const notesSaveTimers = {};
+
+async function loadTrackNotes() {
+  const client = getSupabaseClient({ silent: true });
+  if (!client) return;
+  try {
+    const { data, error } = await client.from("track_notes").select("track_key, notes");
+    if (error) {
+      console.warn("track_notes load failed", error);
+      return;
+    }
+    (data || []).forEach((row) => {
+      trackNotesCache[row.track_key] = row.notes || "";
+    });
+    trackNotesLoaded = true;
+    // If notes section is already rendered, refresh values
+    document.querySelectorAll("textarea.note-textarea[data-track]").forEach((ta) => {
+      const k = ta.dataset.track;
+      if (trackNotesCache[k] != null && !ta.dataset.dirty) {
+        ta.value = trackNotesCache[k];
+      }
+    });
+  } catch (err) {
+    console.warn("track_notes load error", err);
+  }
+}
+
+function setNotesStatus(msg, isError) {
+  const el = document.getElementById("notesStatus");
+  if (!el) return;
+  el.textContent = msg || "";
+  el.style.color = isError ? "#ff6666" : "";
+}
+
+async function saveTrackNote(trackKey, notes) {
+  const client = getSupabaseClient();
+  if (!client) {
+    setNotesStatus("Notes need Supabase connection", true);
+    return;
+  }
+  setNotesStatus("Saving…");
+  try {
+    const { error } = await client
+      .from("track_notes")
+      .upsert({ track_key: trackKey, notes, updated_at: new Date().toISOString() }, { onConflict: "track_key" });
+    if (error) {
+      console.error("track_notes save failed", error);
+      setNotesStatus("Save failed: " + (error.message || "unknown"), true);
+      return;
+    }
+    trackNotesCache[trackKey] = notes;
+    setNotesStatus("Saved ✓");
+    setTimeout(() => setNotesStatus(""), 1500);
+  } catch (err) {
+    console.error(err);
+    setNotesStatus("Save error", true);
+  }
+}
+
+function renderNotesGrid() {
+  const grid = document.getElementById("notesGrid");
+  if (!grid) return;
+  if (grid.dataset.rendered === "1") return;
+  grid.dataset.rendered = "1";
+  grid.innerHTML = NOTES_TRACKS.map((t, i) => `
+    <div class="note-card">
+      <div class="note-head">
+        <span class="note-round">R${String(i + 1).padStart(2, "0")}</span>
+        <span class="note-flag">${t.flag}</span>
+        <span class="note-track">${t.label}</span>
+      </div>
+      <textarea
+        class="note-textarea"
+        data-track="${t.key}"
+        placeholder="Setup notes, braking points, tyre strategy, reminders…"
+      >${(trackNotesCache[t.key] || "").replace(/</g, "&lt;")}</textarea>
+    </div>
+  `).join("");
+
+  grid.querySelectorAll("textarea.note-textarea").forEach((ta) => {
+    ta.addEventListener("input", () => {
+      ta.dataset.dirty = "1";
+      const k = ta.dataset.track;
+      clearTimeout(notesSaveTimers[k]);
+      setNotesStatus("Editing…");
+      notesSaveTimers[k] = setTimeout(() => {
+        delete ta.dataset.dirty;
+        saveTrackNote(k, ta.value);
+      }, 700);
+    });
+    ta.addEventListener("blur", () => {
+      const k = ta.dataset.track;
+      if (ta.dataset.dirty) {
+        clearTimeout(notesSaveTimers[k]);
+        delete ta.dataset.dirty;
+        saveTrackNote(k, ta.value);
+      }
+    });
+  });
+
+  if (!trackNotesLoaded) loadTrackNotes();
+}
+
 function initCollapsibleSections() {
+
+
   try {
     const tabContainer = document.querySelector(".collapsible-tabs");
     const tabs = Array.from(
@@ -3968,7 +4118,9 @@ function initCollapsibleSections() {
         tab.classList.toggle("active", tab.dataset.target === targetId);
       });
       localStorage.setItem(activeKey, targetId);
+      if (targetId === "section-notes") renderNotesGrid();
     }
+
 
     tabs.forEach((tab) => {
       const targetId = tab.dataset.target;
@@ -4133,9 +4285,31 @@ function renderRaceStory() {
       </span>
       <span class="rs-pill">Overtakes made ${rs.overtakes_made.length}</span>
       <span class="rs-pill">Lost ${rs.overtakes_suffered.length}</span>
-      ${fl ? `<span class="rs-pill ${badges.fl ? "rs-pos" : ""}">⏱ Fastest lap: ${fl.name} (L${fl.lap} ${fmtFl(fl.time_ms)})</span>` : ""}
       ${badges.grandSlam ? `<span class="rs-pill rs-grand-slam">👑 GRAND SLAM</span>` : ""}
     `;
+  }
+
+  const flHero = document.getElementById("raceStoryFastestLap");
+  if (flHero) {
+    if (fl) {
+      const isPlayer = badges.fl;
+      flHero.innerHTML = `
+        <div class="rs-fl-card${isPlayer ? " is-player" : ""}">
+          <div class="rs-fl-icon">⚡</div>
+          <div class="rs-fl-body">
+            <div class="rs-fl-label">Fastest Lap of the Race</div>
+            <div class="rs-fl-main">
+              <span class="rs-fl-driver">${(fl.name || "").toUpperCase()}</span>
+              ${fl.lap_time_str ? `<span class="rs-fl-time">${fl.lap_time_str}</span>` : ""}
+            </div>
+            <div class="rs-fl-meta">${fl.team ? fl.team + " · " : ""}Lap ${fl.lap ?? "?"}</div>
+          </div>
+        </div>
+      `;
+      flHero.style.display = "";
+    } else {
+      flHero.style.display = "none";
+    }
   }
 
   renderPositionChart(rs);
@@ -4144,6 +4318,7 @@ function renderRaceStory() {
   renderTopSpeedList(rs);
   renderFinalClassification(rs);
 }
+
 
 function renderFinalClassification(rs) {
   const el = document.getElementById("finalClassification");
@@ -4220,8 +4395,8 @@ function renderFinalClassification(rs) {
         <span class="fc-fl-driver">${(fl.name || "").toUpperCase()}</span>
         ${fl.lap_time_str ? `<span class="fc-fl-time">${fl.lap_time_str}</span>` : ""}
         ${fl.lap ? `<span class="fc-fl-meta">Lap ${fl.lap}</span>` : ""}
-        ${rs.driver_of_the_day ? `<span class="fc-dotd-chip">🌟 DRIVER OF THE DAY</span><span class="fc-dotd-driver">${String(rs.driver_of_the_day).toUpperCase()}</span>` : ""}
       </div>`
+
     : "";
 
   el.innerHTML = `
