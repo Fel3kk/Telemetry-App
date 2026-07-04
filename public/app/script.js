@@ -4116,7 +4116,9 @@ function initCollapsibleSections() {
         tab.classList.toggle("active", tab.dataset.target === targetId);
       });
       localStorage.setItem(activeKey, targetId);
+      if (targetId === "section-notes") renderNotesGrid();
     }
+
 
     tabs.forEach((tab) => {
       const targetId = tab.dataset.target;
