@@ -3976,7 +3976,114 @@ function secondsToTimeString(seconds) {
 }
 
 // Collapsible sections helpers
+// ---------- Track Notes ----------
+const trackNotesCache = {}; // key -> notes text
+let trackNotesLoaded = false;
+const notesSaveTimers = {};
+
+async function loadTrackNotes() {
+  const client = getSupabaseClient({ silent: true });
+  if (!client) return;
+  try {
+    const { data, error } = await client.from("track_notes").select("track_key, notes");
+    if (error) {
+      console.warn("track_notes load failed", error);
+      return;
+    }
+    (data || []).forEach((row) => {
+      trackNotesCache[row.track_key] = row.notes || "";
+    });
+    trackNotesLoaded = true;
+    // If notes section is already rendered, refresh values
+    document.querySelectorAll("textarea.note-textarea[data-track]").forEach((ta) => {
+      const k = ta.dataset.track;
+      if (trackNotesCache[k] != null && !ta.dataset.dirty) {
+        ta.value = trackNotesCache[k];
+      }
+    });
+  } catch (err) {
+    console.warn("track_notes load error", err);
+  }
+}
+
+function setNotesStatus(msg, isError) {
+  const el = document.getElementById("notesStatus");
+  if (!el) return;
+  el.textContent = msg || "";
+  el.style.color = isError ? "#ff6666" : "";
+}
+
+async function saveTrackNote(trackKey, notes) {
+  const client = getSupabaseClient();
+  if (!client) {
+    setNotesStatus("Notes need Supabase connection", true);
+    return;
+  }
+  setNotesStatus("Saving…");
+  try {
+    const { error } = await client
+      .from("track_notes")
+      .upsert({ track_key: trackKey, notes, updated_at: new Date().toISOString() }, { onConflict: "track_key" });
+    if (error) {
+      console.error("track_notes save failed", error);
+      setNotesStatus("Save failed: " + (error.message || "unknown"), true);
+      return;
+    }
+    trackNotesCache[trackKey] = notes;
+    setNotesStatus("Saved ✓");
+    setTimeout(() => setNotesStatus(""), 1500);
+  } catch (err) {
+    console.error(err);
+    setNotesStatus("Save error", true);
+  }
+}
+
+function renderNotesGrid() {
+  const grid = document.getElementById("notesGrid");
+  if (!grid) return;
+  if (grid.dataset.rendered === "1") return;
+  grid.dataset.rendered = "1";
+  grid.innerHTML = NOTES_TRACKS.map((t, i) => `
+    <div class="note-card">
+      <div class="note-head">
+        <span class="note-round">R${String(i + 1).padStart(2, "0")}</span>
+        <span class="note-flag">${t.flag}</span>
+        <span class="note-track">${t.label}</span>
+      </div>
+      <textarea
+        class="note-textarea"
+        data-track="${t.key}"
+        placeholder="Setup notes, braking points, tyre strategy, reminders…"
+      >${(trackNotesCache[t.key] || "").replace(/</g, "&lt;")}</textarea>
+    </div>
+  `).join("");
+
+  grid.querySelectorAll("textarea.note-textarea").forEach((ta) => {
+    ta.addEventListener("input", () => {
+      ta.dataset.dirty = "1";
+      const k = ta.dataset.track;
+      clearTimeout(notesSaveTimers[k]);
+      setNotesStatus("Editing…");
+      notesSaveTimers[k] = setTimeout(() => {
+        delete ta.dataset.dirty;
+        saveTrackNote(k, ta.value);
+      }, 700);
+    });
+    ta.addEventListener("blur", () => {
+      const k = ta.dataset.track;
+      if (ta.dataset.dirty) {
+        clearTimeout(notesSaveTimers[k]);
+        delete ta.dataset.dirty;
+        saveTrackNote(k, ta.value);
+      }
+    });
+  });
+
+  if (!trackNotesLoaded) loadTrackNotes();
+}
+
 function initCollapsibleSections() {
+
 
   try {
     const tabContainer = document.querySelector(".collapsible-tabs");
