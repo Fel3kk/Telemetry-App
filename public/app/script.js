@@ -3533,10 +3533,10 @@ function renderRecordsTable() {
         <td class="rec-num">${d.wins}</td>
         <td class="rec-num">${d.podiums}</td>
         <td class="rec-num">${d.fastest_laps || 0}</td>
-        <td class="rec-num">${d.dotd || 0}</td>
         <td class="rec-num">${d.races}</td>
         <td class="rec-num">${d.seasons.size}</td>
       </tr>`;
+
     })
     .join("");
 
