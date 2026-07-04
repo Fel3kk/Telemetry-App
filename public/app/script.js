@@ -4142,9 +4142,31 @@ function renderRaceStory() {
       </span>
       <span class="rs-pill">Overtakes made ${rs.overtakes_made.length}</span>
       <span class="rs-pill">Lost ${rs.overtakes_suffered.length}</span>
-      ${fl ? `<span class="rs-pill ${badges.fl ? "rs-pos" : ""}">⏱ Fastest lap: ${fl.name} (L${fl.lap} ${fmtFl(fl.time_ms)})</span>` : ""}
       ${badges.grandSlam ? `<span class="rs-pill rs-grand-slam">👑 GRAND SLAM</span>` : ""}
     `;
+  }
+
+  const flHero = document.getElementById("raceStoryFastestLap");
+  if (flHero) {
+    if (fl) {
+      const isPlayer = badges.fl;
+      flHero.innerHTML = `
+        <div class="rs-fl-card${isPlayer ? " is-player" : ""}">
+          <div class="rs-fl-icon">⚡</div>
+          <div class="rs-fl-body">
+            <div class="rs-fl-label">Fastest Lap of the Race</div>
+            <div class="rs-fl-main">
+              <span class="rs-fl-driver">${(fl.name || "").toUpperCase()}</span>
+              ${fl.lap_time_str ? `<span class="rs-fl-time">${fl.lap_time_str}</span>` : ""}
+            </div>
+            <div class="rs-fl-meta">${fl.team ? fl.team + " · " : ""}Lap ${fl.lap ?? "?"}</div>
+          </div>
+        </div>
+      `;
+      flHero.style.display = "";
+    } else {
+      flHero.style.display = "none";
+    }
   }
 
   renderPositionChart(rs);
@@ -4153,6 +4175,7 @@ function renderRaceStory() {
   renderTopSpeedList(rs);
   renderFinalClassification(rs);
 }
+
 
 function renderFinalClassification(rs) {
   const el = document.getElementById("finalClassification");
