@@ -125,6 +125,37 @@ const F1_2026_CALENDAR = [
   "abu_dhabi",
 ];
 
+// 26 tracks available for personal notes (F1 game roster incl. legacy tracks)
+const NOTES_TRACKS = [
+  { key: "melbourne", label: "Melbourne", flag: "🇦🇺" },
+  { key: "shanghai", label: "Shanghai", flag: "🇨🇳" },
+  { key: "suzuka", label: "Suzuka", flag: "🇯🇵" },
+  { key: "sakhir", label: "Bahrain", flag: "🇧🇭" },
+  { key: "jeddah", label: "Jeddah", flag: "🇸🇦" },
+  { key: "miami", label: "Miami", flag: "🇺🇸" },
+  { key: "imola", label: "Imola", flag: "🇮🇹" },
+  { key: "monaco", label: "Monaco", flag: "🇲🇨" },
+  { key: "montreal", label: "Montreal", flag: "🇨🇦" },
+  { key: "catalunya", label: "Catalunya", flag: "🇪🇸" },
+  { key: "austria", label: "Red Bull Ring", flag: "🇦🇹" },
+  { key: "silverstone", label: "Silverstone", flag: "🇬🇧" },
+  { key: "spa", label: "Spa", flag: "🇧🇪" },
+  { key: "hungaroring", label: "Hungaroring", flag: "🇭🇺" },
+  { key: "zandvoort", label: "Zandvoort", flag: "🇳🇱" },
+  { key: "monza", label: "Monza", flag: "🇮🇹" },
+  { key: "madring", label: "Madring", flag: "🇪🇸" },
+  { key: "baku", label: "Baku", flag: "🇦🇿" },
+  { key: "singapore", label: "Singapore", flag: "🇸🇬" },
+  { key: "texas", label: "COTA", flag: "🇺🇸" },
+  { key: "mexico", label: "Mexico City", flag: "🇲🇽" },
+  { key: "brazil", label: "Interlagos", flag: "🇧🇷" },
+  { key: "las_vegas", label: "Las Vegas", flag: "🇺🇸" },
+  { key: "losail", label: "Losail", flag: "🇶🇦" },
+  { key: "abu_dhabi", label: "Yas Marina", flag: "🇦🇪" },
+  { key: "portimao", label: "Portimão", flag: "🇵🇹" },
+];
+
+
 // Suggested team list for driver assignment (datalist/autofill)
 const DRIVER_TEAM_SUGGESTIONS = [
   "My Team",
