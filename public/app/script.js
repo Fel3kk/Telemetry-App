@@ -3523,13 +3523,14 @@ function renderRecordsTable() {
 
     Object.entries(standings).forEach(([name, s]) => {
       if (!driverAgg[name]) {
-        driverAgg[name] = { points: 0, wins: 0, podiums: 0, races: 0, fastest_laps: 0, titles: 0, seasons: new Set(), lastTeam: null };
+        driverAgg[name] = { points: 0, wins: 0, podiums: 0, races: 0, fastest_laps: 0, dnfs: 0, titles: 0, seasons: new Set(), lastTeam: null };
       }
       driverAgg[name].points += s.points;
       driverAgg[name].wins += s.wins;
       driverAgg[name].podiums += s.podiums;
       driverAgg[name].races += s.races;
       driverAgg[name].fastest_laps += s.fastest_laps || 0;
+      driverAgg[name].dnfs += s.dnfs || 0;
       driverAgg[name].seasons.add(season);
       if (teams[name]) driverAgg[name].lastTeam = teams[name];
     });
