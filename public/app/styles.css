@@ -2133,6 +2133,7 @@ body.light-theme #driver-assignments-container { background: #ffffff; }
 .fc-pos-pill.p1 { background: linear-gradient(135deg,#ffd84a,#f3a900); color:#000; }
 .fc-pos-pill.p2 { background: linear-gradient(135deg,#e5e5e5,#a8a8a8); color:#000; }
 .fc-pos-pill.p3 { background: linear-gradient(135deg,#e3a468,#a06a36); color:#000; }
+.fc-pos-pill.dnf { background: rgba(255,80,80,0.18); color:#ff8080; border:1px solid rgba(255,80,80,0.45); font-size:0.72rem; letter-spacing:0.5px; }
 
 .fc-driver { min-width: 160px; border-left: 3px solid var(--team-color); padding-left: 10px !important; }
 .fc-name { display: block; font-weight: 700; letter-spacing: 0.03em; }
