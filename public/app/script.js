@@ -3651,6 +3651,7 @@ function renderRecordsTable() {
         <span><b>Pod</b> Podiums (P1–P3)</span>
         <span><b>FL</b> Fastest laps</span>
         <span><b>GP</b> Grands Prix entered (incl. DNFs)</span>
+        <span><b>DNF</b> Did-not-finish count</span>
         <span><b>Sn</b> Seasons active</span>
         <span><b>★</b> Championship titles</span>
       </div>
