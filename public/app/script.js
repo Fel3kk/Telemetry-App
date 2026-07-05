@@ -3672,7 +3672,7 @@ function renderRecordsTable() {
                 <th class="rec-num" title="Seasons active">Sn</th>
               </tr>
             </thead>
-            <tbody>${driverRows || `<tr><td colspan="8" class="rec-empty">No race results yet.</td></tr>`}</tbody>
+            <tbody>${driverRows || `<tr><td colspan="9" class="rec-empty">No race results yet.</td></tr>`}</tbody>
           </table>
 
         </div>
