@@ -649,26 +649,46 @@ function buildRaceStory(rootData, playerName, playerTeam, classification_data) {
   const rootDOTD = rootData?.["driver-of-the-day"] || rootData?.["records"]?.["driver-of-the-day"];
   if (!driver_of_the_day && rootDOTD) driver_of_the_day = String(rootDOTD).toUpperCase();
 
-  // Final classification (every driver) with total time, best lap, status
-  const classification = (classification_data || [])
-    .map((e) => {
-      const fc = e["final-classification"] || {};
-      return {
-        position: fc.position || null,
-        name: String(e["driver-name"] || "").toUpperCase(),
-        team: e.team || "",
-        laps: fc["num-laps"] || 0,
-        time_s: fc["total-race-time"] || 0,
-        time_str: fc["total-race-time-str"] || "",
-        best_lap_ms: fc["best-lap-time-ms"] || 0,
-        best_lap_str: fc["best-lap-time-str"] || "",
-        status: fc["result-status"] || "",
-        points: fc.points || 0,
-        pits: fc["num-pit-stops"] || 0,
-      };
-    })
-    .filter((e) => e.position)
+  // Final classification (every driver) with total time, best lap, status.
+  // Include DNFs (no position / non-finished status / short on laps) with is_dnf flag.
+  const rawEntries = (classification_data || []).map((e) => {
+    const fc = e["final-classification"] || {};
+    return {
+      position: fc.position || null,
+      name: String(e["driver-name"] || "").toUpperCase(),
+      team: e.team || "",
+      laps: fc["num-laps"] || 0,
+      time_s: fc["total-race-time"] || 0,
+      time_str: fc["total-race-time-str"] || "",
+      best_lap_ms: fc["best-lap-time-ms"] || 0,
+      best_lap_str: fc["best-lap-time-str"] || "",
+      status: fc["result-status"] || "",
+      points: fc.points || 0,
+      pits: fc["num-pit-stops"] || 0,
+    };
+  }).filter((e) => e.name);
+  const maxLaps = rawEntries.reduce((m, e) => Math.max(m, e.laps || 0), 0);
+  const decorated = rawEntries.map((e) => {
+    const statusStr = String(e.status || "").toUpperCase();
+    const statusDnf = statusStr && !/FINISHED|ACTIVE/.test(statusStr);
+    const missingPos = !e.position || e.position <= 0;
+    const shortLaps = maxLaps >= 5 && e.laps > 0 && e.laps < maxLaps - 2 && !e.time_s;
+    const is_dnf = statusDnf || (missingPos && (e.laps === 0 || !e.time_s)) || shortLaps;
+    return { ...e, is_dnf };
+  });
+  const finishers = decorated
+    .filter((e) => e.position && !e.is_dnf)
     .sort((a, b) => a.position - b.position);
+  const dnfs = decorated
+    .filter((e) => e.is_dnf || !e.position)
+    .sort((a, b) => (b.laps || 0) - (a.laps || 0));
+  let nextPos = (finishers[finishers.length - 1]?.position || finishers.length) + 1;
+  dnfs.forEach((e) => {
+    if (!e.position || e.position <= 0) e.position = nextPos++;
+    e.is_dnf = true;
+    if (!e.status) e.status = "DNF";
+  });
+  const classification = [...finishers, ...dnfs];
 
   return {
     player_name: playerName,
