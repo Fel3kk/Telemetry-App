@@ -649,26 +649,46 @@ function buildRaceStory(rootData, playerName, playerTeam, classification_data) {
   const rootDOTD = rootData?.["driver-of-the-day"] || rootData?.["records"]?.["driver-of-the-day"];
   if (!driver_of_the_day && rootDOTD) driver_of_the_day = String(rootDOTD).toUpperCase();
 
-  // Final classification (every driver) with total time, best lap, status
-  const classification = (classification_data || [])
-    .map((e) => {
-      const fc = e["final-classification"] || {};
-      return {
-        position: fc.position || null,
-        name: String(e["driver-name"] || "").toUpperCase(),
-        team: e.team || "",
-        laps: fc["num-laps"] || 0,
-        time_s: fc["total-race-time"] || 0,
-        time_str: fc["total-race-time-str"] || "",
-        best_lap_ms: fc["best-lap-time-ms"] || 0,
-        best_lap_str: fc["best-lap-time-str"] || "",
-        status: fc["result-status"] || "",
-        points: fc.points || 0,
-        pits: fc["num-pit-stops"] || 0,
-      };
-    })
-    .filter((e) => e.position)
+  // Final classification (every driver) with total time, best lap, status.
+  // Include DNFs (no position / non-finished status / short on laps) with is_dnf flag.
+  const rawEntries = (classification_data || []).map((e) => {
+    const fc = e["final-classification"] || {};
+    return {
+      position: fc.position || null,
+      name: String(e["driver-name"] || "").toUpperCase(),
+      team: e.team || "",
+      laps: fc["num-laps"] || 0,
+      time_s: fc["total-race-time"] || 0,
+      time_str: fc["total-race-time-str"] || "",
+      best_lap_ms: fc["best-lap-time-ms"] || 0,
+      best_lap_str: fc["best-lap-time-str"] || "",
+      status: fc["result-status"] || "",
+      points: fc.points || 0,
+      pits: fc["num-pit-stops"] || 0,
+    };
+  }).filter((e) => e.name);
+  const maxLaps = rawEntries.reduce((m, e) => Math.max(m, e.laps || 0), 0);
+  const decorated = rawEntries.map((e) => {
+    const statusStr = String(e.status || "").toUpperCase();
+    const statusDnf = statusStr && !/FINISHED|ACTIVE/.test(statusStr);
+    const missingPos = !e.position || e.position <= 0;
+    const shortLaps = maxLaps >= 5 && e.laps > 0 && e.laps < maxLaps - 2 && !e.time_s;
+    const is_dnf = statusDnf || (missingPos && (e.laps === 0 || !e.time_s)) || shortLaps;
+    return { ...e, is_dnf };
+  });
+  const finishers = decorated
+    .filter((e) => e.position && !e.is_dnf)
     .sort((a, b) => a.position - b.position);
+  const dnfs = decorated
+    .filter((e) => e.is_dnf || !e.position)
+    .sort((a, b) => (b.laps || 0) - (a.laps || 0));
+  let nextPos = (finishers[finishers.length - 1]?.position || finishers.length) + 1;
+  dnfs.forEach((e) => {
+    if (!e.position || e.position <= 0) e.position = nextPos++;
+    e.is_dnf = true;
+    if (!e.status) e.status = "DNF";
+  });
+  const classification = [...finishers, ...dnfs];
 
   return {
     player_name: playerName,
@@ -3427,10 +3447,17 @@ function computeSeasonStandings(season) {
     );
   sessions.forEach((session) => {
     const seen = new Set();
+    const rsClass = session.race_story?.classification || [];
+    const dnfNames = new Set(
+      rsClass
+        .filter((e) => e.is_dnf || (e.status && !/FINISHED/i.test(e.status)))
+        .map((e) => (e.name || "").toUpperCase())
+        .filter(Boolean),
+    );
     (session.results || []).forEach((res) => {
       const name = res.name;
       if (!name) return;
-      if (!drivers[name]) drivers[name] = { points: 0, wins: 0, podiums: 0, races: 0, fastest_laps: 0 };
+      if (!drivers[name]) drivers[name] = { points: 0, wins: 0, podiums: 0, races: 0, fastest_laps: 0, dnfs: 0 };
       const pos = parseInt(res.position);
       const cat = (session.category || "").toLowerCase();
       let pts = 0;
@@ -3440,27 +3467,31 @@ function computeSeasonStandings(season) {
       if (!seen.has(name)) {
         drivers[name].races += 1;
         seen.add(name);
+        // Secondary DNF check: no valid finishing position OR classified as DNF in race_story
+        if (cat === "race" && (dnfNames.has(name) || !pos || pos <= 0)) {
+          drivers[name].dnfs += 1;
+        }
       }
       if (cat === "race") {
         if (pos === 1) drivers[name].wins += 1;
         if (pos >= 1 && pos <= 3) drivers[name].podiums += 1;
       }
     });
-    // DNF fallback: include drivers from race_story classification whose result-status is not FINISHED
-    const rsClass = session.race_story?.classification || [];
+    // DNF fallback: include drivers from race_story classification not in session.results
     rsClass.forEach((e) => {
       const name = (e.name || "").toUpperCase();
       if (!name || seen.has(name)) return;
-      const isDNF = e.status && !/FINISHED/i.test(e.status);
+      const isDNF = e.is_dnf || (e.status && !/FINISHED/i.test(e.status));
       if (!isDNF && e.position) return;
-      if (!drivers[name]) drivers[name] = { points: 0, wins: 0, podiums: 0, races: 0, fastest_laps: 0 };
+      if (!drivers[name]) drivers[name] = { points: 0, wins: 0, podiums: 0, races: 0, fastest_laps: 0, dnfs: 0 };
       drivers[name].races += 1;
+      if ((session.category || "").toLowerCase() === "race") drivers[name].dnfs += 1;
       seen.add(name);
     });
     // Fastest lap credit (race only)
     const flName = ((session.race_story?.fastest_lap?.name) || "").toUpperCase();
     if (flName && (session.category || "").toLowerCase() === "race") {
-      if (!drivers[flName]) drivers[flName] = { points: 0, wins: 0, podiums: 0, races: 0, fastest_laps: 0 };
+      if (!drivers[flName]) drivers[flName] = { points: 0, wins: 0, podiums: 0, races: 0, fastest_laps: 0, dnfs: 0 };
       drivers[flName].fastest_laps += 1;
     }
   });
@@ -3492,13 +3523,14 @@ function renderRecordsTable() {
 
     Object.entries(standings).forEach(([name, s]) => {
       if (!driverAgg[name]) {
-        driverAgg[name] = { points: 0, wins: 0, podiums: 0, races: 0, fastest_laps: 0, titles: 0, seasons: new Set(), lastTeam: null };
+        driverAgg[name] = { points: 0, wins: 0, podiums: 0, races: 0, fastest_laps: 0, dnfs: 0, titles: 0, seasons: new Set(), lastTeam: null };
       }
       driverAgg[name].points += s.points;
       driverAgg[name].wins += s.wins;
       driverAgg[name].podiums += s.podiums;
       driverAgg[name].races += s.races;
       driverAgg[name].fastest_laps += s.fastest_laps || 0;
+      driverAgg[name].dnfs += s.dnfs || 0;
       driverAgg[name].seasons.add(season);
       if (teams[name]) driverAgg[name].lastTeam = teams[name];
     });
@@ -3567,6 +3599,7 @@ function renderRecordsTable() {
         <td class="rec-num">${d.podiums}</td>
         <td class="rec-num">${d.fastest_laps || 0}</td>
         <td class="rec-num">${d.races}</td>
+        <td class="rec-num">${d.dnfs || 0}</td>
         <td class="rec-num">${d.seasons.size}</td>
       </tr>`;
 
@@ -3618,6 +3651,7 @@ function renderRecordsTable() {
         <span><b>Pod</b> Podiums (P1–P3)</span>
         <span><b>FL</b> Fastest laps</span>
         <span><b>GP</b> Grands Prix entered (incl. DNFs)</span>
+        <span><b>DNF</b> Did-not-finish count</span>
         <span><b>Sn</b> Seasons active</span>
         <span><b>★</b> Championship titles</span>
       </div>
@@ -3634,10 +3668,11 @@ function renderRecordsTable() {
                 <th class="rec-num" title="Podiums (P1–P3)">Pod</th>
                 <th class="rec-num" title="Fastest Laps">FL</th>
                 <th class="rec-num" title="Grands Prix entered (incl. DNFs)">GP</th>
+                <th class="rec-num" title="Did not finish">DNF</th>
                 <th class="rec-num" title="Seasons active">Sn</th>
               </tr>
             </thead>
-            <tbody>${driverRows || `<tr><td colspan="8" class="rec-empty">No race results yet.</td></tr>`}</tbody>
+            <tbody>${driverRows || `<tr><td colspan="9" class="rec-empty">No race results yet.</td></tr>`}</tbody>
           </table>
 
         </div>
@@ -4344,7 +4379,7 @@ function renderFinalClassification(rs) {
       const isLeader = i === 0;
       const isPlayer = e.name === (rs.player_name || "").toUpperCase();
       const isFL = flName && e.name === flName;
-      const dnf = e.status && !/FINISHED/i.test(e.status);
+      const dnf = e.is_dnf || (e.status && !/FINISHED/i.test(e.status));
       let gapLeader = "—";
       let gapNext = "—";
       if (isLeader) {
@@ -4371,9 +4406,10 @@ function renderFinalClassification(rs) {
       const color = teamColorFor(e.team) || "#444";
       const pos = e.position;
       const posClass =
-        pos === 1 ? "p1" : pos === 2 ? "p2" : pos === 3 ? "p3" : "";
+        dnf ? "dnf" : pos === 1 ? "p1" : pos === 2 ? "p2" : pos === 3 ? "p3" : "";
+      const posLabel = dnf ? "DNF" : pos;
       return `<tr class="fc-row${isPlayer ? " is-player" : ""}${isFL ? " is-fl" : ""}${dnf ? " is-dnf" : ""}" style="--team-color:${color};">
-        <td class="fc-pos"><span class="fc-pos-pill ${posClass}">${pos}</span></td>
+        <td class="fc-pos"><span class="fc-pos-pill ${posClass}">${posLabel}</span></td>
         <td class="fc-driver">
           <span class="fc-name">${e.name}${isFL ? ' <span class="fc-fl-badge" title="Fastest Lap">FL</span>' : ""}</span>
           <span class="fc-team">${e.team}</span>
