@@ -3668,6 +3668,7 @@ function renderRecordsTable() {
                 <th class="rec-num" title="Podiums (P1–P3)">Pod</th>
                 <th class="rec-num" title="Fastest Laps">FL</th>
                 <th class="rec-num" title="Grands Prix entered (incl. DNFs)">GP</th>
+                <th class="rec-num" title="Did not finish">DNF</th>
                 <th class="rec-num" title="Seasons active">Sn</th>
               </tr>
             </thead>
