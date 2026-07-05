@@ -4364,7 +4364,7 @@ function renderFinalClassification(rs) {
       const isLeader = i === 0;
       const isPlayer = e.name === (rs.player_name || "").toUpperCase();
       const isFL = flName && e.name === flName;
-      const dnf = e.status && !/FINISHED/i.test(e.status);
+      const dnf = e.is_dnf || (e.status && !/FINISHED/i.test(e.status));
       let gapLeader = "—";
       let gapNext = "—";
       if (isLeader) {
@@ -4391,9 +4391,10 @@ function renderFinalClassification(rs) {
       const color = teamColorFor(e.team) || "#444";
       const pos = e.position;
       const posClass =
-        pos === 1 ? "p1" : pos === 2 ? "p2" : pos === 3 ? "p3" : "";
+        dnf ? "dnf" : pos === 1 ? "p1" : pos === 2 ? "p2" : pos === 3 ? "p3" : "";
+      const posLabel = dnf ? "DNF" : pos;
       return `<tr class="fc-row${isPlayer ? " is-player" : ""}${isFL ? " is-fl" : ""}${dnf ? " is-dnf" : ""}" style="--team-color:${color};">
-        <td class="fc-pos"><span class="fc-pos-pill ${posClass}">${pos}</span></td>
+        <td class="fc-pos"><span class="fc-pos-pill ${posClass}">${posLabel}</span></td>
         <td class="fc-driver">
           <span class="fc-name">${e.name}${isFL ? ' <span class="fc-fl-badge" title="Fastest Lap">FL</span>' : ""}</span>
           <span class="fc-team">${e.team}</span>
