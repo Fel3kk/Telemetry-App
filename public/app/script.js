@@ -3417,10 +3417,12 @@ function renderStandingsTable() {
       const posNum = parseInt(pos);
       let pillClass = "";
       let label = pos;
-      if (posNum >= 1 && posNum <= 3) {
+      if (pos === "DNF") {
+        pillClass = " is-dnf";
+        label = "DNF";
+      } else if (posNum >= 1 && posNum <= 3) {
         pillClass = ` pos-${posNum}`;
       } else if (!pos) {
-        // Driver missing from this session's results — treat as DNF
         pillClass = " is-dnf";
         label = "DNF";
       }
