@@ -4421,11 +4421,20 @@ function renderRaceStory() {
 function renderFinalClassification(rs) {
   const el = document.getElementById("finalClassification");
   if (!el) return;
-  const list = rs.classification || [];
-  if (!list.length) {
+  const rawList = rs.classification || [];
+  if (!rawList.length) {
     el.innerHTML = `<div class="race-story-empty">No classification data.</div>`;
     return;
   }
+  // Sort: finishers first (by position asc), then DNFs at the bottom (by laps desc)
+  const isDnfEntry = (e) => e.is_dnf || (e.status && !/FINISHED/i.test(e.status));
+  const finishers = rawList
+    .filter((e) => !isDnfEntry(e))
+    .sort((a, b) => (parseInt(a.position) || 999) - (parseInt(b.position) || 999));
+  const dnfs = rawList
+    .filter(isDnfEntry)
+    .sort((a, b) => (b.laps || 0) - (a.laps || 0));
+  const list = [...finishers, ...dnfs];
   const fl = rs.fastest_lap;
   const flName = fl ? (fl.name || "").toUpperCase() : "";
   const leader = list[0];
