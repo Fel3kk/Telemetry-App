@@ -3522,15 +3522,16 @@ function computeSeasonStandings(season) {
         if (pos >= 1 && pos <= 3) drivers[name].podiums += 1;
       }
     });
-    // DNF fallback: include drivers from race_story classification not in session.results
+    // Fallback: include drivers from race_story classification not already
+    // counted from session.results — this makes DNFs (and any other missing
+    // driver) count towards the GP (races) total.
     rsClass.forEach((e) => {
       const name = (e.name || "").toUpperCase();
       if (!name || seen.has(name)) return;
       const isDNF = e.is_dnf || (e.status && !/FINISHED/i.test(e.status));
-      if (!isDNF && e.position) return;
       if (!drivers[name]) drivers[name] = { points: 0, wins: 0, podiums: 0, races: 0, fastest_laps: 0, dnfs: 0 };
       drivers[name].races += 1;
-      if ((session.category || "").toLowerCase() === "race") drivers[name].dnfs += 1;
+      if ((session.category || "").toLowerCase() === "race" && isDNF) drivers[name].dnfs += 1;
       seen.add(name);
     });
     // Fastest lap credit (race only)
