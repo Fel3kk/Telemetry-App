@@ -1797,10 +1797,10 @@ function renderSessionInfo() {
   const totalFuelConsumed = Math.max(0, startFuel - lastFuel);
   const avgFuelPerLap = laps.length > 0 ? totalFuelConsumed / laps.length : 0;
 
-  // Consistency rating: coefficient of variation across clean racing laps.
-  // Excludes lap 1, pit (in) laps, out-laps (lap after a pit), and any
-  // SC/VSC/Red Flag lap. Outliers slower than 107% of the fastest lap are
-  // trimmed before measuring spread so one lock-up doesn't dominate.
+  // Consistency rating: STINT-SEPARATED weighted CV across clean racing laps.
+  // Each stint is measured on its own (accounts for fuel burn, tyre compound,
+  // and track evolution), then combined by clean-lap weight into a Total CV.
+  // Rating = max(0, min(100, 100 − Total CV × 2500)).
   const pitLapNumbers = new Set(
     laps
       .filter((l) => Number(l.pit_status || 0) === 1)
@@ -1815,34 +1815,79 @@ function renderSessionInfo() {
     if (pitLapNumbers.has(lapNum - 1)) return false; // out-lap
     return true;
   };
-  const cleanLapSeconds = laps
-    .filter(isCleanForConsistency)
-    .map((l) => timeStringToSeconds(l.lap_time))
-    .filter((t) => typeof t === "number" && t > 0);
-  let consistencyHtml = "—";
-  let consistencyTitle =
-    "Needs ≥3 clean racing laps (excludes lap 1, in/out laps, SC, VSC, Red)";
-  if (cleanLapSeconds.length >= 3) {
-    const fast = Math.min(...cleanLapSeconds);
-    const trimmed = cleanLapSeconds.filter((t) => t <= fast * 1.07);
-    const sample = trimmed.length >= 3 ? trimmed : cleanLapSeconds;
-    const dropped = cleanLapSeconds.length - sample.length;
+
+  // Build stint lap groups. Prefer explicit stint boundaries when available,
+  // otherwise segment on pit laps / compound changes.
+  const stintGroups = [];
+  if (Array.isArray(currentData.stints) && currentData.stints.length > 0) {
+    currentData.stints.forEach((s) => {
+      const sl = Number(s["start-lap"]);
+      const el = Number(s["end-lap"]);
+      const g = laps.filter((l) => {
+        const n = Number(l.lap);
+        return n >= sl && n <= el;
+      });
+      if (g.length) stintGroups.push(g);
+    });
+  } else if (laps.length) {
+    let cur = [];
+    let curCompound = laps[0].current_tyre_compound;
+    laps.forEach((l) => {
+      const comp = l.current_tyre_compound;
+      if (cur.length && comp !== curCompound) {
+        stintGroups.push(cur);
+        cur = [];
+        curCompound = comp;
+      }
+      cur.push(l);
+      if (Number(l.pit_status || 0) === 1) {
+        stintGroups.push(cur);
+        cur = [];
+        curCompound = null;
+      }
+    });
+    if (cur.length) stintGroups.push(cur);
+  }
+
+  // Per-stint CV, with >107% of stint median trimmed as outliers.
+  const stintStats = [];
+  let totalCleanLaps = 0;
+  stintGroups.forEach((group) => {
+    const times = group
+      .filter(isCleanForConsistency)
+      .map((l) => timeStringToSeconds(l.lap_time))
+      .filter((t) => typeof t === "number" && t > 0);
+    if (times.length < 3) return;
+    const sorted = [...times].sort((a, b) => a - b);
+    const median = sorted[Math.floor(sorted.length / 2)];
+    const trimmed = times.filter((t) => t <= median * 1.07);
+    const sample = trimmed.length >= 3 ? trimmed : times;
     const mean = sample.reduce((a, b) => a + b, 0) / sample.length;
     const variance =
       sample.reduce((a, b) => a + (b - mean) * (b - mean), 0) / sample.length;
     const stddev = Math.sqrt(variance);
-    const slow = Math.max(...sample);
-    const cv = stddev / mean;
-    const rating = Math.max(0, Math.min(100, 100 - cv * 2000));
+    const cv = mean > 0 ? stddev / mean : 0;
+    stintStats.push({ cv, cleanLaps: sample.length });
+    totalCleanLaps += sample.length;
+  });
+
+  let consistencyHtml = "—";
+  let consistencyTitle =
+    "Needs ≥3 clean racing laps in at least one stint (excludes lap 1, in/out laps, SC/VSC/Red, >107% of stint median)";
+  if (totalCleanLaps >= 3 && stintStats.length > 0) {
+    const totalCV = stintStats.reduce(
+      (acc, s) => acc + s.cv * (s.cleanLaps / totalCleanLaps),
+      0,
+    );
+    const rating = Math.max(0, Math.min(100, 100 - totalCV * 2500));
     const tier =
       rating >= 92 ? "elite" : rating >= 82 ? "good" : rating >= 68 ? "mid" : "low";
     consistencyHtml = `<span class="consistency-pill consistency-${tier}">${rating.toFixed(1)}<span class="consistency-unit">/100</span></span>`;
+    const perStint = stintStats
+      .map((s, i) => `S${i + 1}: CV ${(s.cv * 100).toFixed(2)}% (${s.cleanLaps} laps)`)
+      .join(" · ");
     consistencyTitle =
-      `σ ${stddev.toFixed(3)}s · Mean ${mean.toFixed(3)}s · Spread ${(slow - fast).toFixed(3)}s · ${sample.length} laps used` +
-      (dropped > 0
-        ? ` (${dropped} outlier${dropped > 1 ? "s" : ""} >107% trimmed)`
-        : "") +
-      ` · excludes lap 1, in/out laps, SC/VSC/Red`;
+      `Weighted Total CV ${(totalCV * 100).toFixed(3)}% across ${stintStats.length} stint${stintStats.length > 1 ? "s" : ""} · ${totalCleanLaps} clean laps · ${perStint}`;
   }
 
   const statusCounts = laps.reduce(
