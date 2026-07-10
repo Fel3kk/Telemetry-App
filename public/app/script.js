@@ -3355,17 +3355,32 @@ function renderStandingsTable() {
     )
     .sort(sortSessionsByCalendar);
 
+  // Build per-session DNF sets from race_story.classification
+  const sessionDnfSets = {};
+  scoringSessions.forEach((s) => {
+    const key = s.id || s.created_at;
+    const set = new Set();
+    (s.race_story?.classification || []).forEach((e) => {
+      const isDNF = e.is_dnf || (e.status && !/FINISHED/i.test(e.status));
+      if (isDNF && e.name) set.add(String(e.name).toUpperCase());
+    });
+    sessionDnfSets[key] = set;
+  });
+
   scoringSessions.forEach((session) => {
     if (!session.results) return;
+    const sKey = session.id || session.created_at;
+    const dnfSet = sessionDnfSets[sKey] || new Set();
     session.results.forEach((res) => {
       const driverName = res.name;
-      driversMap[driverName].positions[session.id || session.created_at] =
-        res.position;
+      const isDNF = dnfSet.has(String(driverName || "").toUpperCase());
+      driversMap[driverName].positions[sKey] = isDNF ? "DNF" : res.position;
 
       let pts = 0;
       const cat = (session.category || "").toLowerCase();
       const pos = parseInt(res.position);
-      if (cat === "race")
+      if (isDNF) pts = 0;
+      else if (cat === "race")
         pts = [0, 25, 18, 15, 12, 10, 8, 6, 4, 2, 1][pos] || 0;
       else if (cat === "sprint") pts = [0, 8, 7, 6, 5, 4, 3, 2, 1][pos] || 0;
       driversMap[driverName].points += pts;
@@ -3402,10 +3417,12 @@ function renderStandingsTable() {
       const posNum = parseInt(pos);
       let pillClass = "";
       let label = pos;
-      if (posNum >= 1 && posNum <= 3) {
+      if (pos === "DNF") {
+        pillClass = " is-dnf";
+        label = "DNF";
+      } else if (posNum >= 1 && posNum <= 3) {
         pillClass = ` pos-${posNum}`;
       } else if (!pos) {
-        // Driver missing from this session's results — treat as DNF
         pillClass = " is-dnf";
         label = "DNF";
       }
@@ -4404,11 +4421,20 @@ function renderRaceStory() {
 function renderFinalClassification(rs) {
   const el = document.getElementById("finalClassification");
   if (!el) return;
-  const list = rs.classification || [];
-  if (!list.length) {
+  const rawList = rs.classification || [];
+  if (!rawList.length) {
     el.innerHTML = `<div class="race-story-empty">No classification data.</div>`;
     return;
   }
+  // Sort: finishers first (by position asc), then DNFs at the bottom (by laps desc)
+  const isDnfEntry = (e) => e.is_dnf || (e.status && !/FINISHED/i.test(e.status));
+  const finishers = rawList
+    .filter((e) => !isDnfEntry(e))
+    .sort((a, b) => (parseInt(a.position) || 999) - (parseInt(b.position) || 999));
+  const dnfs = rawList
+    .filter(isDnfEntry)
+    .sort((a, b) => (b.laps || 0) - (a.laps || 0));
+  const list = [...finishers, ...dnfs];
   const fl = rs.fastest_lap;
   const flName = fl ? (fl.name || "").toUpperCase() : "";
   const leader = list[0];
