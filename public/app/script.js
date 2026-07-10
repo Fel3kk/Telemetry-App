@@ -1961,7 +1961,7 @@ function renderSessionInfo() {
             <div class="info-value">${avgFuelPerLap.toFixed(3)} kg</div>
         </div>
         <div class="info-item" title="${consistencyTitle.replace(/"/g, "&quot;")}">
-            <div class="info-label" style="display:flex;align-items:center;gap:6px;">Consistency Rating<span class="hint-icon" data-tooltip="Rating = max(0, min(100, 100 − CV × 2000)) where CV = σ / mean on clean laps (excl. lap 1, in/out laps, SC/VSC/Red, outliers >107% trimmed)">?</span></div>
+            <div class="info-label" style="display:flex;align-items:center;gap:6px;">Consistency Rating<span class="hint-icon" data-tooltip="Stint-Separated Weighted CV. For each stint: filter clean laps (excl. lap 1, in/out laps, SC/VSC/Red, >107% of stint median), compute Stint CV = σ/mean. Total CV = Σ [Stint CV × (stint clean laps / total clean laps)]. Rating = max(0, min(100, 100 − Total CV × 2500)).">?</span></div>
             <div class="info-value">${consistencyHtml}</div>
         </div>
     `;
