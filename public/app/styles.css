@@ -2305,3 +2305,110 @@ body.light-theme .note-textarea {
   background: #fff;
   border-color: rgba(0,0,0,0.12);
 }
+
+/* ============================================================
+   Mobile — off-canvas sidebar drawer + polish (≤880px)
+   ============================================================ */
+.sidebar-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.55);
+  backdrop-filter: blur(3px);
+  z-index: 90;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+body.sidebar-drawer-open .sidebar-backdrop {
+  opacity: 1; pointer-events: auto;
+}
+
+@media (max-width: 880px) {
+  /* Single-column layout — sidebar becomes a fixed drawer */
+  .app-shell { grid-template-columns: 1fr !important; height: auto; min-height: 100vh; }
+  .app-shell.sidebar-collapsed { grid-template-columns: 1fr !important; }
+
+  .sidebar {
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    width: min(86vw, 340px);
+    height: 100vh;
+    z-index: 100;
+    padding: 16px 12px;
+    border-right: 1px solid var(--border);
+    border-bottom: none;
+    box-shadow: 8px 0 30px rgba(0,0,0,0.5);
+    transform: translateX(-100%);
+    opacity: 1;
+    transition: transform 0.25s ease;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  body.sidebar-drawer-open .sidebar {
+    transform: translateX(0);
+    pointer-events: auto;
+  }
+  /* Closed state on mobile hides the sidebar out of layout */
+  .app-shell.sidebar-collapsed .sidebar {
+    transform: translateX(-100%);
+    opacity: 1;
+  }
+
+  /* Expand button — floating pill in top-left corner, always visible */
+  .sidebar-expand {
+    position: fixed !important;
+    top: 10px; left: 10px;
+    width: 42px; height: 42px;
+    border-radius: 12px;
+    background: var(--bg-2);
+    border: 1px solid var(--border-strong);
+    box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+    z-index: 80;
+    display: inline-flex !important;
+    font-size: 1.15em;
+  }
+  /* Make room in header for the floating button */
+  .compact-header { padding-left: 62px !important; padding-right: 60px; }
+
+  /* Main pane fills width */
+  .main-pane { height: auto; overflow: visible; }
+
+  /* Stats: 2x2 grid on mobile */
+  .season-stats-host { padding: 10px 12px 0; }
+  .season-stats-host #seasonSummaryCards {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px;
+  }
+  .season-stats-host #seasonSummaryCards .stat-card { padding: 10px 12px; }
+  .season-stats-host #seasonSummaryCards .stat-value { font-size: 1rem; }
+
+  /* Sticky tabs — auto-scroll active into view (handled by JS) */
+  .sticky-tabs { padding: 10px 12px; }
+
+  /* Sidebar internals stay full-width in the drawer */
+  .season-selector.compact { grid-template-columns: repeat(5, 1fr); }
+  .sessions-block { min-height: 40vh; }
+
+  /* Cards / containers inside main pane hug edges */
+  .collapsible-content { padding: 0 8px 16px; }
+  .collapsible-section .section-header,
+  .collapsible-section .section-body { padding-left: 12px; padding-right: 12px; }
+
+  /* Prevent horizontal page scroll from stray full-width elements */
+  html, body { overflow-x: hidden; }
+  body.sidebar-drawer-open { overflow: hidden; }
+}
+
+@media (max-width: 480px) {
+  .season-stats-host #seasonSummaryCards .stat-label { font-size: 0.55rem; letter-spacing: 0.14em; }
+  .season-stats-host #seasonSummaryCards .stat-value { font-size: 0.95rem; }
+  .compact-header h1 { font-size: 1.05rem !important; }
+  .compact-header p { font-size: 0.7rem; }
+  .sticky-tabs { padding: 8px 10px; }
+  /* Force-hide brand subtitle to save space in drawer */
+  .sidebar-brand .brand-sub { display: none; }
+}
+
+/* Hide desktop-only sidebar-toggle inside the drawer on mobile — the
+   backdrop + floating expand button handles open/close. */
+@media (max-width: 880px) {
+  .sidebar-toggle { display: none !important; }
+}
