@@ -620,23 +620,54 @@ function buildRaceStory(rootData, playerName, playerTeam, classification_data) {
       kmph: Math.round(s["speed-trap-record-kmph"] || 0),
     }));
 
-  // Fastest lap of the race (overall, across all drivers)
-  let fastest_lap = null;
+  // Fastest lap of the race (overall, across all drivers).
+  // Guard against corrupted / stale telemetry entries (e.g. a lapped driver
+  // showing a phantom 25s lap). Collect plausible laps, derive a race-wide
+  // median, then reject anything unrealistically quick, with missing/zero
+  // sectors, mismatched sector sum, or beyond the driver's completed laps.
+  const flCandidates = [];
   (classification_data || []).forEach((e) => {
     const name = String(e["driver-name"] || "").toUpperCase();
     const team = e.team || "";
     const laps = e["lap-time-history"]?.["lap-history-data"] || [];
+    const fc = e["final-classification"] || {};
+    const completedLaps = fc["num-laps"] || laps.length;
+    const driverBestMs = fc["best-lap-time-ms"] || 0;
     laps.forEach((l, i) => {
+      const lapNum = i + 1;
+      if (lapNum > completedLaps) return; // stale rows past retirement
       const ms = l["lap-time-in-ms"] || 0;
-      const valid = (l["lap-valid-bit-flags"] === undefined) || (l["lap-valid-bit-flags"] & 1);
-      if (ms > 0 && valid && (!fastest_lap || ms < fastest_lap.time_ms)) {
-        const totalSec = ms / 1000;
-        const m = Math.floor(totalSec / 60);
-        const s = (totalSec - m * 60).toFixed(3).padStart(6, "0");
-        fastest_lap = { name, team, lap: i + 1, time_ms: ms, lap_time_str: `${m}:${s}` };
-      }
+      if (ms <= 0) return;
+      const s1 = l["sector-1-time-in-ms"] || 0;
+      const s2 = l["sector-2-time-in-ms"] || 0;
+      const s3 = l["sector-3-time-in-ms"] || 0;
+      if (s1 <= 0 || s2 <= 0 || s3 <= 0) return;
+      if (Math.abs(s1 + s2 + s3 - ms) > 500) return;
+      const flags = l["lap-valid-bit-flags"];
+      const valid = flags === undefined || (flags & 1);
+      if (!valid) return;
+      // Reject laps clearly faster than driver's own reported best
+      if (driverBestMs > 0 && ms < driverBestMs - 50) return;
+      flCandidates.push({ name, team, lap: lapNum, ms });
     });
   });
+  let fastest_lap = null;
+  if (flCandidates.length) {
+    const sortedMs = flCandidates.map((c) => c.ms).sort((a, b) => a - b);
+    const median = sortedMs[Math.floor(sortedMs.length / 2)];
+    // Reject anything faster than 75% of median (impossible pace = corrupt)
+    const floor = median * 0.75;
+    const pool = flCandidates.filter((c) => c.ms >= floor);
+    const finalPool = pool.length ? pool : flCandidates;
+    finalPool.forEach((c) => {
+      if (!fastest_lap || c.ms < fastest_lap.time_ms) {
+        const totalSec = c.ms / 1000;
+        const m = Math.floor(totalSec / 60);
+        const s = (totalSec - m * 60).toFixed(3).padStart(6, "0");
+        fastest_lap = { name: c.name, team: c.team, lap: c.lap, time_ms: c.ms, lap_time_str: `${m}:${s}` };
+      }
+    });
+  }
 
   // Driver of the Day — pulled from common field names if game records it
   let driver_of_the_day = null;
