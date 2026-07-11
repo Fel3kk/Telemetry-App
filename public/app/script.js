@@ -4903,19 +4903,80 @@ function renderPaceDeltaChart() {
   window.addEventListener("scroll", () => { if (tipEl) tipEl.classList.remove("show"); }, true);
 })();
 
-// Sidebar collapse toggle
+// Sidebar collapse toggle + mobile drawer behavior
 (function () {
+  const MOBILE_BP = 880;
+  const isMobile = () => window.matchMedia(`(max-width: ${MOBILE_BP}px)`).matches;
+
   const apply = (collapsed) => {
     document.getElementById("appShell")?.classList.toggle("sidebar-collapsed", collapsed);
+    // On mobile, "collapsed" also means the drawer is closed
+    if (isMobile()) {
+      document.body.classList.toggle("sidebar-drawer-open", !collapsed);
+    } else {
+      document.body.classList.remove("sidebar-drawer-open");
+    }
     try { localStorage.setItem("sidebarCollapsed", collapsed ? "1" : "0"); } catch (e) {}
   };
+
+  const closeDrawer = () => apply(true);
+
   document.addEventListener("DOMContentLoaded", () => {
-    const initial = (() => { try { return localStorage.getItem("sidebarCollapsed") === "1"; } catch (e) { return false; }})();
+    // On mobile, always start with the drawer closed regardless of prior state
+    const stored = (() => { try { return localStorage.getItem("sidebarCollapsed") === "1"; } catch (e) { return false; }})();
+    const initial = isMobile() ? true : stored;
     apply(initial);
+
     document.getElementById("sidebarToggle")?.addEventListener("click", () => {
       const collapsed = !document.getElementById("appShell")?.classList.contains("sidebar-collapsed");
       apply(collapsed);
     });
     document.getElementById("sidebarExpand")?.addEventListener("click", () => apply(false));
+    document.getElementById("sidebarBackdrop")?.addEventListener("click", closeDrawer);
+
+    // Close drawer on Escape
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && document.body.classList.contains("sidebar-drawer-open")) closeDrawer();
+    });
+
+    // On mobile: tapping a session row or season box should close the drawer
+    document.addEventListener("click", (e) => {
+      if (!isMobile()) return;
+      if (!document.body.classList.contains("sidebar-drawer-open")) return;
+      const t = e.target.closest(".session-row, .season-box, .session-card");
+      if (t && !e.target.closest(".delete-btn")) {
+        // small delay so the click handler runs first
+        setTimeout(closeDrawer, 60);
+      }
+    });
+
+    // Auto-scroll the active section tab into view on mobile
+    const scrollActiveTab = () => {
+      const bar = document.querySelector(".collapsible-tabs.sticky-tabs");
+      const active = bar?.querySelector(".section-tab.active");
+      if (!bar || !active) return;
+      const offset = active.offsetLeft - bar.clientWidth / 2 + active.clientWidth / 2;
+      bar.scrollTo({ left: Math.max(0, offset), behavior: "smooth" });
+    };
+    document.querySelectorAll(".section-tab").forEach((t) => {
+      t.addEventListener("click", () => setTimeout(scrollActiveTab, 30));
+    });
+    setTimeout(scrollActiveTab, 300);
+
+    // React to viewport changes (rotation, resize)
+    let wasMobile = isMobile();
+    window.addEventListener("resize", () => {
+      const nowMobile = isMobile();
+      if (nowMobile !== wasMobile) {
+        wasMobile = nowMobile;
+        // Reset drawer state on breakpoint crossing
+        if (nowMobile) apply(true);
+        else {
+          document.body.classList.remove("sidebar-drawer-open");
+          apply(stored);
+        }
+      }
+    });
   });
 })();
+
