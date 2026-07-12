@@ -986,6 +986,16 @@ function processTelemetryData(data) {
             ers_remaining_j: Number(
               (status["ers-store-energy"] || 0).toFixed(0),
             ),
+            damage: {
+              fl_wing: damage["front-left-wing-damage"] || 0,
+              fr_wing: damage["front-right-wing-damage"] || 0,
+              rear_wing: damage["rear-wing-damage"] || 0,
+              floor: damage["floor-damage"] || 0,
+              diffuser: damage["diffuser-damage"] || 0,
+              sidepod: damage["sidepod-damage"] || 0,
+              gearbox: damage["gear-box-damage"] || 0,
+              engine: damage["engine-damage"] || 0,
+            },
           });
         });
 
