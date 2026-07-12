@@ -4978,8 +4978,12 @@ function renderCompareCharts(playerEntry, opponentName) {
   const overlayCtx = document.getElementById("compareOverlayChart");
   if (overlayCtx) {
     if (charts.compareOverlayChart) charts.compareOverlayChart.destroy();
-    const playerColor = teamColorFor(playerEntry.team) || "#e10600";
-    const oppColor = teamColorFor(opp.team) || "#3498db";
+    // Player is always red so it stays consistent across comparisons;
+    // opponent uses their team color, falling back to a distinct cyan
+    // and to another distinct hue if the opponent team also maps to red.
+    const playerColor = "#e10600";
+    let oppColor = teamColorFor(opp.team) || "#00b8d4";
+    if (oppColor.toLowerCase() === playerColor.toLowerCase()) oppColor = "#00b8d4";
     charts.compareOverlayChart = new Chart(overlayCtx.getContext("2d"), {
       type: "line",
       data: {
