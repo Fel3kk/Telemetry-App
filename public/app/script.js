@@ -1410,6 +1410,7 @@ function renderContent() {
   renderQualiResults();
   renderPracticeSection();
   renderRaceStory();
+  renderCompareTab();
   document.getElementById("content").style.display = "block";
 
 }
