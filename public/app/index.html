@@ -87,6 +87,9 @@
         <button class="section-tab" data-target="section-race-story">
           🎬 Race Story
         </button>
+        <button class="section-tab" data-target="section-compare">
+          🆚 Compare
+        </button>
         <button class="section-tab" data-target="section-graphs">
           📊 Graphs
         </button>
@@ -169,7 +172,6 @@
             </div>
             <div id="raceStoryContent" style="display:none">
               <div class="race-story-headline" id="raceStoryHeadline"></div>
-              <div id="raceStoryFastestLap" class="rs-fl-hero"></div>
               <div class="charts-grid">
                 <div class="chart-container full-width">
                   <div class="chart-title">📈 Position Changes Through the Race</div>
@@ -185,6 +187,10 @@
                   <div id="stintStrip" class="stint-strip"></div>
                 </div>
                 <div class="chart-container full-width auto-height">
+                  <div class="chart-title">🔧 Damage Progression</div>
+                  <div id="damageSection" class="damage-section"></div>
+                </div>
+                <div class="chart-container full-width auto-height">
                   <div class="chart-title">🚀 Speed Trap Leaderboard</div>
                   <div id="topSpeedList" class="speed-trap-list"></div>
                 </div>
@@ -192,6 +198,46 @@
                   <div class="chart-title">🏁 Final Classification</div>
                   <div id="finalClassification" class="final-classification"></div>
                 </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <div class="collapsible-section" id="section-compare">
+          <div class="section-header">
+            <h2 style="margin: 0; font-size: 1.05rem">🆚 Compare Lap Times</h2>
+          </div>
+          <div class="section-body">
+            <div id="compareEmpty" class="race-story-empty" style="display:none">
+              Compare is available for freshly uploaded race telemetry with all-driver lap history.
+            </div>
+            <div id="compareContent" style="display:none">
+              <div class="compare-controls" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
+                <label style="font-size:.85rem;color:var(--secondary-text)">Compare against</label>
+                <select id="compareDriverSelect" class="download-btn" style="padding:6px 10px"></select>
+                <span id="compareSummary" style="font-size:.85rem;color:var(--secondary-text)"></span>
+              </div>
+              <div class="chart-container full-width">
+                <div class="chart-title">Lap Time Delta (You − Opponent, seconds)</div>
+                <canvas id="compareDeltaChart"></canvas>
+              </div>
+              <div class="chart-container full-width">
+                <div class="chart-title">Lap Times Overlay</div>
+                <canvas id="compareOverlayChart"></canvas>
+              </div>
+              <div class="table-container" style="margin-top:16px">
+                <table id="compareTable">
+                  <thead>
+                    <tr>
+                      <th>Lap</th>
+                      <th id="compareThYou">You</th>
+                      <th id="compareThOpp">Opponent</th>
+                      <th>Δ</th>
+                    </tr>
+                  </thead>
+                  <tbody id="compareTableBody"></tbody>
+                </table>
               </div>
             </div>
 

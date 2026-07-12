@@ -721,6 +721,20 @@ function buildRaceStory(rootData, playerName, playerTeam, classification_data) {
   });
   const classification = [...finishers, ...dnfs];
 
+  // Per-driver lap times for the Compare tab
+  const driver_lap_times = (classification_data || []).map((e) => ({
+    name: String(e["driver-name"] || "").toUpperCase(),
+    team: e.team || "",
+    laps: (e["lap-time-history"]?.["lap-history-data"] || []).map((l, i) => ({
+      lap: i + 1,
+      ms: l["lap-time-in-ms"] || 0,
+      s1: l["sector-1-time-in-ms"] || 0,
+      s2: l["sector-2-time-in-ms"] || 0,
+      s3: l["sector-3-time-in-ms"] || 0,
+      valid: l["lap-valid-bit-flags"] === undefined || !!(l["lap-valid-bit-flags"] & 1),
+    })),
+  })).filter((d) => d.name && d.laps.length);
+
   return {
     player_name: playerName,
     player_team: playerTeam,
@@ -733,6 +747,7 @@ function buildRaceStory(rootData, playerName, playerTeam, classification_data) {
     fastest_lap,
     driver_of_the_day,
     classification,
+    driver_lap_times,
   };
 }
 
@@ -971,6 +986,16 @@ function processTelemetryData(data) {
             ers_remaining_j: Number(
               (status["ers-store-energy"] || 0).toFixed(0),
             ),
+            damage: {
+              fl_wing: damage["front-left-wing-damage"] || 0,
+              fr_wing: damage["front-right-wing-damage"] || 0,
+              rear_wing: damage["rear-wing-damage"] || 0,
+              floor: damage["floor-damage"] || 0,
+              diffuser: damage["diffuser-damage"] || 0,
+              sidepod: damage["sidepod-damage"] || 0,
+              gearbox: damage["gear-box-damage"] || 0,
+              engine: damage["engine-damage"] || 0,
+            },
           });
         });
 
@@ -1385,6 +1410,7 @@ function renderContent() {
   renderQualiResults();
   renderPracticeSection();
   renderRaceStory();
+  renderCompareTab();
   document.getElementById("content").style.display = "block";
 
 }
@@ -4418,34 +4444,13 @@ function renderRaceStory() {
     `;
   }
 
-  const flHero = document.getElementById("raceStoryFastestLap");
-  if (flHero) {
-    if (fl) {
-      const isPlayer = badges.fl;
-      flHero.innerHTML = `
-        <div class="rs-fl-card${isPlayer ? " is-player" : ""}">
-          <div class="rs-fl-icon">⚡</div>
-          <div class="rs-fl-body">
-            <div class="rs-fl-label">Fastest Lap of the Race</div>
-            <div class="rs-fl-main">
-              <span class="rs-fl-driver">${(fl.name || "").toUpperCase()}</span>
-              ${fl.lap_time_str ? `<span class="rs-fl-time">${fl.lap_time_str}</span>` : ""}
-            </div>
-            <div class="rs-fl-meta">${fl.team ? fl.team + " · " : ""}Lap ${fl.lap ?? "?"}</div>
-          </div>
-        </div>
-      `;
-      flHero.style.display = "";
-    } else {
-      flHero.style.display = "none";
-    }
-  }
-
   renderPositionChart(rs);
   renderOvertakesChart(rs);
   renderStintStrip();
+  renderDamageSection();
   renderTopSpeedList(rs);
   renderFinalClassification(rs);
+  renderCompareTab();
 }
 
 
@@ -4760,7 +4765,7 @@ function renderStintStrip() {
 function renderTopSpeedList(rs) {
   const el = document.getElementById("topSpeedList");
   if (!el) return;
-  const top = rs.speed_traps.slice(0, 20);
+  const top = rs.speed_traps || [];
   if (!top.length) {
     el.innerHTML = `<div class="race-story-empty">No speed-trap data.</div>`;
     return;
@@ -4791,6 +4796,242 @@ function renderTopSpeedList(rs) {
     })
     .join("");
   el.innerHTML = header + rows;
+}
+
+function renderDamageSection() {
+  const el = document.getElementById("damageSection");
+  if (!el) return;
+  const laps = (currentData?.lap_history || []).filter((l) => l && l.damage);
+  if (!laps.length) {
+    el.innerHTML = `<div class="race-story-empty">No per-lap damage data available. Re-upload the race JSON to view damage progression.</div>`;
+    return;
+  }
+  const components = [
+    ["fl_wing", "FL Wing", "#e10600"],
+    ["fr_wing", "FR Wing", "#ff6b35"],
+    ["rear_wing", "Rear Wing", "#f4d03f"],
+    ["floor", "Floor", "#9b59b6"],
+    ["diffuser", "Diffuser", "#3498db"],
+    ["sidepod", "Sidepod", "#2ecc71"],
+    ["gearbox", "Gearbox", "#e67e22"],
+    ["engine", "Engine", "#c0392b"],
+  ];
+  // Only show components that had non-zero damage at some point
+  const active = components.filter(([k]) => laps.some((l) => (l.damage[k] || 0) > 0));
+  const finalLap = laps[laps.length - 1];
+  const finals = components.map(([k, label, c]) => ({
+    key: k, label, color: c, value: finalLap.damage[k] || 0,
+  }));
+  const pills = finals
+    .map((f) => `<span class="damage-pill" style="border-color:${f.color};color:${f.value > 0 ? f.color : "var(--secondary-text)"}">
+      <b>${f.label}</b> ${f.value}%
+    </span>`)
+    .join("");
+  let chartWrap = "";
+  if (active.length) {
+    chartWrap = `<div class="rs-canvas-wrap" style="margin-top:12px"><canvas id="damageChart"></canvas></div>`;
+  } else {
+    chartWrap = `<div class="race-story-empty" style="margin-top:12px">No damage taken this race — clean drive!</div>`;
+  }
+  el.innerHTML = `<div class="damage-pills">${pills}</div>${chartWrap}`;
+  if (active.length) {
+    const ctx = document.getElementById("damageChart");
+    if (ctx) {
+      if (charts.damageChart) charts.damageChart.destroy();
+      charts.damageChart = new Chart(ctx.getContext("2d"), {
+        type: "line",
+        data: {
+          labels: laps.map((l) => l.lap),
+          datasets: active.map(([k, label, color]) => ({
+            label,
+            data: laps.map((l) => l.damage[k] || 0),
+            borderColor: color,
+            backgroundColor: color + "33",
+            tension: 0.25,
+            pointRadius: 0,
+            borderWidth: 2,
+          })),
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: "index", intersect: false },
+          scales: {
+            y: { beginAtZero: true, max: 100, title: { display: true, text: "Damage %" } },
+            x: { title: { display: true, text: "Lap" } },
+          },
+          plugins: { legend: { position: "bottom" } },
+        },
+      });
+    }
+  }
+}
+
+// ==================== COMPARE TAB ====================
+
+function fmtLapMs(ms) {
+  if (!ms || ms <= 0) return "—";
+  const m = Math.floor(ms / 60000);
+  const s = ((ms % 60000) / 1000).toFixed(3).padStart(6, "0");
+  return `${m}:${s}`;
+}
+
+function renderCompareTab() {
+  const empty = document.getElementById("compareEmpty");
+  const wrap = document.getElementById("compareContent");
+  if (!empty || !wrap) return;
+  const rs = currentData?.race_story;
+  const dlt = rs?.driver_lap_times || [];
+  const playerName = (rs?.player_name || currentData?.driver_name || "").toUpperCase();
+  const playerEntry = dlt.find((d) => d.name === playerName);
+  const others = dlt.filter((d) => d.name !== playerName && d.laps.some((l) => l.ms > 0));
+  if (!playerEntry || !others.length) {
+    empty.style.display = "block";
+    wrap.style.display = "none";
+    return;
+  }
+  empty.style.display = "none";
+  wrap.style.display = "block";
+
+  const select = document.getElementById("compareDriverSelect");
+  if (!select) return;
+  // Save previous selection
+  const prev = select.value;
+  select.innerHTML = others
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((d) => `<option value="${d.name}">${d.name} — ${normalizeTeamName(d.team)}</option>`)
+    .join("");
+  if (prev && others.some((d) => d.name === prev)) select.value = prev;
+  if (!select.dataset.bound) {
+    select.dataset.bound = "1";
+    select.addEventListener("change", () => renderCompareCharts(playerEntry, select.value));
+  }
+  renderCompareCharts(playerEntry, select.value);
+}
+
+function renderCompareCharts(playerEntry, opponentName) {
+  const rs = currentData?.race_story;
+  const dlt = rs?.driver_lap_times || [];
+  const opp = dlt.find((d) => d.name === opponentName);
+  if (!opp) return;
+
+  const maxLaps = Math.max(playerEntry.laps.length, opp.laps.length);
+  const labels = [];
+  const youMs = [];
+  const oppMs = [];
+  const deltas = [];
+  for (let i = 0; i < maxLaps; i++) {
+    labels.push(i + 1);
+    const yl = playerEntry.laps[i];
+    const ol = opp.laps[i];
+    const y = yl && yl.ms > 0 ? yl.ms : null;
+    const o = ol && ol.ms > 0 ? ol.ms : null;
+    youMs.push(y);
+    oppMs.push(o);
+    deltas.push(y !== null && o !== null ? +((y - o) / 1000).toFixed(3) : null);
+  }
+
+  const validDeltas = deltas.filter((d) => d !== null);
+  const avgDelta = validDeltas.length
+    ? validDeltas.reduce((a, b) => a + b, 0) / validDeltas.length
+    : 0;
+  const totalYou = youMs.filter((v) => v).reduce((a, b) => a + b, 0);
+  const totalOpp = oppMs.filter((v) => v).reduce((a, b) => a + b, 0);
+  const summary = document.getElementById("compareSummary");
+  if (summary) {
+    summary.innerHTML = `Avg delta: <b style="color:${avgDelta < 0 ? "#2ecc71" : "#e10600"}">${avgDelta > 0 ? "+" : ""}${avgDelta.toFixed(3)}s</b> · Total: <b>${fmtLapMs(totalYou)}</b> vs <b>${fmtLapMs(totalOpp)}</b>`;
+  }
+  const thYou = document.getElementById("compareThYou");
+  const thOpp = document.getElementById("compareThOpp");
+  if (thYou) thYou.textContent = `You (${playerEntry.name})`;
+  if (thOpp) thOpp.textContent = opp.name;
+
+  // Delta bar chart
+  const deltaCtx = document.getElementById("compareDeltaChart");
+  if (deltaCtx) {
+    if (charts.compareDeltaChart) charts.compareDeltaChart.destroy();
+    charts.compareDeltaChart = new Chart(deltaCtx.getContext("2d"), {
+      type: "bar",
+      data: {
+        labels,
+        datasets: [{
+          label: "Delta (s) — negative = you were faster",
+          data: deltas,
+          backgroundColor: deltas.map((d) =>
+            d === null ? "rgba(120,120,120,0.3)" : d < 0 ? "rgba(46,204,113,0.85)" : "rgba(225,6,0,0.85)"
+          ),
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          y: { title: { display: true, text: "Δ seconds" } },
+          x: { title: { display: true, text: "Lap" } },
+        },
+        plugins: { legend: { display: false } },
+      },
+    });
+  }
+
+  // Overlay line chart
+  const overlayCtx = document.getElementById("compareOverlayChart");
+  if (overlayCtx) {
+    if (charts.compareOverlayChart) charts.compareOverlayChart.destroy();
+    const playerColor = teamColorFor(playerEntry.team) || "#e10600";
+    const oppColor = teamColorFor(opp.team) || "#3498db";
+    charts.compareOverlayChart = new Chart(overlayCtx.getContext("2d"), {
+      type: "line",
+      data: {
+        labels,
+        datasets: [
+          {
+            label: `You (${playerEntry.name})`,
+            data: youMs.map((v) => (v ? +(v / 1000).toFixed(3) : null)),
+            borderColor: playerColor,
+            backgroundColor: playerColor + "33",
+            tension: 0.2,
+            spanGaps: true,
+          },
+          {
+            label: opp.name,
+            data: oppMs.map((v) => (v ? +(v / 1000).toFixed(3) : null)),
+            borderColor: oppColor,
+            backgroundColor: oppColor + "33",
+            tension: 0.2,
+            spanGaps: true,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: "index", intersect: false },
+        scales: {
+          y: { title: { display: true, text: "Lap time (s)" } },
+          x: { title: { display: true, text: "Lap" } },
+        },
+        plugins: { legend: { position: "bottom" } },
+      },
+    });
+  }
+
+  // Table
+  const tbody = document.getElementById("compareTableBody");
+  if (tbody) {
+    tbody.innerHTML = labels
+      .map((lap, i) => {
+        const d = deltas[i];
+        const cls = d === null ? "" : d < 0 ? "delta-pos" : "delta-neg";
+        return `<tr>
+          <td class="text-center">${lap}</td>
+          <td class="text-center">${fmtLapMs(youMs[i])}</td>
+          <td class="text-center">${fmtLapMs(oppMs[i])}</td>
+          <td class="text-center ${cls}">${d === null ? "—" : (d > 0 ? "+" : "") + d.toFixed(3)}</td>
+        </tr>`;
+      })
+      .join("");
+  }
 }
 
 function renderPaceDeltaChart() {
