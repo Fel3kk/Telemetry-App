@@ -995,6 +995,8 @@ function processTelemetryData(data) {
               sidepod: damage["sidepod-damage"] || 0,
               gearbox: damage["gear-box-damage"] || 0,
               engine: damage["engine-damage"] || 0,
+              drs_fault: !!damage["drs-fault"],
+              ers_fault: !!damage["ers-fault"],
             },
           });
         });
