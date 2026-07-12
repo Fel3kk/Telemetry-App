@@ -995,6 +995,8 @@ function processTelemetryData(data) {
               sidepod: damage["sidepod-damage"] || 0,
               gearbox: damage["gear-box-damage"] || 0,
               engine: damage["engine-damage"] || 0,
+              drs_fault: !!damage["drs-fault"],
+              ers_fault: !!damage["ers-fault"],
             },
           });
         });
@@ -3676,12 +3678,43 @@ function renderRecordsTable() {
     Object.entries(teamSeason).forEach(([team, s]) => {
       if (team === "Unassigned") return;
       if (!teamAgg[team]) {
-        teamAgg[team] = { points: 0, wins: 0, podiums: 0, titles: 0, seasons: new Set() };
+        teamAgg[team] = { points: 0, wins: 0, podiums: 0, one_twos: 0, front_row_lockouts: 0, titles: 0, seasons: new Set() };
       }
       teamAgg[team].points += s.points;
       teamAgg[team].wins += s.wins;
       teamAgg[team].podiums += s.podiums;
       teamAgg[team].seasons.add(season);
+    });
+
+    // Front-row lockouts (Qualifying / Sprint Shootout) and 1-2 finishes (Race / Sprint)
+    // Group sessions by track+category; for each, find P1 and P2 drivers and check same team.
+    const seasonSessions = allSessions.filter((sn) => sn.season === season);
+    const byEvent = {};
+    seasonSessions.forEach((sn) => {
+      const key = `${sn.track_name}||${sn.category}`;
+      if (!byEvent[key]) byEvent[key] = [];
+      byEvent[key].push(sn);
+    });
+    Object.entries(byEvent).forEach(([key, group]) => {
+      const cat = (group[0].category || "").toLowerCase();
+      const isQuali = cat === "qualifying" || cat === "sprint shootout";
+      const isRace = cat === "race" || cat === "sprint";
+      if (!isQuali && !isRace) return;
+      // Prefer a session with a results array covering the full grid
+      const src = group.find((g) => (g.results || []).length >= 2) || group[0];
+      const results = src.results || [];
+      const posFor = (p) => results.find((r) => parseInt(r.position) === p);
+      const p1 = posFor(1);
+      const p2 = posFor(2);
+      if (!p1 || !p2) return;
+      const t1 = teams[p1.name] || null;
+      const t2 = teams[p2.name] || null;
+      if (!t1 || !t2 || t1 !== t2 || t1 === "Unassigned") return;
+      if (!teamAgg[t1]) {
+        teamAgg[t1] = { points: 0, wins: 0, podiums: 0, one_twos: 0, front_row_lockouts: 0, titles: 0, seasons: new Set() };
+      }
+      if (isQuali) teamAgg[t1].front_row_lockouts = (teamAgg[t1].front_row_lockouts || 0) + 1;
+      else teamAgg[t1].one_twos = (teamAgg[t1].one_twos || 0) + 1;
     });
     const teamRanked = Object.entries(teamSeason)
       .filter(([t]) => t !== "Unassigned")
@@ -3742,6 +3775,8 @@ function renderRecordsTable() {
         <td class="pts-cell">${t.points}</td>
         <td class="rec-num">${t.wins}</td>
         <td class="rec-num">${t.podiums}</td>
+        <td class="rec-num">${t.one_twos || 0}</td>
+        <td class="rec-num">${t.front_row_lockouts || 0}</td>
       </tr>`;
     })
     .join("");
@@ -3773,6 +3808,8 @@ function renderRecordsTable() {
         <span><b>GP</b> Grands Prix entered (incl. DNFs)</span>
         <span><b>DNF</b> Did-not-finish count</span>
         <span><b>Sn</b> Seasons active</span>
+        <span><b>1-2</b> Constructor 1-2 finishes</span>
+        <span><b>FRL</b> Front-row lockouts (Qualifying)</span>
         <span><b>★</b> Championship titles</span>
       </div>
       <div class="records-block">
@@ -3809,9 +3846,11 @@ function renderRecordsTable() {
                 <th class="col-pts" title="Total points">Pts</th>
                 <th class="rec-num" title="Race wins">Wins</th>
                 <th class="rec-num" title="Podiums (P1–P3)">Pod</th>
+                <th class="rec-num" title="1-2 finishes (both cars P1 &amp; P2 in the race)">1-2</th>
+                <th class="rec-num" title="Front-row lockouts (both cars P1 &amp; P2 in qualifying)">FRL</th>
               </tr>
             </thead>
-            <tbody>${teamRows || `<tr><td colspan="5" class="rec-empty">Assign drivers to teams to build constructor records.</td></tr>`}</tbody>
+            <tbody>${teamRows || `<tr><td colspan="7" class="rec-empty">Assign drivers to teams to build constructor records.</td></tr>`}</tbody>
           </table>
         </div>
       </div>
@@ -4833,7 +4872,19 @@ function renderDamageSection() {
   } else {
     chartWrap = `<div class="race-story-empty" style="margin-top:12px">No damage taken this race — clean drive!</div>`;
   }
-  el.innerHTML = `<div class="damage-pills">${pills}</div>${chartWrap}`;
+  // System faults (DRS stuck closed, ERS fault) — telemetry only records these
+  // when the game actually flags a fault; older uploads will simply show none.
+  const drsLaps = laps.filter((l) => l.damage.drs_fault).map((l) => l.lap);
+  const ersLaps = laps.filter((l) => l.damage.ers_fault).map((l) => l.lap);
+  const faultPills = [];
+  if (drsLaps.length) {
+    faultPills.push(`<span class="damage-pill" style="border-color:#e10600;color:#e10600" title="DRS fault (wing did not open) on laps: ${drsLaps.join(", ")}"><b>⚠ DRS Fault</b> laps ${drsLaps[0]}${drsLaps.length > 1 ? "–" + drsLaps[drsLaps.length - 1] : ""}</span>`);
+  }
+  if (ersLaps.length) {
+    faultPills.push(`<span class="damage-pill" style="border-color:#f4d03f;color:#f4d03f" title="ERS fault on laps: ${ersLaps.join(", ")}"><b>⚠ ERS Fault</b> laps ${ersLaps[0]}${ersLaps.length > 1 ? "–" + ersLaps[ersLaps.length - 1] : ""}</span>`);
+  }
+  const faultsHtml = faultPills.length ? `<div class="damage-pills" style="margin-bottom:8px">${faultPills.join("")}</div>` : "";
+  el.innerHTML = `${faultsHtml}<div class="damage-pills">${pills}</div>${chartWrap}`;
   if (active.length) {
     const ctx = document.getElementById("damageChart");
     if (ctx) {
@@ -4978,8 +5029,12 @@ function renderCompareCharts(playerEntry, opponentName) {
   const overlayCtx = document.getElementById("compareOverlayChart");
   if (overlayCtx) {
     if (charts.compareOverlayChart) charts.compareOverlayChart.destroy();
-    const playerColor = teamColorFor(playerEntry.team) || "#e10600";
-    const oppColor = teamColorFor(opp.team) || "#3498db";
+    // Player is always red so it stays consistent across comparisons;
+    // opponent uses their team color, falling back to a distinct cyan
+    // and to another distinct hue if the opponent team also maps to red.
+    const playerColor = "#e10600";
+    let oppColor = teamColorFor(opp.team) || "#00b8d4";
+    if (oppColor.toLowerCase() === playerColor.toLowerCase()) oppColor = "#00b8d4";
     charts.compareOverlayChart = new Chart(overlayCtx.getContext("2d"), {
       type: "line",
       data: {
