@@ -721,6 +721,20 @@ function buildRaceStory(rootData, playerName, playerTeam, classification_data) {
   });
   const classification = [...finishers, ...dnfs];
 
+  // Per-driver lap times for the Compare tab
+  const driver_lap_times = (classification_data || []).map((e) => ({
+    name: String(e["driver-name"] || "").toUpperCase(),
+    team: e.team || "",
+    laps: (e["lap-time-history"]?.["lap-history-data"] || []).map((l, i) => ({
+      lap: i + 1,
+      ms: l["lap-time-in-ms"] || 0,
+      s1: l["sector-1-time-in-ms"] || 0,
+      s2: l["sector-2-time-in-ms"] || 0,
+      s3: l["sector-3-time-in-ms"] || 0,
+      valid: l["lap-valid-bit-flags"] === undefined || !!(l["lap-valid-bit-flags"] & 1),
+    })),
+  })).filter((d) => d.name && d.laps.length);
+
   return {
     player_name: playerName,
     player_team: playerTeam,
@@ -733,6 +747,7 @@ function buildRaceStory(rootData, playerName, playerTeam, classification_data) {
     fastest_lap,
     driver_of_the_day,
     classification,
+    driver_lap_times,
   };
 }
 
