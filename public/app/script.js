@@ -4443,34 +4443,13 @@ function renderRaceStory() {
     `;
   }
 
-  const flHero = document.getElementById("raceStoryFastestLap");
-  if (flHero) {
-    if (fl) {
-      const isPlayer = badges.fl;
-      flHero.innerHTML = `
-        <div class="rs-fl-card${isPlayer ? " is-player" : ""}">
-          <div class="rs-fl-icon">⚡</div>
-          <div class="rs-fl-body">
-            <div class="rs-fl-label">Fastest Lap of the Race</div>
-            <div class="rs-fl-main">
-              <span class="rs-fl-driver">${(fl.name || "").toUpperCase()}</span>
-              ${fl.lap_time_str ? `<span class="rs-fl-time">${fl.lap_time_str}</span>` : ""}
-            </div>
-            <div class="rs-fl-meta">${fl.team ? fl.team + " · " : ""}Lap ${fl.lap ?? "?"}</div>
-          </div>
-        </div>
-      `;
-      flHero.style.display = "";
-    } else {
-      flHero.style.display = "none";
-    }
-  }
-
   renderPositionChart(rs);
   renderOvertakesChart(rs);
   renderStintStrip();
+  renderDamageSection();
   renderTopSpeedList(rs);
   renderFinalClassification(rs);
+  renderCompareTab();
 }
 
 
