@@ -3842,9 +3842,11 @@ function renderRecordsTable() {
                 <th class="col-pts" title="Total points">Pts</th>
                 <th class="rec-num" title="Race wins">Wins</th>
                 <th class="rec-num" title="Podiums (P1–P3)">Pod</th>
+                <th class="rec-num" title="1-2 finishes (both cars P1 &amp; P2 in the race)">1-2</th>
+                <th class="rec-num" title="Front-row lockouts (both cars P1 &amp; P2 in qualifying)">FRL</th>
               </tr>
             </thead>
-            <tbody>${teamRows || `<tr><td colspan="5" class="rec-empty">Assign drivers to teams to build constructor records.</td></tr>`}</tbody>
+            <tbody>${teamRows || `<tr><td colspan="7" class="rec-empty">Assign drivers to teams to build constructor records.</td></tr>`}</tbody>
           </table>
         </div>
       </div>
