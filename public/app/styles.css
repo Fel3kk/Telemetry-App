@@ -2424,7 +2424,65 @@ body.sidebar-drawer-open .sidebar-backdrop {
 /* Compare tab */
 #compareTable td.delta-pos { color: #2ecc71; font-weight: 600; }
 #compareTable td.delta-neg { color: #e10600; font-weight: 600; }
-#compareDriverSelect {
-  background: var(--card-bg, #1a1a1a); color: var(--text-color, #fff);
-  border: 1px solid var(--border-color, #333); border-radius: 6px;
+.compare-controls {
+  background: linear-gradient(135deg, rgba(225,6,0,0.08), rgba(0,184,212,0.06));
+  border: 1px solid var(--border-color, #2a2a2a);
+  border-radius: 10px;
+  padding: 12px 16px !important;
+  gap: 14px !important;
 }
+.compare-controls label {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+  font-size: .72rem !important;
+  color: var(--secondary-text);
+}
+#compareDriverSelect {
+  appearance: none;
+  -webkit-appearance: none;
+  background: #14151a;
+  color: #fff;
+  border: 1px solid rgba(225,6,0,0.4);
+  border-radius: 8px;
+  padding: 8px 34px 8px 14px !important;
+  font-family: inherit;
+  font-weight: 700;
+  font-size: .82rem;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  min-width: 220px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path fill='%23e10600' d='M6 8L0 0h12z'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  transition: border-color .15s, box-shadow .15s, transform .15s;
+}
+#compareDriverSelect:hover {
+  border-color: #e10600;
+  box-shadow: 0 0 0 3px rgba(225,6,0,0.15);
+}
+#compareDriverSelect:focus {
+  outline: none;
+  border-color: #e10600;
+  box-shadow: 0 0 0 3px rgba(225,6,0,0.25);
+}
+#compareDriverSelect option {
+  background: #14151a;
+  color: #fff;
+  padding: 6px;
+  font-weight: 600;
+}
+#compareSummary {
+  margin-left: auto;
+  padding: 6px 12px;
+  background: rgba(0,0,0,0.35);
+  border: 1px solid var(--border-color, #2a2a2a);
+  border-radius: 6px;
+  font-family: "JetBrains Mono", monospace;
+  font-size: .78rem !important;
+}
+@media (max-width: 640px) {
+  #compareSummary { margin-left: 0; width: 100%; }
+  #compareDriverSelect { flex: 1; min-width: 0; }
+}
+
