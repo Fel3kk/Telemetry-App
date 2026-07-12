@@ -2412,3 +2412,19 @@ body.sidebar-drawer-open .sidebar-backdrop {
 @media (max-width: 880px) {
   .sidebar-toggle { display: none !important; }
 }
+
+/* Damage progression */
+.damage-pills { display:flex; flex-wrap:wrap; gap:8px; }
+.damage-pill {
+  padding: 4px 10px; border-radius: 999px; font-size: .8rem;
+  border: 1px solid var(--border-color); background: rgba(255,255,255,0.02);
+}
+.damage-pill b { margin-right: 4px; font-weight: 600; }
+
+/* Compare tab */
+#compareTable td.delta-pos { color: #2ecc71; font-weight: 600; }
+#compareTable td.delta-neg { color: #e10600; font-weight: 600; }
+#compareDriverSelect {
+  background: var(--card-bg, #1a1a1a); color: var(--text-color, #fff);
+  border: 1px solid var(--border-color, #333); border-radius: 6px;
+}
