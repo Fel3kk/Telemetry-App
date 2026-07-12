@@ -4872,7 +4872,19 @@ function renderDamageSection() {
   } else {
     chartWrap = `<div class="race-story-empty" style="margin-top:12px">No damage taken this race — clean drive!</div>`;
   }
-  el.innerHTML = `<div class="damage-pills">${pills}</div>${chartWrap}`;
+  // System faults (DRS stuck closed, ERS fault) — telemetry only records these
+  // when the game actually flags a fault; older uploads will simply show none.
+  const drsLaps = laps.filter((l) => l.damage.drs_fault).map((l) => l.lap);
+  const ersLaps = laps.filter((l) => l.damage.ers_fault).map((l) => l.lap);
+  const faultPills = [];
+  if (drsLaps.length) {
+    faultPills.push(`<span class="damage-pill" style="border-color:#e10600;color:#e10600" title="DRS fault (wing did not open) on laps: ${drsLaps.join(", ")}"><b>⚠ DRS Fault</b> laps ${drsLaps[0]}${drsLaps.length > 1 ? "–" + drsLaps[drsLaps.length - 1] : ""}</span>`);
+  }
+  if (ersLaps.length) {
+    faultPills.push(`<span class="damage-pill" style="border-color:#f4d03f;color:#f4d03f" title="ERS fault on laps: ${ersLaps.join(", ")}"><b>⚠ ERS Fault</b> laps ${ersLaps[0]}${ersLaps.length > 1 ? "–" + ersLaps[ersLaps.length - 1] : ""}</span>`);
+  }
+  const faultsHtml = faultPills.length ? `<div class="damage-pills" style="margin-bottom:8px">${faultPills.join("")}</div>` : "";
+  el.innerHTML = `${faultsHtml}<div class="damage-pills">${pills}</div>${chartWrap}`;
   if (active.length) {
     const ctx = document.getElementById("damageChart");
     if (ctx) {
