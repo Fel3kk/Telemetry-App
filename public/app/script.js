@@ -4764,7 +4764,7 @@ function renderStintStrip() {
 function renderTopSpeedList(rs) {
   const el = document.getElementById("topSpeedList");
   if (!el) return;
-  const top = rs.speed_traps.slice(0, 20);
+  const top = rs.speed_traps || [];
   if (!top.length) {
     el.innerHTML = `<div class="race-story-empty">No speed-trap data.</div>`;
     return;
