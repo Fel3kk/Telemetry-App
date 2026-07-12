@@ -3676,12 +3676,43 @@ function renderRecordsTable() {
     Object.entries(teamSeason).forEach(([team, s]) => {
       if (team === "Unassigned") return;
       if (!teamAgg[team]) {
-        teamAgg[team] = { points: 0, wins: 0, podiums: 0, titles: 0, seasons: new Set() };
+        teamAgg[team] = { points: 0, wins: 0, podiums: 0, one_twos: 0, front_row_lockouts: 0, titles: 0, seasons: new Set() };
       }
       teamAgg[team].points += s.points;
       teamAgg[team].wins += s.wins;
       teamAgg[team].podiums += s.podiums;
       teamAgg[team].seasons.add(season);
+    });
+
+    // Front-row lockouts (Qualifying / Sprint Shootout) and 1-2 finishes (Race / Sprint)
+    // Group sessions by track+category; for each, find P1 and P2 drivers and check same team.
+    const seasonSessions = allSessions.filter((sn) => sn.season === season);
+    const byEvent = {};
+    seasonSessions.forEach((sn) => {
+      const key = `${sn.track_name}||${sn.category}`;
+      if (!byEvent[key]) byEvent[key] = [];
+      byEvent[key].push(sn);
+    });
+    Object.entries(byEvent).forEach(([key, group]) => {
+      const cat = (group[0].category || "").toLowerCase();
+      const isQuali = cat === "qualifying" || cat === "sprint shootout";
+      const isRace = cat === "race" || cat === "sprint";
+      if (!isQuali && !isRace) return;
+      // Prefer a session with a results array covering the full grid
+      const src = group.find((g) => (g.results || []).length >= 2) || group[0];
+      const results = src.results || [];
+      const posFor = (p) => results.find((r) => parseInt(r.position) === p);
+      const p1 = posFor(1);
+      const p2 = posFor(2);
+      if (!p1 || !p2) return;
+      const t1 = teams[p1.name] || null;
+      const t2 = teams[p2.name] || null;
+      if (!t1 || !t2 || t1 !== t2 || t1 === "Unassigned") return;
+      if (!teamAgg[t1]) {
+        teamAgg[t1] = { points: 0, wins: 0, podiums: 0, one_twos: 0, front_row_lockouts: 0, titles: 0, seasons: new Set() };
+      }
+      if (isQuali) teamAgg[t1].front_row_lockouts = (teamAgg[t1].front_row_lockouts || 0) + 1;
+      else teamAgg[t1].one_twos = (teamAgg[t1].one_twos || 0) + 1;
     });
     const teamRanked = Object.entries(teamSeason)
       .filter(([t]) => t !== "Unassigned")
