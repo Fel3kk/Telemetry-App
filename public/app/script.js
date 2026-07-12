@@ -3773,6 +3773,8 @@ function renderRecordsTable() {
         <td class="pts-cell">${t.points}</td>
         <td class="rec-num">${t.wins}</td>
         <td class="rec-num">${t.podiums}</td>
+        <td class="rec-num">${t.one_twos || 0}</td>
+        <td class="rec-num">${t.front_row_lockouts || 0}</td>
       </tr>`;
     })
     .join("");
