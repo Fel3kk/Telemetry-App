@@ -3806,6 +3806,8 @@ function renderRecordsTable() {
         <span><b>GP</b> Grands Prix entered (incl. DNFs)</span>
         <span><b>DNF</b> Did-not-finish count</span>
         <span><b>Sn</b> Seasons active</span>
+        <span><b>1-2</b> Constructor 1-2 finishes</span>
+        <span><b>FRL</b> Front-row lockouts (Qualifying)</span>
         <span><b>★</b> Championship titles</span>
       </div>
       <div class="records-block">
