@@ -2568,3 +2568,29 @@ body:not(.subpage-active) .sticky-tabs .section-tab::before { display: none; }
   }
   .back-to-menu { width: 100%; justify-content: center; }
 }
+
+/* Small "open in new tab" launcher on each menu tile */
+.section-tab { position: relative; }
+.tab-newtab {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  width: 22px; height: 22px;
+  display: none;
+  align-items: center; justify-content: center;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.06);
+  color: var(--text);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-decoration: none;
+  opacity: 0.7;
+  transition: background 0.15s ease, opacity 0.15s ease, color 0.15s ease;
+}
+.tab-newtab:hover {
+  background: var(--f1-red);
+  color: #fff;
+  opacity: 1;
+}
+/* Only show the launcher on the menu tiles, not the sticky bar tabs */
+body:not(.subpage-active) .sticky-tabs .tab-newtab { display: inline-flex; }
