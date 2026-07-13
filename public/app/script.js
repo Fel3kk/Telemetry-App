@@ -1228,6 +1228,7 @@ function renderSeasonSelector() {
       try { localStorage.setItem("currentSeason_v1", String(i)); } catch (_) {}
       renderSeasonSelector();
       renderSavedSessions(allSessions);
+      if (typeof window.__refreshTabHrefs === "function") window.__refreshTabHrefs();
     };
     container.appendChild(box);
   }
