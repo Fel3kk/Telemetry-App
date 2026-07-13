@@ -1336,6 +1336,7 @@ function renderSavedSessions(sessions) {
       currentData = session;
       renderContent();
       renderSavedSessions(allSessions);
+      if (typeof window.__refreshTabHrefs === "function") window.__refreshTabHrefs();
     });
 
     grid.appendChild(card);
