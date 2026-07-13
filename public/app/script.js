@@ -4310,15 +4310,37 @@ function initCollapsibleSections() {
       }
     } catch (_) {}
 
+    // Inject a "Back to menu" button once
+    let backBtn = document.getElementById("backToMenuBtn");
+    if (!backBtn) {
+      backBtn = document.createElement("button");
+      backBtn.id = "backToMenuBtn";
+      backBtn.className = "back-to-menu";
+      backBtn.type = "button";
+      backBtn.innerHTML = "← Back to menu";
+      const contentWrap = document.querySelector(".collapsible-content");
+      if (contentWrap && contentWrap.parentNode) {
+        contentWrap.parentNode.insertBefore(backBtn, contentWrap);
+      }
+      backBtn.addEventListener("click", () => activateSection(null));
+    }
+
     function activateSection(targetId) {
+      const isHome = !targetId;
       sections.forEach((section) => {
-        section.classList.toggle("active", section.id === targetId);
+        section.classList.toggle("active", !isHome && section.id === targetId);
       });
       tabs.forEach((tab) => {
-        tab.classList.toggle("active", tab.dataset.target === targetId);
+        tab.classList.toggle("active", !isHome && tab.dataset.target === targetId);
       });
-      localStorage.setItem(activeKey, targetId);
-      if (targetId === "section-notes") renderNotesGrid();
+      document.body.classList.toggle("subpage-active", !isHome);
+      if (backBtn) backBtn.style.display = isHome ? "none" : "";
+      try {
+        if (isHome) localStorage.removeItem(activeKey);
+        else localStorage.setItem(activeKey, targetId);
+      } catch (_) {}
+      if (!isHome && targetId === "section-notes") renderNotesGrid();
+      if (!isHome) window.scrollTo({ top: 0, behavior: "instant" in window ? "instant" : "auto" });
     }
 
 
@@ -4345,10 +4367,9 @@ function initCollapsibleSections() {
       });
     }
 
+    // Start on the menu (home) unless a section was explicitly open before
     const defaultSection =
-      storedActive && document.getElementById(storedActive)
-        ? storedActive
-        : "section-standings";
+      storedActive && document.getElementById(storedActive) ? storedActive : null;
     activateSection(defaultSection);
   } catch (err) {
     console.warn("initCollapsibleSections failed", err);
