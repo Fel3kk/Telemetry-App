@@ -1225,6 +1225,7 @@ function renderSeasonSelector() {
     box.textContent = i;
     box.onclick = () => {
       currentSeason = i;
+      try { localStorage.setItem("currentSeason_v1", String(i)); } catch (_) {}
       renderSeasonSelector();
       renderSavedSessions(allSessions);
     };
