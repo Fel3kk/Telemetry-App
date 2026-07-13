@@ -1,6 +1,11 @@
 let allSessions = [];
 let currentData = null;
-let currentSeason = 1;
+let currentSeason = (() => {
+  try {
+    const v = parseInt(localStorage.getItem("currentSeason_v1"), 10);
+    return Number.isFinite(v) && v >= 1 && v <= 10 ? v : 1;
+  } catch (_) { return 1; }
+})();
 let qualiGapMode = "leader";
 const charts = {};
 
