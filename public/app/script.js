@@ -4384,17 +4384,87 @@ function initCollapsibleSections() {
     }
 
 
+    // Expose so external code (season/session changes) can update the URL hash
+    window.__updateStateHash = () => {
+      try {
+        const params = new URLSearchParams();
+        const activeSection = document.querySelector(".collapsible-section.active");
+        if (activeSection) params.set("view", activeSection.id);
+        params.set("season", String(currentSeason));
+        if (currentData && currentData.id) params.set("session", String(currentData.id));
+        const hash = params.toString();
+        const newHash = hash ? "#" + hash : "";
+        if (newHash !== location.hash) history.replaceState(null, "", location.pathname + location.search + newHash);
+      } catch (_) {}
+    };
+
+    // Wrap activateSection to also sync the hash
+    const _activate = activateSection;
+    activateSection = function (targetId) {
+      _activate(targetId);
+      window.__updateStateHash();
+    };
+
     tabs.forEach((tab) => {
       const targetId = tab.dataset.target;
+
+      // Give each tab a real href so browsers offer "Open link in new tab"
+      // and support middle-click / ctrl+click natively.
+      const params = new URLSearchParams();
+      params.set("view", targetId);
+      params.set("season", String(currentSeason));
+      if (currentData && currentData.id) params.set("session", String(currentData.id));
+      tab.setAttribute("data-href", "#" + params.toString());
+
+      // Middle click / ctrl+click / cmd+click → open in new tab, preserving state
+      const openInNewTab = (e) => {
+        const url = location.pathname + location.search + tab.getAttribute("data-href");
+        window.open(url, "_blank", "noopener");
+        e.preventDefault();
+        e.stopPropagation();
+      };
+      tab.addEventListener("auxclick", (e) => { if (e.button === 1) openInNewTab(e); });
+      tab.addEventListener("mousedown", (e) => { if (e.button === 1) { e.preventDefault(); } });
+
       tab.addEventListener("click", (e) => {
         // Ignore clicks that immediately follow a drag
         if (tab.dataset.justDragged === "1") {
           delete tab.dataset.justDragged;
           return;
         }
+        if (e.ctrlKey || e.metaKey || e.shiftKey) { openInNewTab(e); return; }
         activateSection(targetId);
       });
+
+      // Small "open in new tab" launcher on each tile
+      if (!tab.querySelector(".tab-newtab")) {
+        const a = document.createElement("a");
+        a.className = "tab-newtab";
+        a.href = "#" + params.toString();
+        a.target = "_blank";
+        a.rel = "noopener";
+        a.title = "Open in new tab";
+        a.textContent = "↗";
+        a.addEventListener("click", (e) => e.stopPropagation());
+        a.addEventListener("mousedown", (e) => e.stopPropagation());
+        tab.appendChild(a);
+      }
     });
+
+    // Refresh all tab hrefs when season/session changes
+    window.__refreshTabHrefs = () => {
+      document.querySelectorAll(".section-tab[data-target]").forEach((tab) => {
+        const p = new URLSearchParams();
+        p.set("view", tab.dataset.target);
+        p.set("season", String(currentSeason));
+        if (currentData && currentData.id) p.set("session", String(currentData.id));
+        const h = "#" + p.toString();
+        tab.setAttribute("data-href", h);
+        const a = tab.querySelector(".tab-newtab");
+        if (a) a.href = h;
+      });
+      window.__updateStateHash();
+    };
 
     if (tabContainer) {
       enableDragReorder(tabContainer, ".section-tab[data-target]", {
@@ -4407,9 +4477,29 @@ function initCollapsibleSections() {
       });
     }
 
-    // Start on the menu (home) unless a section was explicitly open before
+    // Prefer URL hash (?view=... after #) over localStorage for cross-tab links
+    let hashView = null, hashSeason = null, hashSession = null;
+    try {
+      const hp = new URLSearchParams((location.hash || "").replace(/^#/, ""));
+      hashView = hp.get("view");
+      hashSeason = hp.get("season");
+      hashSession = hp.get("session");
+    } catch (_) {}
+    if (hashSeason) {
+      const sn = parseInt(hashSeason, 10);
+      if (Number.isFinite(sn) && sn >= 1 && sn <= 10) {
+        currentSeason = sn;
+        try { localStorage.setItem("currentSeason_v1", String(sn)); } catch (_) {}
+        if (typeof renderSeasonSelector === "function") renderSeasonSelector();
+      }
+    }
+    if (hashSession && Array.isArray(allSessions)) {
+      const s = allSessions.find((x) => String(x.id) === String(hashSession));
+      if (s) { currentData = s; try { renderContent(); } catch (_) {} }
+    }
     const defaultSection =
-      storedActive && document.getElementById(storedActive) ? storedActive : null;
+      (hashView && document.getElementById(hashView)) ? hashView :
+      (storedActive && document.getElementById(storedActive)) ? storedActive : null;
     activateSection(defaultSection);
   } catch (err) {
     console.warn("initCollapsibleSections failed", err);
