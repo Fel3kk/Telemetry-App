@@ -1,11 +1,6 @@
 let allSessions = [];
 let currentData = null;
-let currentSeason = (() => {
-  try {
-    const v = parseInt(localStorage.getItem("currentSeason_v1"), 10);
-    return Number.isFinite(v) && v >= 1 && v <= 10 ? v : 1;
-  } catch (_) { return 1; }
-})();
+let currentSeason = 1;
 let qualiGapMode = "leader";
 const charts = {};
 
@@ -1225,10 +1220,8 @@ function renderSeasonSelector() {
     box.textContent = i;
     box.onclick = () => {
       currentSeason = i;
-      try { localStorage.setItem("currentSeason_v1", String(i)); } catch (_) {}
       renderSeasonSelector();
       renderSavedSessions(allSessions);
-      if (typeof window.__refreshTabHrefs === "function") window.__refreshTabHrefs();
     };
     container.appendChild(box);
   }
@@ -1336,7 +1329,6 @@ function renderSavedSessions(sessions) {
       currentData = session;
       renderContent();
       renderSavedSessions(allSessions);
-      if (typeof window.__refreshTabHrefs === "function") window.__refreshTabHrefs();
     });
 
     grid.appendChild(card);
@@ -3126,46 +3118,6 @@ function createChart(
         ctx.fillText(rangeTxt, (xLeft + xRight) / 2, chartArea.top + 4);
       });
 
-      // 1b. Fault bands (Active Aero / ERS) — grouped contiguous laps
-      const faultDefs = [
-        { key: "drs_fault", label: "AERO", fill: "rgba(225, 6, 0, 0.14)", border: "rgba(225, 6, 0, 0.7)" },
-        { key: "ers_fault", label: "ERS",  fill: "rgba(244, 208, 63, 0.16)", border: "rgba(244, 208, 63, 0.75)" },
-      ];
-      faultDefs.forEach((fd) => {
-        const runs = [];
-        let start = null;
-        for (let i = 0; i < laps.length; i++) {
-          const on = !!(laps[i] && laps[i].damage && laps[i].damage[fd.key]);
-          if (on && start === null) start = laps[i].lap;
-          if ((!on || i === laps.length - 1) && start !== null) {
-            const end = on ? laps[i].lap : laps[i - 1].lap;
-            runs.push({ first: start, last: end });
-            start = null;
-          }
-        }
-        runs.forEach((r) => {
-          const xL = pixelForLap(r.first) - barWidth / 2;
-          const xR = pixelForLap(r.last) + barWidth / 2;
-          const w = Math.max(2, xR - xL);
-          ctx.fillStyle = fd.fill;
-          ctx.fillRect(xL, chartArea.top, w, chartArea.bottom - chartArea.top);
-          ctx.strokeStyle = fd.border;
-          ctx.lineWidth = 1;
-          ctx.setLineDash([2, 4]);
-          ctx.beginPath();
-          ctx.moveTo(xL + 0.5, chartArea.top); ctx.lineTo(xL + 0.5, chartArea.bottom);
-          ctx.moveTo(xR - 0.5, chartArea.top); ctx.lineTo(xR - 0.5, chartArea.bottom);
-          ctx.stroke();
-          ctx.setLineDash([]);
-          ctx.fillStyle = fd.border;
-          ctx.font = `${isMobile ? 9 : 10}px sans-serif`;
-          ctx.textAlign = "center";
-          ctx.textBaseline = "bottom";
-          const txt = r.first === r.last ? `${fd.label} L${r.first}` : `${fd.label} L${r.first}–${r.last}`;
-          ctx.fillText(txt, (xL + xR) / 2, chartArea.bottom - 3);
-        });
-      });
-
       // 2. Vertical lines for pit stops (kept per-lap)
       laps.forEach((lap) => {
         const xPos = pixelForLap(lap.lap);
@@ -4352,121 +4304,29 @@ function initCollapsibleSections() {
       }
     } catch (_) {}
 
-    // Inject a "Back to menu" button once
-    let backBtn = document.getElementById("backToMenuBtn");
-    if (!backBtn) {
-      backBtn = document.createElement("button");
-      backBtn.id = "backToMenuBtn";
-      backBtn.className = "back-to-menu";
-      backBtn.type = "button";
-      backBtn.innerHTML = "← Back to menu";
-      const contentWrap = document.querySelector(".collapsible-content");
-      if (contentWrap && contentWrap.parentNode) {
-        contentWrap.parentNode.insertBefore(backBtn, contentWrap);
-      }
-      backBtn.addEventListener("click", () => activateSection(null));
-    }
-
     function activateSection(targetId) {
-      const isHome = !targetId;
       sections.forEach((section) => {
-        section.classList.toggle("active", !isHome && section.id === targetId);
+        section.classList.toggle("active", section.id === targetId);
       });
       tabs.forEach((tab) => {
-        tab.classList.toggle("active", !isHome && tab.dataset.target === targetId);
+        tab.classList.toggle("active", tab.dataset.target === targetId);
       });
-      document.body.classList.toggle("subpage-active", !isHome);
-      if (backBtn) backBtn.style.display = isHome ? "none" : "";
-      try {
-        if (isHome) localStorage.removeItem(activeKey);
-        else localStorage.setItem(activeKey, targetId);
-      } catch (_) {}
-      if (!isHome && targetId === "section-notes") renderNotesGrid();
-      if (!isHome) window.scrollTo({ top: 0, behavior: "instant" in window ? "instant" : "auto" });
+      localStorage.setItem(activeKey, targetId);
+      if (targetId === "section-notes") renderNotesGrid();
     }
 
-
-    // Expose so external code (season/session changes) can update the URL hash
-    window.__updateStateHash = () => {
-      try {
-        const params = new URLSearchParams();
-        const activeSection = document.querySelector(".collapsible-section.active");
-        if (activeSection) params.set("view", activeSection.id);
-        params.set("season", String(currentSeason));
-        if (currentData && currentData.id) params.set("session", String(currentData.id));
-        const hash = params.toString();
-        const newHash = hash ? "#" + hash : "";
-        if (newHash !== location.hash) history.replaceState(null, "", location.pathname + location.search + newHash);
-      } catch (_) {}
-    };
-
-    // Wrap activateSection to also sync the hash
-    const _activate = activateSection;
-    activateSection = function (targetId) {
-      _activate(targetId);
-      window.__updateStateHash();
-    };
 
     tabs.forEach((tab) => {
       const targetId = tab.dataset.target;
-
-      // Give each tab a real href so browsers offer "Open link in new tab"
-      // and support middle-click / ctrl+click natively.
-      const params = new URLSearchParams();
-      params.set("view", targetId);
-      params.set("season", String(currentSeason));
-      if (currentData && currentData.id) params.set("session", String(currentData.id));
-      tab.setAttribute("data-href", "#" + params.toString());
-
-      // Middle click / ctrl+click / cmd+click → open in new tab, preserving state
-      const openInNewTab = (e) => {
-        const url = location.pathname + location.search + tab.getAttribute("data-href");
-        window.open(url, "_blank", "noopener");
-        e.preventDefault();
-        e.stopPropagation();
-      };
-      tab.addEventListener("auxclick", (e) => { if (e.button === 1) openInNewTab(e); });
-      tab.addEventListener("mousedown", (e) => { if (e.button === 1) { e.preventDefault(); } });
-
       tab.addEventListener("click", (e) => {
         // Ignore clicks that immediately follow a drag
         if (tab.dataset.justDragged === "1") {
           delete tab.dataset.justDragged;
           return;
         }
-        if (e.ctrlKey || e.metaKey || e.shiftKey) { openInNewTab(e); return; }
         activateSection(targetId);
       });
-
-      // Small "open in new tab" launcher on each tile
-      if (!tab.querySelector(".tab-newtab")) {
-        const a = document.createElement("a");
-        a.className = "tab-newtab";
-        a.href = "#" + params.toString();
-        a.target = "_blank";
-        a.rel = "noopener";
-        a.title = "Open in new tab";
-        a.textContent = "↗";
-        a.addEventListener("click", (e) => e.stopPropagation());
-        a.addEventListener("mousedown", (e) => e.stopPropagation());
-        tab.appendChild(a);
-      }
     });
-
-    // Refresh all tab hrefs when season/session changes
-    window.__refreshTabHrefs = () => {
-      document.querySelectorAll(".section-tab[data-target]").forEach((tab) => {
-        const p = new URLSearchParams();
-        p.set("view", tab.dataset.target);
-        p.set("season", String(currentSeason));
-        if (currentData && currentData.id) p.set("session", String(currentData.id));
-        const h = "#" + p.toString();
-        tab.setAttribute("data-href", h);
-        const a = tab.querySelector(".tab-newtab");
-        if (a) a.href = h;
-      });
-      window.__updateStateHash();
-    };
 
     if (tabContainer) {
       enableDragReorder(tabContainer, ".section-tab[data-target]", {
@@ -4479,29 +4339,10 @@ function initCollapsibleSections() {
       });
     }
 
-    // Prefer URL hash (?view=... after #) over localStorage for cross-tab links
-    let hashView = null, hashSeason = null, hashSession = null;
-    try {
-      const hp = new URLSearchParams((location.hash || "").replace(/^#/, ""));
-      hashView = hp.get("view");
-      hashSeason = hp.get("season");
-      hashSession = hp.get("session");
-    } catch (_) {}
-    if (hashSeason) {
-      const sn = parseInt(hashSeason, 10);
-      if (Number.isFinite(sn) && sn >= 1 && sn <= 10) {
-        currentSeason = sn;
-        try { localStorage.setItem("currentSeason_v1", String(sn)); } catch (_) {}
-        if (typeof renderSeasonSelector === "function") renderSeasonSelector();
-      }
-    }
-    if (hashSession && Array.isArray(allSessions)) {
-      const s = allSessions.find((x) => String(x.id) === String(hashSession));
-      if (s) { currentData = s; try { renderContent(); } catch (_) {} }
-    }
     const defaultSection =
-      (hashView && document.getElementById(hashView)) ? hashView :
-      (storedActive && document.getElementById(storedActive)) ? storedActive : null;
+      storedActive && document.getElementById(storedActive)
+        ? storedActive
+        : "section-standings";
     activateSection(defaultSection);
   } catch (err) {
     console.warn("initCollapsibleSections failed", err);
