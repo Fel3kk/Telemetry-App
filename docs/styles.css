@@ -2133,6 +2133,7 @@ body.light-theme #driver-assignments-container { background: #ffffff; }
 .fc-pos-pill.p1 { background: linear-gradient(135deg,#ffd84a,#f3a900); color:#000; }
 .fc-pos-pill.p2 { background: linear-gradient(135deg,#e5e5e5,#a8a8a8); color:#000; }
 .fc-pos-pill.p3 { background: linear-gradient(135deg,#e3a468,#a06a36); color:#000; }
+.fc-pos-pill.dnf { background: rgba(255,80,80,0.18); color:#ff8080; border:1px solid rgba(255,80,80,0.45); font-size:0.72rem; letter-spacing:0.5px; }
 
 .fc-driver { min-width: 160px; border-left: 3px solid var(--team-color); padding-left: 10px !important; }
 .fc-name { display: block; font-weight: 700; letter-spacing: 0.03em; }
@@ -2202,3 +2203,417 @@ body.light-theme #driver-assignments-container { background: #ffffff; }
   letter-spacing: 0.10em;
 }
 .fc-dotd-driver { color: #ffe27a; font-size: 1rem; text-transform: uppercase; }
+
+/* ---------- Fastest Lap hero (Race Story) ---------- */
+.rs-fl-hero { margin: 14px 0 18px; }
+.rs-fl-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 20px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(155,89,255,0.18), rgba(70,130,255,0.18));
+  border: 1px solid rgba(155,89,255,0.45);
+  box-shadow: 0 4px 24px -8px rgba(155,89,255,0.35);
+}
+.rs-fl-card.is-player {
+  background: linear-gradient(135deg, rgba(255,180,60,0.22), rgba(255,90,150,0.20));
+  border-color: rgba(255,180,60,0.55);
+  box-shadow: 0 4px 24px -8px rgba(255,180,60,0.45);
+}
+.rs-fl-icon { font-size: 2.2rem; line-height: 1; }
+.rs-fl-body { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.rs-fl-label {
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  opacity: 0.75;
+  font-weight: 700;
+}
+.rs-fl-main { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.rs-fl-driver { font-size: 1.35rem; font-weight: 800; letter-spacing: 0.02em; }
+.rs-fl-time {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 1.15rem;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: rgba(0,0,0,0.28);
+}
+.rs-fl-meta { font-size: 0.82rem; opacity: 0.8; }
+
+/* ---------- Track Notes ---------- */
+.notes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+  padding: 8px 0;
+}
+.note-card {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border-color, rgba(255,255,255,0.08));
+  border-radius: 10px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: border-color .15s, background .15s;
+}
+.note-card:hover { border-color: rgba(255,255,255,0.18); }
+.note-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+.note-round {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 0.7rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(255,255,255,0.08);
+  opacity: 0.75;
+}
+.note-flag { font-size: 1.15rem; }
+.note-track { flex: 1; }
+.note-textarea {
+  width: 100%;
+  min-height: 110px;
+  resize: vertical;
+  font-family: inherit;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(0,0,0,0.25);
+  color: inherit;
+  outline: none;
+  transition: border-color .15s, background .15s;
+}
+.note-textarea:focus {
+  border-color: rgba(155,89,255,0.55);
+  background: rgba(0,0,0,0.35);
+}
+.notes-status { transition: opacity .2s; }
+body.light-theme .note-card {
+  background: rgba(0,0,0,0.03);
+  border-color: rgba(0,0,0,0.08);
+}
+body.light-theme .note-textarea {
+  background: #fff;
+  border-color: rgba(0,0,0,0.12);
+}
+
+/* ============================================================
+   Mobile — off-canvas sidebar drawer + polish (≤880px)
+   ============================================================ */
+.sidebar-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.55);
+  backdrop-filter: blur(3px);
+  z-index: 90;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+body.sidebar-drawer-open .sidebar-backdrop {
+  opacity: 1; pointer-events: auto;
+}
+
+@media (max-width: 880px) {
+  /* Single-column layout — sidebar becomes a fixed drawer */
+  .app-shell { grid-template-columns: 1fr !important; height: auto; min-height: 100vh; }
+  .app-shell.sidebar-collapsed { grid-template-columns: 1fr !important; }
+
+  .sidebar {
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    width: min(86vw, 340px);
+    height: 100vh;
+    z-index: 100;
+    padding: 16px 12px;
+    border-right: 1px solid var(--border);
+    border-bottom: none;
+    box-shadow: 8px 0 30px rgba(0,0,0,0.5);
+    transform: translateX(-100%);
+    opacity: 1;
+    transition: transform 0.25s ease;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  body.sidebar-drawer-open .sidebar {
+    transform: translateX(0);
+    pointer-events: auto;
+  }
+  /* Closed state on mobile hides the sidebar out of layout */
+  .app-shell.sidebar-collapsed .sidebar {
+    transform: translateX(-100%);
+    opacity: 1;
+  }
+
+  /* Expand button — floating pill in top-left corner, always visible */
+  .sidebar-expand {
+    position: fixed !important;
+    top: 10px; left: 10px;
+    width: 42px; height: 42px;
+    border-radius: 12px;
+    background: var(--bg-2);
+    border: 1px solid var(--border-strong);
+    box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+    z-index: 80;
+    display: inline-flex !important;
+    font-size: 1.15em;
+  }
+  /* Make room in header for the floating button */
+  .compact-header { padding-left: 62px !important; padding-right: 60px; }
+
+  /* Main pane fills width */
+  .main-pane { height: auto; overflow: visible; }
+
+  /* Stats: 2x2 grid on mobile */
+  .season-stats-host { padding: 10px 12px 0; }
+  .season-stats-host #seasonSummaryCards {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px;
+  }
+  .season-stats-host #seasonSummaryCards .stat-card { padding: 10px 12px; }
+  .season-stats-host #seasonSummaryCards .stat-value { font-size: 1rem; }
+
+  /* Sticky tabs — auto-scroll active into view (handled by JS) */
+  .sticky-tabs { padding: 10px 12px; }
+
+  /* Sidebar internals stay full-width in the drawer */
+  .season-selector.compact { grid-template-columns: repeat(5, 1fr); }
+  .sessions-block { min-height: 40vh; }
+
+  /* Cards / containers inside main pane hug edges */
+  .collapsible-content { padding: 0 8px 16px; }
+  .collapsible-section .section-header,
+  .collapsible-section .section-body { padding-left: 12px; padding-right: 12px; }
+
+  /* Prevent horizontal page scroll from stray full-width elements */
+  html, body { overflow-x: hidden; }
+  body.sidebar-drawer-open { overflow: hidden; }
+}
+
+@media (max-width: 480px) {
+  .season-stats-host #seasonSummaryCards .stat-label { font-size: 0.55rem; letter-spacing: 0.14em; }
+  .season-stats-host #seasonSummaryCards .stat-value { font-size: 0.95rem; }
+  .compact-header h1 { font-size: 1.05rem !important; }
+  .compact-header p { font-size: 0.7rem; }
+  .sticky-tabs { padding: 8px 10px; }
+  /* Force-hide brand subtitle to save space in drawer */
+  .sidebar-brand .brand-sub { display: none; }
+}
+
+/* Hide desktop-only sidebar-toggle inside the drawer on mobile — the
+   backdrop + floating expand button handles open/close. */
+@media (max-width: 880px) {
+  .sidebar-toggle { display: none !important; }
+}
+
+/* Damage progression */
+.damage-pills { display:flex; flex-wrap:wrap; gap:8px; }
+.damage-pill {
+  padding: 4px 10px; border-radius: 999px; font-size: .8rem;
+  border: 1px solid var(--border-color); background: rgba(255,255,255,0.02);
+}
+.damage-pill b { margin-right: 4px; font-weight: 600; }
+
+/* Compare tab */
+#compareTable td.delta-pos { color: #2ecc71; font-weight: 600; }
+#compareTable td.delta-neg { color: #e10600; font-weight: 600; }
+.compare-controls {
+  background: linear-gradient(135deg, rgba(225,6,0,0.08), rgba(0,184,212,0.06));
+  border: 1px solid var(--border-color, #2a2a2a);
+  border-radius: 10px;
+  padding: 12px 16px !important;
+  gap: 14px !important;
+}
+.compare-controls label {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+  font-size: .72rem !important;
+  color: var(--secondary-text);
+}
+#compareDriverSelect {
+  appearance: none;
+  -webkit-appearance: none;
+  background: #14151a;
+  color: #fff;
+  border: 1px solid rgba(225,6,0,0.4);
+  border-radius: 8px;
+  padding: 8px 34px 8px 14px !important;
+  font-family: inherit;
+  font-weight: 700;
+  font-size: .82rem;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  min-width: 220px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path fill='%23e10600' d='M6 8L0 0h12z'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  transition: border-color .15s, box-shadow .15s, transform .15s;
+}
+#compareDriverSelect:hover {
+  border-color: #e10600;
+  box-shadow: 0 0 0 3px rgba(225,6,0,0.15);
+}
+#compareDriverSelect:focus {
+  outline: none;
+  border-color: #e10600;
+  box-shadow: 0 0 0 3px rgba(225,6,0,0.25);
+}
+#compareDriverSelect option {
+  background: #14151a;
+  color: #fff;
+  padding: 6px;
+  font-weight: 600;
+}
+#compareSummary {
+  margin-left: auto;
+  padding: 6px 12px;
+  background: rgba(0,0,0,0.35);
+  border: 1px solid var(--border-color, #2a2a2a);
+  border-radius: 6px;
+  font-family: "JetBrains Mono", monospace;
+  font-size: .78rem !important;
+}
+@media (max-width: 640px) {
+  #compareSummary { margin-left: 0; width: 100%; }
+  #compareDriverSelect { flex: 1; min-width: 0; }
+}
+
+
+/* ---------------- Embed mode (iframed by React shell) ---------------- */
+html.embed-mode, body.embed-mode { background: transparent; }
+body.embed-mode #topNav,
+body.embed-mode .sidebar,
+body.embed-mode .compact-header,
+body.embed-mode .season-stats-host,
+body.embed-mode .collapsible-tabs,
+body.embed-mode .sidebar-expand { display: none !important; }
+body.embed-mode .app-shell { display: block; }
+body.embed-mode .main-pane { padding: 8px 12px; max-width: 100%; }
+body.embed-mode .collapsible-section { display: none; }
+body.embed-mode .collapsible-section.active { display: block !important; }
+body.embed-mode .section-header { display: none; }
+
+/* Upload-only embed */
+html.embed-upload, body.embed-upload { background: transparent; }
+body.embed-upload #topNav,
+body.embed-upload .compact-header,
+body.embed-upload .season-stats-host,
+body.embed-upload .collapsible-tabs,
+body.embed-upload .collapsible-section,
+body.embed-upload .sidebar-expand,
+body.embed-upload .sidebar-brand,
+body.embed-upload .season-block,
+body.embed-upload .sessions-block,
+body.embed-upload .sidebar-backdrop { display: none !important; }
+body.embed-upload .app-shell,
+body.embed-upload .app-shell.sidebar-collapsed { display: block; padding: 0; grid-template-columns: 1fr; }
+body.embed-upload .sidebar,
+body.embed-upload .app-shell.sidebar-collapsed .sidebar {
+  position: static; width: 100%; max-width: 100%;
+  background: transparent; border: none; padding: 0; box-shadow: none;
+  transform: none !important; opacity: 1 !important; visibility: visible !important;
+  pointer-events: auto !important; left: auto !important;
+}
+body.embed-upload .sidebar-block { border: none; background: transparent; margin: 0; }
+body.embed-upload .sidebar-block[open] > summary,
+body.embed-upload .sidebar-block > summary { display: none; }
+body.embed-upload .sidebar-block-body { padding: 0; }
+body.embed-upload .main-pane { display: none; }
+body.embed-upload .sidebar-toggle { display: none !important; }
+
+/* Upload embed: nicer, less shouty */
+body.embed-upload {
+  padding: 0;
+  color: var(--text);
+}
+body.embed-upload .sidebar-block-body {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  padding: 4px;
+}
+body.embed-upload .file-input-label {
+  justify-content: center;
+  width: 100%;
+  padding: 14px 20px;
+  background:
+    linear-gradient(135deg, rgba(225,6,0,0.16), rgba(225,6,0,0.04));
+  border: 1px dashed rgba(225,6,0,0.55);
+  color: var(--text);
+  border-radius: 12px;
+  letter-spacing: 0.14em;
+  font-size: 0.82em;
+  box-shadow: none;
+  transition: border-color .18s ease, background .18s ease, transform .18s ease;
+}
+body.embed-upload .file-input-label:hover {
+  border-color: var(--f1-red);
+  background: linear-gradient(135deg, rgba(225,6,0,0.28), rgba(225,6,0,0.08));
+  transform: none;
+  box-shadow: 0 0 0 3px rgba(225,6,0,0.15);
+}
+body.embed-upload .sidebar-template-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+body.embed-upload .sidebar-template-row .download-btn,
+body.embed-upload .download-btn.small {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 0.72em;
+  transition: border-color .15s ease, color .15s ease, background .15s ease;
+}
+body.embed-upload .sidebar-template-row .download-btn:hover,
+body.embed-upload .download-btn.small:hover {
+  border-color: var(--f1-red);
+  color: var(--text);
+  background: rgba(225,6,0,0.08);
+}
+
+/* Overlay guide legend above graphs */
+.overlay-guide {
+  margin: 6px 0 14px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px;
+  background: rgba(255,255,255,0.03);
+}
+.overlay-guide-title {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.55);
+  margin-bottom: 8px;
+}
+.overlay-guide-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  font-size: 11px;
+  color: rgba(255,255,255,0.85);
+  align-items: center;
+}
+.og-item { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.og-swatch { display: inline-block; width: 18px; height: 12px; border-radius: 2px; border: 1px dashed transparent; }
+.og-line { display: inline-block; width: 3px; height: 14px; border-radius: 1px; }
+.og-sep { width: 1px; height: 16px; background: rgba(255,255,255,0.12); }
+@media (max-width: 640px) {
+  .overlay-guide-items { gap: 4px 10px; font-size: 10px; }
+  .og-sep { display: none; }
+}

@@ -4,6 +4,163 @@ let currentSeason = 1;
 let qualiGapMode = "leader";
 const charts = {};
 
+// ---------------------------------------------------------------
+// Embed / deep-link bootstrap
+// The React shell iframes this app with ?season=&track=&view=
+// to render a single focused view (standings, race-story, etc).
+// ---------------------------------------------------------------
+const EMBED_QP = (() => {
+  try { return new URLSearchParams(location.search); } catch { return new URLSearchParams(); }
+})();
+const EMBED_VIEW   = EMBED_QP.get("view");    // e.g. "race-story"
+const EMBED_SEASON = EMBED_QP.get("season");  // "1" | "2" ...
+const EMBED_TRACK  = EMBED_QP.get("track");   // track_name
+const EMBED_CAT    = EMBED_QP.get("cat");     // optional category filter
+if (EMBED_VIEW) {
+  const cls = EMBED_VIEW === "upload" ? "embed-upload" : "embed-mode";
+  document.documentElement.classList.add(cls);
+  document.body && document.body.classList.add(cls);
+  document.addEventListener("DOMContentLoaded", () => document.body.classList.add(cls));
+}
+
+function _embedApplyView() {
+  if (!EMBED_VIEW) return;
+  const targetId = "section-" + EMBED_VIEW;
+  document.querySelectorAll(".collapsible-section").forEach((s) => {
+    s.classList.toggle("active", s.id === targetId);
+    if (s.id !== targetId) s.style.display = "none";
+  });
+  document.querySelectorAll(".section-tab").forEach((t) => {
+    t.classList.toggle("active", t.dataset.target === targetId);
+  });
+}
+function _embedNotifyReady(status) {
+  try {
+    if (window.parent && window.parent !== window) {
+      window.parent.postMessage({ type: "f1-embed-ready", status: status || "ok", view: EMBED_VIEW }, "*");
+    }
+  } catch (e) { /* ignore */ }
+}
+function _embedSelectSession() {
+  if (!EMBED_TRACK) { _embedNotifyReady("no-track"); return; }
+  const wanted = String(EMBED_TRACK).toLowerCase();
+  const wantedCat = EMBED_CAT ? String(EMBED_CAT).toLowerCase() : null;
+  const seasonN = Number(EMBED_SEASON || currentSeason);
+  const isPracticeView = EMBED_VIEW === "practice";
+  // For the practice view we pick a Practice or Sprint session regardless of
+  // `cat`, so the "Race → Practice" link surfaces every uploaded practice
+  // AND the sprint for the same weekend.
+  const isPracticeLikeSession = (s) => {
+    const c = (s.category || "").toLowerCase();
+    const st = (s.session_type || "").toLowerCase();
+    return (
+      c === "practice" || c.startsWith("practice") ||
+      c === "sprint" || c === "sprint qualifying" || c === "sprint shootout" ||
+      /^p[123]$/.test(st) || st.includes("practice") || st.includes("fp") ||
+      st.includes("sprint")
+    );
+  };
+  const match = allSessions.find((s) => {
+    if (Number(s.season) !== seasonN) return false;
+    if ((s.track_name || "").toLowerCase() !== wanted) return false;
+    if (isPracticeView) return isPracticeLikeSession(s);
+    return !wantedCat || (s.category || "").toLowerCase() === wantedCat;
+  });
+  if (match) {
+    currentData = match;
+    try { renderContent(); } catch (e) { console.warn(e); }
+    if (isPracticeView) { try { _embedRenderPracticePicker(); } catch (e) { console.warn(e); } }
+    _embedNotifyReady("ok");
+  } else {
+    if (isPracticeView) { try { _embedRenderPracticePicker(); } catch (e) { console.warn(e); } }
+    _embedNotifyReady("no-match");
+  }
+}
+
+// Render a session picker at the top of the practice section listing every
+// Practice (and Sprint) session uploaded for this track so the user can
+// switch between P1/P2/P3/Sprint.
+function _embedRenderPracticePicker() {
+  const section = document.getElementById("section-practice");
+  if (!section) return;
+  const wanted = String(EMBED_TRACK || "").toLowerCase();
+  const seasonN = Number(EMBED_SEASON || currentSeason);
+  const isPracticeLike = (s) => {
+    const c = (s.category || "").toLowerCase();
+    const st = (s.session_type || "").toLowerCase();
+    return (
+      c === "practice" || c.startsWith("practice") ||
+      c === "sprint" || c === "sprint qualifying" || c === "sprint shootout" ||
+      /^p[123]$/.test(st) || st.includes("practice") || st.includes("fp") ||
+      st.includes("sprint")
+    );
+  };
+  const orderKey = (s) => {
+    const c = (s.category || "").toLowerCase();
+    const st = (s.session_type || "").toLowerCase();
+    if (/^p1$/.test(st) || st.includes("practice 1") || st.includes("fp1")) return "1";
+    if (/^p2$/.test(st) || st.includes("practice 2") || st.includes("fp2")) return "2";
+    if (/^p3$/.test(st) || st.includes("practice 3") || st.includes("fp3")) return "3";
+    if (c === "sprint qualifying" || c === "sprint shootout") return "4";
+    if (c === "sprint") return "5";
+    return "9" + (s.session_type || "");
+  };
+  const list = allSessions
+    .filter((s) =>
+      Number(s.season) === seasonN &&
+      (s.track_name || "").toLowerCase() === wanted &&
+      isPracticeLike(s),
+    )
+    .sort((a, b) => orderKey(a).localeCompare(orderKey(b)));
+
+  let picker = document.getElementById("embedPracticePicker");
+  if (!picker) {
+    picker = document.createElement("div");
+    picker.id = "embedPracticePicker";
+    picker.style.cssText = "display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 18px;padding:12px;border:1px solid var(--border-color);border-radius:10px;background:rgba(255,255,255,0.04);";
+    const body = section.querySelector(".section-body");
+    if (body) body.prepend(picker); else section.prepend(picker);
+  }
+  if (list.length === 0) {
+    const totalPract = allSessions.filter(isPracticeLike).length;
+    picker.innerHTML = `<div style="color:var(--secondary-text);font-size:0.9rem">No Practice or Sprint sessions uploaded for this track yet (season ${seasonN}, track "${wanted}"). Total practice/sprint sessions across all tracks: ${totalPract}. Upload a Practice_*.json or Sprint_*.json to see the summary here.</div>`;
+    return;
+  }
+  const currentId = currentData && (currentData.id || currentData.created_at);
+  const labelFor = (s) => {
+    const st = s.session_type || "";
+    const c = (s.category || "").toLowerCase();
+    if (st) return st;
+    if (c === "sprint") return "Sprint";
+    if (c === "sprint qualifying" || c === "sprint shootout") return "Sprint Quali";
+    return "Practice";
+  };
+  picker.innerHTML =
+    '<div style="width:100%;font-size:0.72rem;letter-spacing:0.14em;text-transform:uppercase;color:var(--secondary-text);margin-bottom:4px">Practice & Sprint Sessions</div>' +
+    list.map((s) => {
+      const id = s.id || s.created_at;
+      const label = labelFor(s);
+      const isActive = String(id) === String(currentId);
+      const isSprint = (s.category || "").toLowerCase().startsWith("sprint");
+      const accent = isSprint ? "#f59e0b" : "#ef4444";
+      return `<button type="button" data-sid="${id}" style="padding:8px 14px;border-radius:8px;border:1px solid ${isActive ? accent : "rgba(255,255,255,0.15)"};background:${isActive ? "rgba(239,68,68,0.15)" : "rgba(255,255,255,0.03)"};color:#fff;font-weight:700;font-size:0.85rem;cursor:pointer">${label}</button>`;
+    }).join("");
+  picker.querySelectorAll("button[data-sid]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const sid = btn.getAttribute("data-sid");
+      const next = list.find((s) => String(s.id || s.created_at) === String(sid));
+      if (next) {
+        currentData = next;
+        try { renderContent(); } catch (e) { console.warn(e); }
+        _embedRenderPracticePicker();
+      }
+    });
+  });
+}
+if (EMBED_SEASON) currentSeason = Number(EMBED_SEASON) || 1;
+
+
+
 // Global state for Practice Fuel Calculator
 let selectedPracticeLaps = new Set();
 let practiceFuelMap = new Map();
@@ -193,6 +350,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
   renderSeasonSelector();
   initCollapsibleSections();
+  _embedApplyView();
 
   // Load sessions then attempt to auto-load driver teams for the selected season.
   // This runs after the UI is wired so slow/failed DB startup cannot freeze clicks.
@@ -482,9 +640,8 @@ async function handleFileUpload(e) {
           if (trackGuess) session.track_name = trackGuess;
         }
 
-        if (category !== "Practice") {
-          sessionsToPersist.push(session);
-        }
+        // Persist every session, including Practice, so it shows up under the race weekend card
+        sessionsToPersist.push(session);
         lastProcessedSession = session;
       }
     } catch (err) {
@@ -494,20 +651,12 @@ async function handleFileUpload(e) {
 
   if (lastProcessedSession) {
     if (sessionsToPersist.length > 0) {
-      // Persist only non-Practice uploaded sessions to the database
       await saveSessions(sessionsToPersist);
-
-      // Set the view to the last uploaded session (finding the persisted version to get its database ID if applicable)
-      if (lastProcessedSession.category !== "Practice") {
-        currentData =
-          allSessions.find(
-            (s) => s.session_date === lastProcessedSession.created_at,
-          ) || lastProcessedSession;
-      } else {
-        currentData = lastProcessedSession;
-      }
+      currentData =
+        allSessions.find(
+          (s) => s.session_date === lastProcessedSession.created_at,
+        ) || lastProcessedSession;
     } else {
-      // Practice sessions are treated as temporary previews and not saved to the database
       currentData = lastProcessedSession;
     }
 
@@ -1338,6 +1487,7 @@ function renderSavedSessions(sessions) {
   renderStandingsTable();
 
   container.style.display = sessions.length ? "block" : "none";
+  if (EMBED_VIEW && !currentData) _embedSelectSession();
 }
 
 function determineWeatherIcon(session) {
@@ -3131,6 +3281,48 @@ function createChart(
           ctx.stroke();
           ctx.setLineDash([]); // Reset for other drawings
         }
+      });
+
+      // 3. Fault overlays (ERS / DRS / engine / gearbox / aero)
+      const FAULT_STYLES = {
+        ers:     { color: "#ffb020", label: "ERS" },
+        drs:     { color: "#5ad1ff", label: "DRS" },
+        engine:  { color: "#ff5252", label: "ENG" },
+        gearbox: { color: "#c084fc", label: "GBX" },
+        aero:    { color: "#9aff9a", label: "AERO" },
+      };
+      let prevDmg = null;
+      laps.forEach((lap) => {
+        if (!lap || !lap.damage) return;
+        const d = lap.damage;
+        const faults = [];
+        if (d.ers_fault) faults.push("ers");
+        if (d.drs_fault) faults.push("drs");
+        if (prevDmg) {
+          if ((d.engine || 0) - (prevDmg.engine || 0) >= 5) faults.push("engine");
+          if ((d.gearbox || 0) - (prevDmg.gearbox || 0) >= 5) faults.push("gearbox");
+          const aeroNow  = (d.fl_wing||0)+(d.fr_wing||0)+(d.rear_wing||0)+(d.floor||0)+(d.diffuser||0)+(d.sidepod||0);
+          const aeroPrev = (prevDmg.fl_wing||0)+(prevDmg.fr_wing||0)+(prevDmg.rear_wing||0)+(prevDmg.floor||0)+(prevDmg.diffuser||0)+(prevDmg.sidepod||0);
+          if (aeroNow - aeroPrev >= 10) faults.push("aero");
+        }
+        prevDmg = d;
+        if (!faults.length) return;
+        const xPos = pixelForLap(lap.lap);
+        faults.forEach((f, i) => {
+          const style = FAULT_STYLES[f];
+          ctx.strokeStyle = style.color;
+          ctx.lineWidth = 2;
+          ctx.setLineDash([2, 4]);
+          ctx.beginPath();
+          ctx.moveTo(xPos + i * 2, chartArea.top);
+          ctx.lineTo(xPos + i * 2, chartArea.bottom);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.fillStyle = style.color;
+          ctx.font = "bold 9px sans-serif";
+          ctx.textAlign = "center";
+          ctx.fillText(style.label, xPos, chartArea.top + 14 + i * 11);
+        });
       });
       ctx.restore();
     },

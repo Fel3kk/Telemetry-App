@@ -9,7 +9,7 @@ import {
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
 
-import appCss from "../styles.css?url";
+import "../styles.css";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 
 function NotFoundComponent() {
@@ -77,20 +77,17 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
-      { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { title: "F1 Telemetry Analyzer" },
+      { name: "description", content: "Season standings, race stories, and telemetry from your F1 uploads." },
+      { name: "author", content: "F1 Telemetry Analyzer" },
+      { property: "og:title", content: "F1 Telemetry Analyzer" },
+      { property: "og:description", content: "Season standings, race stories, and telemetry from your F1 uploads." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
-      { name: "twitter:site", content: "@Lovable" },
-    ],
-    links: [
-      {
-        rel: "stylesheet",
-        href: appCss,
-      },
+      { name: "twitter:title", content: "F1 Telemetry Analyzer" },
+      { name: "twitter:description", content: "Season standings, race stories, and telemetry from your F1 uploads." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/503b8ee5-72ad-4360-b420-85c00bc49a9d/id-preview-15595008--92064a28-4347-49e0-9ccd-3d4853040e8e.lovable.app-1784146677592.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/503b8ee5-72ad-4360-b420-85c00bc49a9d/id-preview-15595008--92064a28-4347-49e0-9ccd-3d4853040e8e.lovable.app-1784146677592.png" },
     ],
   }),
   shellComponent: RootShell,

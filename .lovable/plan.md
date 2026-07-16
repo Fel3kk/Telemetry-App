@@ -1,50 +1,104 @@
+# F1 Analyzer Revamp — Plan
+
 ## Goal
-Use the rich per-session JSON (which contains `position-history`, `overtakes`, `speed-trap-records`, `tyre-stint-history-v2`, plus the player's `per-lap-info` / `lap-time-history`) to add player-focused race-story charts to the analyzer. Everything keys off the entry where `is-player: true`, matching what already exists in `script.js`.
 
-## New visualizations
+Restructure the app into three deep-linkable levels while keeping every current feature working:
 
-1. **Position Changes Through the Race** (primary request)
-   - Line chart, x = lap, y = track position (inverted: P1 on top, integer ticks).
-   - Player line in bold F1 red, with start/end position labels and a marker at the lowest/highest position reached.
-   - Optional faint comparison lines for the eventual podium finishers (top 3 from `final-classification`) using their team colors — toggleable in the legend.
-   - Data source: `position-history[*].driver-position-history`.
+1. **Main page** (`/`) — upload, season select (persisted), season stats, track card grid
+2. **Track page** (`/season/$season/track/$track`) — hero + card grid of options
+3. **Option page** (`/season/$season/track/$track/$view`) — one focused view (standings, records, race-story, graphs, laps, quali, practice, compare)
 
-2. **Overtakes Timeline**
-   - Compact stacked bar (or dot strip) per lap showing overtakes the player **made** vs overtakes **suffered**, plus a small list of "Notable battles" (opponent + lap).
-   - Data source: `overtakes.records`, filtered where the player is overtaking-driver or overtaken-driver.
+Nav breadcrumb (Home ↔ Track ↔ Option) is always present.
 
-3. **Lap Pace vs Field Average**
-   - Line chart of player's lap time minus the median lap time of all classified drivers that lap (delta-to-median).
-   - Highlights stints visually using `tyre-stint-history-v2` (background bands shaded by compound color).
-   - Data source: each driver's `lap-time-history.lap-history-data`.
+## Approach: React shell + iframed legacy views
 
-4. **Tyre Stint Strategy Strip**
-   - Horizontal stint bar for the player showing each stint's lap range and compound (color-coded: soft red, medium yellow, hard white, inters green, wet blue), with pit-stop markers.
-   - Data source: player's `tyre-stint-history-v2` / `tyre-set-history`.
+`public/app/script.js` is ~5,300 lines of vanilla JS that already renders every table, chart, and race-story panel correctly. Reimplementing all of it in React would take days and lose behavior.
 
-5. **Top Speed Leaderboard (mini widget)**
-   - Small ranked list of top 5 speed-trap entries with the player highlighted (and their delta to the leader).
-   - Data source: `speed-trap-records`.
+Instead: the new React routes are the **shell** (nav, layout, season picker, track grid, hero). Views that depend on the existing rendering pipeline (`renderStandingsTable`, `buildRaceStory`, quali table, lap table, charts, records) are surfaced by iframing `public/app/index.html?season=X&track=Y&view=race-story`. Inside `script.js`, a new bootstrap reads those query params and:
 
-## UI placement
-- Add a new collapsible tab **"Race Story"** at the top of the charts section containing: Position Changes, Overtakes Timeline, Tyre Stint Strip, Top Speed widget.
-- Add **"Pace vs Field"** chart into the existing **Lap Times** tab right under the lap-times chart.
-- All charts reuse the existing `createChart()` helper + `chart-theme.js` styling for the F1 dark look, and inherit mobile sticky-filter / snap-scroll behavior already in `styles.css`.
+- shows only the requested section (hides sidebar + other tabs)
+- auto-selects the given season + saved session before rendering
 
-## Technical details
-- All work stays in `public/app/` — no backend, no schema changes.
-- `script.js`:
-  - Add helpers `getPlayer(data)`, `getOvertakesForPlayer(data, playerName)`, `getPaceDeltaSeries(data, playerName)`, `getStints(player)`.
-  - Add `renderPositionChart()`, `renderOvertakesChart()`, `renderPaceDeltaChart()`, `renderStintStrip()`, `renderTopSpeedWidget()` and call them from `renderCharts()`.
-  - Reuse Chart.js (already loaded). Stint strip uses a horizontal stacked bar; speed widget is plain DOM.
-- `index.html`: add the new `<canvas>` elements and the "Race Story" collapsible tab block, plus a small container `<div id="topSpeedList">`.
-- `styles.css`: minor additions for the stint strip and top-speed list — reuse existing tokens (`--bg-2`, `--accent`, compound colors as new CSS vars: `--c-soft`, `--c-medium`, `--c-hard`, `--c-inter`, `--c-wet`).
-- `chart-theme.js`: extend palette with team-color map used by the position chart legend lines.
+This keeps the rewrite scoped to the shell while giving the user real URLs and per-view pages.
 
-## Out of scope
-- Non-player driver deep dives (data only used as context: median pace, podium comparison, overtake counterparties).
-- Any persistence/Cloud backend; sessions continue to load from the existing upload + saved-sessions flow.
+## Route structure
 
-## Verification
-- Load the provided Catalunya JSON via the existing upload UI, open Race Story tab, confirm: player position line goes from P? → final, overtakes bars match `overtakes.records` count for SAINZ (the player in this file), pace-delta chart renders, stint strip shows compound colors with pit markers, top-speed widget highlights the player row.
-- Mobile viewport (390px): tab snaps, charts scroll horizontally, stint strip is full-width.
+```
+src/routes/
+  __root.tsx                          # existing shell
+  index.tsx                           # main page (rewritten)
+  season.$season.track.$track.tsx     # layout (Outlet)
+  season.$season.track.$track.index.tsx        # track hero + option grid
+  season.$season.track.$track.$view.tsx        # one option, iframed
+```
+
+`$view` values: `standings | records | quali | teams | race-story | graphs | laps | practice | compare`
+
+Season selection persists via `localStorage['f1.season']`; `/` reads it on mount and pre-selects.
+
+## Main page (`/`)
+
+- Header + breadcrumb
+- Upload zone (drag/drop + button) — POSTs into existing Cloud tables via the same code path as today (extracted from `script.js` into a small helper module, or called through a hidden iframe on first load — TBD during build)
+- Season selector chips → writes `localStorage`
+- Season stats strip: GP wins, poles, sprint wins, sprint poles, podiums, fastest laps (aggregated from standings table already in DB)
+- Track card grid: one card per uploaded session for the selected season. Card shows track name, session type badge(s) (Race / Quali / Sprint / Practice), tags (W, P, FL, GS, DOTD), and the track map image if present. Cards link to `/season/$s/track/$t`.
+
+## Track page (`/season/$s/track/$t`)
+
+- Hero: track name, session-type badges, session summary (extracted from current graphs tab's `sessionInfo`), track map image, editable notes textarea (already in DB as `track_notes`).
+- Card grid of options: Standings, Records, Qualifying, Teams, Race Story, Graphs, Laps, Practice, Compare. Each links to the `$view` subroute. Cards that don't apply to the session type (e.g. Race Story on a Practice-only track) are dimmed/hidden.
+
+## Option page (`/season/$s/track/$t/$view`)
+
+Renders `<iframe src="/app/index.html?season=$s&track=$t&view=$view">`. Full height, no chrome (script.js hides sidebar + header + other tabs when `?view=` is present).
+
+## Track map images
+
+- New folder: `public/track-maps/`
+- File naming: EXACT track name from saved session (spaces preserved, lowercased) + `.png` — e.g. `public/track-maps/monaco.png`, `public/track-maps/são paulo.png`
+- Lookup helper: `trackMapUrl(name)` → `${import.meta.env.BASE_URL}track-maps/${slugify(name)}.png` with `onerror` fallback to a placeholder. Uses `BASE_URL` so GitHub Pages subpath works.
+- No DB storage — user drops PNGs into the folder and commits.
+- A `public/track-maps/README.md` explains the naming convention.
+
+## Fault overlays on charts
+
+In `renderChart` (Chart.js) add a shared `faultAnnotationsPlugin` that reads a per-lap fault map built during telemetry ingest:
+
+- Parse `ers_fault`, `aero_fault`, `engine_fault`, `gearbox_fault` (and any `*_fault` field) from the telemetry frames.
+- For each fault, record `{ lap, type, severity }`.
+- Plugin draws a vertical dashed line at the fault's lap on Lap Times, Pace Delta, Fuel, ERS, and Tire Wear charts, colored by type, with a tooltip on hover.
+- A small legend under each chart lists the fault icons.
+
+If a session has no faults, plugin is a no-op.
+
+## Technical notes
+
+- `script.js` gets a new top-of-file block:
+  ```js
+  const qp = new URLSearchParams(location.search);
+  const viewParam = qp.get('view');
+  const seasonParam = qp.get('season');
+  const trackParam = qp.get('track');
+  if (viewParam) document.body.classList.add('embed-mode');
+  ```
+  CSS `.embed-mode` hides sidebar, top nav, header, and all non-matching `.collapsible-section`s; auto-selects the matching saved session on load.
+- `docs/` (GitHub Pages build target) mirrors `public/app/` — both get the same script/CSS updates; the React shell only affects the Lovable-hosted app. For GitHub Pages, `docs/index.html` continues to be the full standalone app (no route change).
+- The React routes only live on the Lovable-hosted TanStack site. GitHub Pages users keep the current single-page experience (documented in `docs/README.md`).
+- Season persistence: `localStorage['f1.season']`, written on select, read on `/` mount.
+
+## Out of scope for this pass
+
+- Migrating the vanilla JS rendering into React components (would take another full pass).
+- Moving track maps into DB storage (user chose file-based).
+- Auth (localStorage only, user chose).
+
+## Build order
+
+1. Add `?season/?track/?view` handling + `.embed-mode` CSS to `public/app/script.js` and `public/app/styles.css` (and mirror to `docs/`).
+2. `public/track-maps/` folder + `trackMapUrl()` helper + README.
+3. Fault detection in ingest + `faultAnnotationsPlugin` in `chart-theme.js`.
+4. New React routes: `/`, track layout, track index, `$view` iframe wrapper.
+5. Shared components: `SeasonPicker`, `TrackCard`, `OptionCard`, `Breadcrumb`, `TrackHero`.
+6. Wire main-page upload to reuse existing upload logic (either call into iframed script or extract).
+7. Verify end-to-end with a sample session upload; check GitHub Pages build still works.

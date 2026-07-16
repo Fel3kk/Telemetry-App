@@ -56,6 +56,7 @@
           <div id="savedSessionsGrid" class="session-list"></div>
         </div>
       </aside>
+      <div class="sidebar-backdrop" id="sidebarBackdrop" aria-hidden="true"></div>
 
       <div class="main-pane">
       <div class="header compact-header">
@@ -71,14 +72,23 @@
         <button class="section-tab active" data-target="section-standings">
           🏆 Standings
         </button>
+        <button class="section-tab" data-target="section-records">
+          📚 Records
+        </button>
         <button class="section-tab" data-target="section-quali-results">
           ⏱️ Qualifying
         </button>
         <button class="section-tab" data-target="section-assignments">
           🏎️ Teams
         </button>
+        <button class="section-tab" data-target="section-notes">
+          📝 Notes
+        </button>
         <button class="section-tab" data-target="section-race-story">
           🎬 Race Story
+        </button>
+        <button class="section-tab" data-target="section-compare">
+          🆚 Compare
         </button>
         <button class="section-tab" data-target="section-graphs">
           📊 Graphs
@@ -91,6 +101,7 @@
         </button>
       </div>
 
+
       <div class="collapsible-content">
         <div class="collapsible-section" id="section-standings">
           <div class="section-header">
@@ -98,6 +109,15 @@
           </div>
           <div class="section-body">
             <div id="standings-container"></div>
+          </div>
+        </div>
+
+        <div class="collapsible-section" id="section-records">
+          <div class="section-header">
+            <h2 style="margin: 0; font-size: 1.05rem">📚 All-Time Records</h2>
+          </div>
+          <div class="section-body">
+            <div id="records-container"></div>
           </div>
         </div>
 
@@ -131,7 +151,18 @@
           </div>
         </div>
 
+        <div class="collapsible-section" id="section-notes">
+          <div class="section-header">
+            <h2 style="margin: 0; font-size: 1.05rem">📝 Track Notes</h2>
+            <span id="notesStatus" class="notes-status" style="margin-left:12px;font-size:.8rem;color:var(--secondary-text)"></span>
+          </div>
+          <div class="section-body">
+            <div id="notesGrid" class="notes-grid"></div>
+          </div>
+        </div>
+
         <div class="collapsible-section" id="section-race-story">
+
           <div class="section-header">
             <h2 style="margin: 0; font-size: 1.05rem">🎬 Race Story</h2>
           </div>
@@ -156,11 +187,60 @@
                   <div id="stintStrip" class="stint-strip"></div>
                 </div>
                 <div class="chart-container full-width auto-height">
+                  <div class="chart-title">🔧 Damage Progression</div>
+                  <div id="damageSection" class="damage-section"></div>
+                </div>
+                <div class="chart-container full-width auto-height">
                   <div class="chart-title">🚀 Speed Trap Leaderboard</div>
                   <div id="topSpeedList" class="speed-trap-list"></div>
                 </div>
+                <div class="chart-container full-width auto-height">
+                  <div class="chart-title">🏁 Final Classification</div>
+                  <div id="finalClassification" class="final-classification"></div>
+                </div>
               </div>
             </div>
+
+          </div>
+        </div>
+
+        <div class="collapsible-section" id="section-compare">
+          <div class="section-header">
+            <h2 style="margin: 0; font-size: 1.05rem">🆚 Compare Lap Times</h2>
+          </div>
+          <div class="section-body">
+            <div id="compareEmpty" class="race-story-empty" style="display:none">
+              Compare is available for freshly uploaded race telemetry with all-driver lap history.
+            </div>
+            <div id="compareContent" style="display:none">
+              <div class="compare-controls" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
+                <label style="font-size:.85rem;color:var(--secondary-text)">Compare against</label>
+                <select id="compareDriverSelect" class="download-btn" style="padding:6px 10px"></select>
+                <span id="compareSummary" style="font-size:.85rem;color:var(--secondary-text)"></span>
+              </div>
+              <div class="chart-container full-width">
+                <div class="chart-title">Lap Time Delta (You − Opponent, seconds)</div>
+                <canvas id="compareDeltaChart"></canvas>
+              </div>
+              <div class="chart-container full-width">
+                <div class="chart-title">Lap Times Overlay</div>
+                <canvas id="compareOverlayChart"></canvas>
+              </div>
+              <div class="table-container" style="margin-top:16px">
+                <table id="compareTable">
+                  <thead>
+                    <tr>
+                      <th>Lap</th>
+                      <th id="compareThYou">You</th>
+                      <th id="compareThOpp">Opponent</th>
+                      <th>Δ</th>
+                    </tr>
+                  </thead>
+                  <tbody id="compareTableBody"></tbody>
+                </table>
+              </div>
+            </div>
+
           </div>
         </div>
 
@@ -175,6 +255,21 @@
 
               <div class="charts-section">
                 <h2 class="section-title">📊 Performance Metrics</h2>
+                <div class="overlay-guide" aria-label="Chart overlay legend">
+                  <div class="overlay-guide-title">Overlay guide</div>
+                  <div class="overlay-guide-items">
+                    <span class="og-item"><span class="og-swatch" style="background:rgba(173,216,230,0.35);border-color:rgba(120,180,230,0.7)"></span>Safety Car</span>
+                    <span class="og-item"><span class="og-swatch" style="background:rgba(255,215,0,0.28);border-color:rgba(255,200,0,0.7)"></span>VSC</span>
+                    <span class="og-item"><span class="og-swatch" style="background:rgba(255,60,60,0.32);border-color:rgba(255,80,80,0.8)"></span>Red Flag</span>
+                    <span class="og-item"><span class="og-line" style="background:#fff"></span>Pit stop</span>
+                    <span class="og-sep"></span>
+                    <span class="og-item"><span class="og-line" style="background:#ffb020"></span>ERS fault</span>
+                    <span class="og-item"><span class="og-line" style="background:#5ad1ff"></span>DRS fault</span>
+                    <span class="og-item"><span class="og-line" style="background:#ff5252"></span>Engine</span>
+                    <span class="og-item"><span class="og-line" style="background:#c084fc"></span>Gearbox</span>
+                    <span class="og-item"><span class="og-line" style="background:#9aff9a"></span>Aero</span>
+                  </div>
+                </div>
                 <div class="charts-grid">
                   <div class="chart-container">
                     <div class="chart-title">Lap Times</div>
