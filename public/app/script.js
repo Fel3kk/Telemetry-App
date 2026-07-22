@@ -274,6 +274,7 @@ const SUPABASE_ANON_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imtiamp0aWFqdWd4dmhvYm9xeHdiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwODE5NzUsImV4cCI6MjA5MTY1Nzk3NX0.VI2B5EcQXx_aaXyOB-eGXentTbMRG6obxu6IjUv7juI";
 let supabaseClient = null;
 let supabaseWarningShown = false;
+const SESSION_USER_ID_STORAGE_KEY = "f1.savedSessions.userId";
 
 function getSupabaseClient(options = {}) {
   if (supabaseClient) return supabaseClient;
@@ -292,6 +293,54 @@ function loadDatabaseBackedData() {
   return loadSavedSessions().then(async () => {
     await autoLoadDriverTeams();
   });
+}
+
+function getSessionUserIdOverride() {
+  try {
+    const params = new URLSearchParams(location.search);
+    const fromQuery = [
+      params.get("user_uuid"),
+      params.get("userUuid"),
+      params.get("uuid"),
+      params.get("uid"),
+    ].find((value) => !!value && String(value).trim());
+    if (fromQuery) return String(fromQuery).trim();
+  } catch {}
+
+  try {
+    const fromStorage = localStorage.getItem(SESSION_USER_ID_STORAGE_KEY);
+    if (fromStorage) return String(fromStorage).trim();
+  } catch {}
+
+  return null;
+}
+
+function persistSessionUserIdOverride(value) {
+  if (!value) return;
+  try {
+    localStorage.setItem(SESSION_USER_ID_STORAGE_KEY, String(value).trim());
+  } catch {}
+}
+
+async function resolveSessionUserId(db) {
+  const override = getSessionUserIdOverride();
+  if (override) {
+    persistSessionUserIdOverride(override);
+    return override;
+  }
+
+  let uid = null;
+  try {
+    const { data } = await db.auth.getUser();
+    uid = data?.user?.id || null;
+  } catch {}
+
+  if (uid) {
+    persistSessionUserIdOverride(uid);
+    return uid;
+  }
+
+  return null;
 }
 
 // F1 2026 Calendar Order for sorting
@@ -1174,16 +1223,14 @@ async function loadSavedSessions() {
     const db = getSupabaseClient();
     if (!db) return;
 
-    // Get current user to filter sessions by user_id
-    let uid = null;
-    try {
-      const { data } = await db.auth.getUser();
-      uid = data?.user?.id || null;
-    } catch (e) {
-      /* ignore */
+    const uid = await resolveSessionUserId(db);
+    if (!uid) {
+      console.warn("No session user identity available; skipping saved sessions load.");
+      allSessions = [];
+      renderSeasonSelector();
+      renderSavedSessions(allSessions);
+      return;
     }
-
-    if (!uid) return; // Only load sessions if user is authenticated
 
     const { data: sessions, error } = await db
       .from("telemetry_sessions")
@@ -1194,39 +1241,38 @@ async function loadSavedSessions() {
 
     if (error) throw error;
 
-    if (sessions && sessions.length) {
-      // Map Supabase column names back to our app's object structure if they differ
-      const mappedSessions = sessions.map((s) => ({
-        ...s,
-        starting_position: s.starting_pos,
-        finishing_position: s.finishing_pos,
-        created_at: s.session_date,
-        category: s.category || "Race",
-        session_type: s.session_type,
-        season: s.season || 1,
-        starting_fuel: s.starting_fuel,
-        stints: s.stints || [],
-        results: s.results || [],
-        race_story: s.race_story || null,
-      }));
+    const mappedSessions = (sessions || []).map((s) => ({
+      ...s,
+      starting_position: s.starting_pos,
+      finishing_position: s.finishing_pos,
+      created_at: s.session_date,
+      category: s.category || "Race",
+      session_type: s.session_type,
+      season: s.season || 1,
+      starting_fuel: s.starting_fuel,
+      stints: s.stints || [],
+      results: s.results || [],
+      race_story: s.race_story || null,
+    }));
 
-      // Custom sorting: Season -> F1 2026 Calendar -> Date
-      mappedSessions.sort(sortSessionsByCalendar);
+    // Custom sorting: Season -> F1 2026 Calendar -> Date
+    mappedSessions.sort(sortSessionsByCalendar);
 
-      allSessions = mappedSessions;
-      renderSeasonSelector();
+    allSessions = mappedSessions;
+    renderSeasonSelector();
+    renderSavedSessions(allSessions);
 
-      renderSavedSessions(allSessions);
-
-      if (!currentData) {
-        // Prioritize showing a Race or Sprint as the default session
-        currentData =
-          mappedSessions.find(
-            (s) => s.category !== "Qualifying" && s.category !== "Sprint Shootout",
-          ) || mappedSessions[0];
-      }
-      renderContent();
+    if (!currentData && mappedSessions.length) {
+      // Prioritize showing a Race or Sprint as the default session
+      currentData =
+        mappedSessions.find(
+          (s) => s.category !== "Qualifying" && s.category !== "Sprint Shootout",
+        ) || mappedSessions[0];
     }
+    if (!currentData) {
+      currentData = null;
+    }
+    renderContent();
   } catch (err) {
     console.error("Failed to fetch sessions from Supabase", err);
   }
@@ -1239,14 +1285,8 @@ async function saveSessions(sessions) {
     throw new Error("Database connection is still loading. Please try again in a moment.");
   }
 
-  // Attach the signed-in user so RLS accepts the insert.
-  let uid = null;
-  try {
-    const { data } = await db.auth.getUser();
-    uid = data?.user?.id || null;
-  } catch (e) {
-    /* ignore */
-  }
+  // Attach the signed-in user (or a provided UUID override) so RLS accepts the insert.
+  const uid = await resolveSessionUserId(db);
   if (!uid) {
     throw new Error("You must be signed in to save sessions.");
   }
@@ -1452,6 +1492,18 @@ function renderSavedSessions(sessions) {
     .filter((s) => s.category !== "Qualifying" && s.category !== "Sprint Shootout")
     .slice()
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+  if (!displaySessions.length) {
+    grid.innerHTML = `
+      <div class="empty-hint" style="padding:18px;color:#888;line-height:1.5;">
+        No saved sessions found for this user yet.<br />
+        Try loading the app with <strong>?user_uuid=${getSessionUserIdOverride() || "YOUR_UUID"}</strong> or save a session again after signing in.
+      </div>
+    `;
+    renderStandingsTable();
+    container.style.display = "block";
+    return;
+  }
 
   const catLabel = (c) => {
     if (!c) return "";
