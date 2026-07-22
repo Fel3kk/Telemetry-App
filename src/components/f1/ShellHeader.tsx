@@ -1,5 +1,6 @@
-import { Link } from "@tanstack/react-router";
-import type { ReactNode } from "react";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { useEffect, useState, type ReactNode } from "react";
+import { supabase, displayNameFromSession } from "@/lib/supabase";
 
 export function titleCase(name: string) {
   return (name || "")
@@ -38,9 +39,36 @@ export function ShellHeader({ crumbs }: { crumbs: { label: string; to?: any; par
           >
             Home
           </Link>
+          <UserMenu />
         </div>
       </div>
     </header>
+  );
+}
+
+function UserMenu() {
+  const navigate = useNavigate();
+  const [name, setName] = useState("");
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setName(displayNameFromSession(data.session)));
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setName(displayNameFromSession(s)));
+    return () => sub.subscription.unsubscribe();
+  }, []);
+  async function signOut() {
+    await supabase.auth.signOut();
+    navigate({ to: "/auth" });
+  }
+  if (!name) return null;
+  return (
+    <div className="flex items-center gap-2">
+      <span className="hidden text-xs font-semibold uppercase tracking-widest text-white/60 sm:inline">{name}</span>
+      <button
+        onClick={signOut}
+        className="rounded-md border border-white/20 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/10"
+      >
+        Sign out
+      </button>
+    </div>
   );
 }
 

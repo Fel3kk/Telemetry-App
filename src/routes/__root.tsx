@@ -7,7 +7,7 @@ import {
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import "../styles.css";
 import { reportLovableError } from "../lib/lovable-error-reporting";
@@ -74,7 +74,6 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   head: () => ({
-    links: [{ rel: "icon", type: "image/x-icon", href: "/favicon.ico" }],
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
@@ -113,11 +112,41 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
-
   return (
     <QueryClientProvider client={queryClient}>
-      {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-      <Outlet />
+      <AuthGate>
+        <Outlet />
+      </AuthGate>
     </QueryClientProvider>
   );
+}
+
+function AuthGate({ children }: { children: ReactNode }) {
+  const router = useRouter();
+  const [ready, setReady] = useState(false);
+  const [authed, setAuthed] = useState(false);
+  useEffect(() => {
+    let active = true;
+    import("@/lib/supabase").then(({ supabase }) => {
+      supabase.auth.getSession().then(({ data }) => {
+        if (!active) return;
+        setAuthed(!!data.session);
+        setReady(true);
+      });
+      const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => {
+        setAuthed(!!s);
+        router.invalidate();
+      });
+      return () => sub.subscription.unsubscribe();
+    });
+    return () => { active = false; };
+  }, [router]);
+
+  if (!ready) return <div className="flex min-h-screen items-center justify-center bg-[#0a0a0f] text-white/60 text-sm">Loading…</div>;
+  const path = typeof window !== "undefined" ? window.location.pathname : "";
+  if (!authed && path !== "/auth") {
+    if (typeof window !== "undefined") window.location.replace("/auth");
+    return null;
+  }
+  return <>{children}</>;
 }

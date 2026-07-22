@@ -53,11 +53,11 @@ function _embedSelectSession() {
   const isPracticeLikeSession = (s) => {
     const c = (s.category || "").toLowerCase();
     const st = (s.session_type || "").toLowerCase();
+    // Only Practice sessions and the (race) Sprint. Exclude Qualifying and Sprint Shootout/Qualifying.
     return (
       c === "practice" || c.startsWith("practice") ||
-      c === "sprint" || c === "sprint qualifying" || c === "sprint shootout" ||
-      /^p[123]$/.test(st) || st.includes("practice") || st.includes("fp") ||
-      st.includes("sprint")
+      c === "sprint" ||
+      /^p[123]$/.test(st) || st.includes("practice") || st.includes("fp")
     );
   };
   const match = allSessions.find((s) => {
@@ -90,9 +90,8 @@ function _embedRenderPracticePicker() {
     const st = (s.session_type || "").toLowerCase();
     return (
       c === "practice" || c.startsWith("practice") ||
-      c === "sprint" || c === "sprint qualifying" || c === "sprint shootout" ||
-      /^p[123]$/.test(st) || st.includes("practice") || st.includes("fp") ||
-      st.includes("sprint")
+      c === "sprint" ||
+      /^p[123]$/.test(st) || st.includes("practice") || st.includes("fp")
     );
   };
   const orderKey = (s) => {
@@ -1227,6 +1226,16 @@ async function saveSessions(sessions) {
     throw new Error("Database connection is still loading. Please try again in a moment.");
   }
 
+  // Attach the signed-in user so RLS accepts the insert.
+  let uid = null;
+  try {
+    const { data } = await db.auth.getUser();
+    uid = data?.user?.id || null;
+  } catch (e) { /* ignore */ }
+  if (!uid) {
+    throw new Error("You must be signed in to save sessions.");
+  }
+
   const dataToInsert = sessions.map((session) => ({
     driver_name: session.driver_name,
     track_name: session.track_name,
@@ -1241,17 +1250,22 @@ async function saveSessions(sessions) {
     stints: session.stints,
     results: session.results,
     race_story: session.race_story || null,
+    user_id: uid,
   }));
 
-  // Overwrite: delete any existing row matching driver+track+season+category, then insert
+  // Overwrite: delete any existing row matching driver+track+season+category (+ session_type for Practice/Quali) then insert
   for (const row of dataToInsert) {
     try {
-      await db.from("telemetry_sessions").delete().match({
+      const match = {
         driver_name: row.driver_name,
         track_name: row.track_name,
         season: row.season,
         category: row.category,
-      });
+      };
+      // For sessions with distinct session_type (P1/P2/P3, Q1/Q2/Q3), scope
+      // the overwrite so uploading FP2 doesn't wipe FP1 for the same weekend.
+      if (row.session_type) match.session_type = row.session_type;
+      await db.from("telemetry_sessions").delete().match(match);
     } catch (err) {
       console.warn("Pre-delete for overwrite failed (continuing):", err);
     }
@@ -4302,10 +4316,14 @@ async function saveDriverTeamsToDB(obj) {
     throw new Error("Database connection is still loading. Please try again in a moment.");
   }
 
+  const { data: userData } = await db.auth.getUser();
+  const uid = userData?.user?.id;
+  if (!uid) throw new Error("You must be signed in to save.");
   const rows = Object.entries(obj).map(([driver, team]) => ({
     season: currentSeason,
     driver_name: driver,
     team: team,
+    user_id: uid,
   }));
 
   // Upsert rows using season + driver_name as unique constraint
@@ -4409,9 +4427,12 @@ async function saveTrackNote(trackKey, notes) {
   }
   setNotesStatus("Saving…");
   try {
+    const { data: userData } = await client.auth.getUser();
+    const uid = userData?.user?.id;
+    if (!uid) { setNotesStatus("Sign in to save notes", true); return; }
     const { error } = await client
       .from("track_notes")
-      .upsert({ track_key: trackKey, notes, updated_at: new Date().toISOString() }, { onConflict: "track_key" });
+      .upsert({ track_key: trackKey, notes, updated_at: new Date().toISOString(), user_id: uid }, { onConflict: "track_key" });
     if (error) {
       console.error("track_notes save failed", error);
       setNotesStatus("Save failed: " + (error.message || "unknown"), true);
