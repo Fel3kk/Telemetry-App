@@ -61,22 +61,32 @@ export function cacheIsFresh(): boolean {
   } catch { return false; }
 }
 
+async function currentAccessToken(): Promise<string | null> {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem("sb-kbjjtiajugxvhoboqxwb-auth-token");
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed?.access_token ?? parsed?.currentSession?.access_token ?? null;
+  } catch { return null; }
+}
+
 export async function fetchSessions(season?: number): Promise<Session[]> {
   const url = new URL(`${SUPABASE_URL}/rest/v1/telemetry_sessions`);
-  // Trim heavy columns from list queries; details fetched per-session inside the app iframe.
   url.searchParams.set("select", "id,season,driver_name,track_name,category,session_type,finishing_pos,starting_pos,created_at,session_date,race_story");
   url.searchParams.set("order", "session_date.desc");
   if (season != null) url.searchParams.set("season", `eq.${season}`);
+  const token = await currentAccessToken();
   const res = await fetch(url.toString(), {
     headers: {
       apikey: SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+      Authorization: `Bearer ${token || SUPABASE_ANON_KEY}`,
     },
   });
   if (!res.ok) throw new Error(`Failed to load telemetry sessions (${res.status})`);
   const rows = await res.json();
   const mapped = rows.map(mapTelemetrySession);
-  if (season == null) saveCachedSessions(mapped);
+  if (season == null && token) saveCachedSessions(mapped);
   return mapped;
 }
 

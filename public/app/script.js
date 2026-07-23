@@ -10,16 +10,12 @@ const charts = {};
 // to render a single focused view (standings, race-story, etc).
 // ---------------------------------------------------------------
 const EMBED_QP = (() => {
-  try {
-    return new URLSearchParams(location.search);
-  } catch {
-    return new URLSearchParams();
-  }
+  try { return new URLSearchParams(location.search); } catch { return new URLSearchParams(); }
 })();
-const EMBED_VIEW = EMBED_QP.get("view"); // e.g. "race-story"
-const EMBED_SEASON = EMBED_QP.get("season"); // "1" | "2" ...
-const EMBED_TRACK = EMBED_QP.get("track"); // track_name
-const EMBED_CAT = EMBED_QP.get("cat"); // optional category filter
+const EMBED_VIEW   = EMBED_QP.get("view");    // e.g. "race-story"
+const EMBED_SEASON = EMBED_QP.get("season");  // "1" | "2" ...
+const EMBED_TRACK  = EMBED_QP.get("track");   // track_name
+const EMBED_CAT    = EMBED_QP.get("cat");     // optional category filter
 if (EMBED_VIEW) {
   const cls = EMBED_VIEW === "upload" ? "embed-upload" : "embed-mode";
   document.documentElement.classList.add(cls);
@@ -41,20 +37,12 @@ function _embedApplyView() {
 function _embedNotifyReady(status) {
   try {
     if (window.parent && window.parent !== window) {
-      window.parent.postMessage(
-        { type: "f1-embed-ready", status: status || "ok", view: EMBED_VIEW },
-        "*",
-      );
+      window.parent.postMessage({ type: "f1-embed-ready", status: status || "ok", view: EMBED_VIEW }, "*");
     }
-  } catch (e) {
-    /* ignore */
-  }
+  } catch (e) { /* ignore */ }
 }
 function _embedSelectSession() {
-  if (!EMBED_TRACK) {
-    _embedNotifyReady("no-track");
-    return;
-  }
+  if (!EMBED_TRACK) { _embedNotifyReady("no-track"); return; }
   const wanted = String(EMBED_TRACK).toLowerCase();
   const wantedCat = EMBED_CAT ? String(EMBED_CAT).toLowerCase() : null;
   const seasonN = Number(EMBED_SEASON || currentSeason);
@@ -67,12 +55,9 @@ function _embedSelectSession() {
     const st = (s.session_type || "").toLowerCase();
     // Only Practice sessions and the (race) Sprint. Exclude Qualifying and Sprint Shootout/Qualifying.
     return (
-      c === "practice" ||
-      c.startsWith("practice") ||
+      c === "practice" || c.startsWith("practice") ||
       c === "sprint" ||
-      /^p[123]$/.test(st) ||
-      st.includes("practice") ||
-      st.includes("fp")
+      /^p[123]$/.test(st) || st.includes("practice") || st.includes("fp")
     );
   };
   const match = allSessions.find((s) => {
@@ -83,27 +68,11 @@ function _embedSelectSession() {
   });
   if (match) {
     currentData = match;
-    try {
-      renderContent();
-    } catch (e) {
-      console.warn(e);
-    }
-    if (isPracticeView) {
-      try {
-        _embedRenderPracticePicker();
-      } catch (e) {
-        console.warn(e);
-      }
-    }
+    try { renderContent(); } catch (e) { console.warn(e); }
+    if (isPracticeView) { try { _embedRenderPracticePicker(); } catch (e) { console.warn(e); } }
     _embedNotifyReady("ok");
   } else {
-    if (isPracticeView) {
-      try {
-        _embedRenderPracticePicker();
-      } catch (e) {
-        console.warn(e);
-      }
-    }
+    if (isPracticeView) { try { _embedRenderPracticePicker(); } catch (e) { console.warn(e); } }
     _embedNotifyReady("no-match");
   }
 }
@@ -119,13 +88,13 @@ function _embedRenderPracticePicker() {
   const isPracticeLike = (s) => {
     const c = (s.category || "").toLowerCase();
     const st = (s.session_type || "").toLowerCase();
+    // Only Practice, Sprint (race), and Race. Explicitly exclude Sprint Quali/Shootout.
+    if (c === "sprint qualifying" || c === "sprint shootout") return false;
     return (
-      c === "practice" ||
-      c.startsWith("practice") ||
+      c === "practice" || c.startsWith("practice") ||
       c === "sprint" ||
-      /^p[123]$/.test(st) ||
-      st.includes("practice") ||
-      st.includes("fp")
+      c === "race" ||
+      /^p[123]$/.test(st) || st.includes("practice") || st.includes("fp")
     );
   };
   const orderKey = (s) => {
@@ -134,16 +103,15 @@ function _embedRenderPracticePicker() {
     if (/^p1$/.test(st) || st.includes("practice 1") || st.includes("fp1")) return "1";
     if (/^p2$/.test(st) || st.includes("practice 2") || st.includes("fp2")) return "2";
     if (/^p3$/.test(st) || st.includes("practice 3") || st.includes("fp3")) return "3";
-    if (c === "sprint qualifying" || c === "sprint shootout") return "4";
     if (c === "sprint") return "5";
+    if (c === "race") return "6";
     return "9" + (s.session_type || "");
   };
   const list = allSessions
-    .filter(
-      (s) =>
-        Number(s.season) === seasonN &&
-        (s.track_name || "").toLowerCase() === wanted &&
-        isPracticeLike(s),
+    .filter((s) =>
+      Number(s.season) === seasonN &&
+      (s.track_name || "").toLowerCase() === wanted &&
+      isPracticeLike(s),
     )
     .sort((a, b) => orderKey(a).localeCompare(orderKey(b)));
 
@@ -151,11 +119,9 @@ function _embedRenderPracticePicker() {
   if (!picker) {
     picker = document.createElement("div");
     picker.id = "embedPracticePicker";
-    picker.style.cssText =
-      "display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 18px;padding:12px;border:1px solid var(--border-color);border-radius:10px;background:rgba(255,255,255,0.04);";
+    picker.style.cssText = "display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 18px;padding:12px;border:1px solid var(--border-color);border-radius:10px;background:rgba(255,255,255,0.04);";
     const body = section.querySelector(".section-body");
-    if (body) body.prepend(picker);
-    else section.prepend(picker);
+    if (body) body.prepend(picker); else section.prepend(picker);
   }
   if (list.length === 0) {
     const totalPract = allSessions.filter(isPracticeLike).length;
@@ -166,40 +132,36 @@ function _embedRenderPracticePicker() {
   const labelFor = (s) => {
     const st = s.session_type || "";
     const c = (s.category || "").toLowerCase();
-    if (st) return st;
     if (c === "sprint") return "Sprint";
-    if (c === "sprint qualifying" || c === "sprint shootout") return "Sprint Quali";
+    if (c === "race") return "Race";
+    if (st) return st;
     return "Practice";
   };
   picker.innerHTML =
     '<div style="width:100%;font-size:0.72rem;letter-spacing:0.14em;text-transform:uppercase;color:var(--secondary-text);margin-bottom:4px">Practice & Sprint Sessions</div>' +
-    list
-      .map((s) => {
-        const id = s.id || s.created_at;
-        const label = labelFor(s);
-        const isActive = String(id) === String(currentId);
-        const isSprint = (s.category || "").toLowerCase().startsWith("sprint");
-        const accent = isSprint ? "#f59e0b" : "#ef4444";
-        return `<button type="button" data-sid="${id}" style="padding:8px 14px;border-radius:8px;border:1px solid ${isActive ? accent : "rgba(255,255,255,0.15)"};background:${isActive ? "rgba(239,68,68,0.15)" : "rgba(255,255,255,0.03)"};color:#fff;font-weight:700;font-size:0.85rem;cursor:pointer">${label}</button>`;
-      })
-      .join("");
+    list.map((s) => {
+      const id = s.id || s.created_at;
+      const label = labelFor(s);
+      const isActive = String(id) === String(currentId);
+      const isSprint = (s.category || "").toLowerCase().startsWith("sprint");
+      const accent = isSprint ? "#f59e0b" : "#ef4444";
+      return `<button type="button" data-sid="${id}" style="padding:8px 14px;border-radius:8px;border:1px solid ${isActive ? accent : "rgba(255,255,255,0.15)"};background:${isActive ? "rgba(239,68,68,0.15)" : "rgba(255,255,255,0.03)"};color:#fff;font-weight:700;font-size:0.85rem;cursor:pointer">${label}</button>`;
+    }).join("");
   picker.querySelectorAll("button[data-sid]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const sid = btn.getAttribute("data-sid");
       const next = list.find((s) => String(s.id || s.created_at) === String(sid));
       if (next) {
         currentData = next;
-        try {
-          renderContent();
-        } catch (e) {
-          console.warn(e);
-        }
+        try { renderContent(); } catch (e) { console.warn(e); }
         _embedRenderPracticePicker();
       }
     });
   });
 }
 if (EMBED_SEASON) currentSeason = Number(EMBED_SEASON) || 1;
+
+
 
 // Global state for Practice Fuel Calculator
 let selectedPracticeLaps = new Set();
@@ -274,7 +236,6 @@ const SUPABASE_ANON_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imtiamp0aWFqdWd4dmhvYm9xeHdiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwODE5NzUsImV4cCI6MjA5MTY1Nzk3NX0.VI2B5EcQXx_aaXyOB-eGXentTbMRG6obxu6IjUv7juI";
 let supabaseClient = null;
 let supabaseWarningShown = false;
-const SESSION_USER_ID_STORAGE_KEY = "f1.savedSessions.userId";
 
 function getSupabaseClient(options = {}) {
   if (supabaseClient) return supabaseClient;
@@ -293,54 +254,6 @@ function loadDatabaseBackedData() {
   return loadSavedSessions().then(async () => {
     await autoLoadDriverTeams();
   });
-}
-
-function getSessionUserIdOverride() {
-  try {
-    const params = new URLSearchParams(location.search);
-    const fromQuery = [
-      params.get("user_uuid"),
-      params.get("userUuid"),
-      params.get("uuid"),
-      params.get("uid"),
-    ].find((value) => !!value && String(value).trim());
-    if (fromQuery) return String(fromQuery).trim();
-  } catch {}
-
-  try {
-    const fromStorage = localStorage.getItem(SESSION_USER_ID_STORAGE_KEY);
-    if (fromStorage) return String(fromStorage).trim();
-  } catch {}
-
-  return null;
-}
-
-function persistSessionUserIdOverride(value) {
-  if (!value) return;
-  try {
-    localStorage.setItem(SESSION_USER_ID_STORAGE_KEY, String(value).trim());
-  } catch {}
-}
-
-async function resolveSessionUserId(db) {
-  const override = getSessionUserIdOverride();
-  if (override) {
-    persistSessionUserIdOverride(override);
-    return override;
-  }
-
-  let uid = null;
-  try {
-    const { data } = await db.auth.getUser();
-    uid = data?.user?.id || null;
-  } catch {}
-
-  if (uid) {
-    persistSessionUserIdOverride(uid);
-    return uid;
-  }
-
-  return null;
 }
 
 // F1 2026 Calendar Order for sorting
@@ -401,6 +314,7 @@ const NOTES_TRACKS = [
   { key: "portimao", label: "Portimão", flag: "🇵🇹" },
 ];
 
+
 // Suggested team list for driver assignment (datalist/autofill)
 const DRIVER_TEAM_SUGGESTIONS = [
   "My Team",
@@ -417,7 +331,9 @@ const DRIVER_TEAM_SUGGESTIONS = [
   "Aston Martin",
 ];
 
-document.getElementById("fileInput").addEventListener("change", handleFileUpload);
+document
+  .getElementById("fileInput")
+  .addEventListener("change", handleFileUpload);
 
 window.addEventListener("DOMContentLoaded", () => {
   // Initialize Theme
@@ -442,16 +358,10 @@ window.addEventListener("DOMContentLoaded", () => {
   // This runs after the UI is wired so slow/failed DB startup cannot freeze clicks.
   loadDatabaseBackedData();
   loadTrackNotes();
-  window.addEventListener(
-    "supabase-ready",
-    () => {
-      loadDatabaseBackedData();
-      loadTrackNotes();
-    },
-    {
-      once: true,
-    },
-  );
+  window.addEventListener("supabase-ready", () => { loadDatabaseBackedData(); loadTrackNotes(); }, {
+
+    once: true,
+  });
 
   const qualiGapToggleBtn = document.getElementById("qualiGapToggleBtn");
   if (qualiGapToggleBtn) {
@@ -467,7 +377,8 @@ window.addEventListener("DOMContentLoaded", () => {
   if (dlBtn) dlBtn.addEventListener("click", handleDownloadTemplate);
 
   const dlQualiBtn = document.getElementById("downloadQualiTemplateBtn");
-  if (dlQualiBtn) dlQualiBtn.addEventListener("click", handleDownloadQualiTemplate);
+  if (dlQualiBtn)
+    dlQualiBtn.addEventListener("click", handleDownloadQualiTemplate);
 
   const _st = document.getElementById("searchTrack");
   if (_st) _st.addEventListener("input", () => renderSavedSessions(allSessions));
@@ -650,9 +561,7 @@ function sortSessionsByCalendar(a, b) {
   const categoryOrder = { Sprint: 0, Race: 1 };
   const categoryDiff = (categoryOrder[a.category] ?? 2) - (categoryOrder[b.category] ?? 2);
   if (categoryDiff !== 0) return categoryDiff;
-  return (
-    new Date(a.created_at || a.session_date || 0) - new Date(b.created_at || b.session_date || 0)
-  );
+  return new Date(a.created_at || a.session_date || 0) - new Date(b.created_at || b.session_date || 0);
 }
 
 let resizeTimeout;
@@ -724,7 +633,11 @@ async function handleFileUpload(e) {
         if (session.track_name === "Unknown" || !session.track_name) {
           const parts = filename.replace(".json", "").split(/[_-]/);
           const trackGuess = parts.find(
-            (p) => p !== "race" && p !== "sprint" && p !== "quali" && p !== "qualifying",
+            (p) =>
+              p !== "race" &&
+              p !== "sprint" &&
+              p !== "quali" &&
+              p !== "qualifying",
           );
           if (trackGuess) session.track_name = trackGuess;
         }
@@ -742,8 +655,9 @@ async function handleFileUpload(e) {
     if (sessionsToPersist.length > 0) {
       await saveSessions(sessionsToPersist);
       currentData =
-        allSessions.find((s) => s.session_date === lastProcessedSession.created_at) ||
-        lastProcessedSession;
+        allSessions.find(
+          (s) => s.session_date === lastProcessedSession.created_at,
+        ) || lastProcessedSession;
     } else {
       currentData = lastProcessedSession;
     }
@@ -791,7 +705,8 @@ function buildRaceStory(rootData, playerName, playerTeam, classification_data) {
     .filter((e) => e["final-classification"]?.position)
     .sort(
       (a, b) =>
-        (a["final-classification"]?.position || 99) - (b["final-classification"]?.position || 99),
+        (a["final-classification"]?.position || 99) -
+        (b["final-classification"]?.position || 99),
     )
     .slice(0, 3);
   sortedClass.forEach((entry) => {
@@ -819,9 +734,12 @@ function buildRaceStory(rootData, playerName, playerTeam, classification_data) {
   // Pace delta vs field median (in ms)
   const driverLapTimes = (classification_data || []).map((e) => ({
     name: String(e["driver-name"] || "").toUpperCase(),
-    laps: (e["lap-time-history"]?.["lap-history-data"] || []).map((l) => l["lap-time-in-ms"] || 0),
+    laps: (e["lap-time-history"]?.["lap-history-data"] || []).map(
+      (l) => l["lap-time-in-ms"] || 0,
+    ),
   }));
-  const playerLaps = driverLapTimes.find((d) => d.name === playerName)?.laps || [];
+  const playerLaps =
+    driverLapTimes.find((d) => d.name === playerName)?.laps || [];
   const pace_delta = [];
   for (let i = 0; i < playerLaps.length; i++) {
     const playerMs = playerLaps[i];
@@ -832,7 +750,8 @@ function buildRaceStory(rootData, playerName, playerTeam, classification_data) {
     if (others.length < 3) continue;
     const sorted = [...others].sort((a, b) => a - b);
     const mid = Math.floor(sorted.length / 2);
-    const median = sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+    const median =
+      sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
     pace_delta.push({
       lap: i + 1,
       delta_ms: playerMs - median,
@@ -842,7 +761,10 @@ function buildRaceStory(rootData, playerName, playerTeam, classification_data) {
   }
 
   const speed_traps = [...speedTraps]
-    .sort((a, b) => (b["speed-trap-record-kmph"] || 0) - (a["speed-trap-record-kmph"] || 0))
+    .sort(
+      (a, b) =>
+        (b["speed-trap-record-kmph"] || 0) - (a["speed-trap-record-kmph"] || 0),
+    )
     .map((s) => ({
       name: s.name,
       team: s.team,
@@ -873,7 +795,7 @@ function buildRaceStory(rootData, playerName, playerTeam, classification_data) {
       if (s1 <= 0 || s2 <= 0 || s3 <= 0) return;
       if (Math.abs(s1 + s2 + s3 - ms) > 500) return;
       const flags = l["lap-valid-bit-flags"];
-      const valid = flags === undefined || flags & 1;
+      const valid = flags === undefined || (flags & 1);
       if (!valid) return;
       // Reject laps clearly faster than driver's own reported best
       if (driverBestMs > 0 && ms < driverBestMs - 50) return;
@@ -893,13 +815,7 @@ function buildRaceStory(rootData, playerName, playerTeam, classification_data) {
         const totalSec = c.ms / 1000;
         const m = Math.floor(totalSec / 60);
         const s = (totalSec - m * 60).toFixed(3).padStart(6, "0");
-        fastest_lap = {
-          name: c.name,
-          team: c.team,
-          lap: c.lap,
-          time_ms: c.ms,
-          lap_time_str: `${m}:${s}`,
-        };
+        fastest_lap = { name: c.name, team: c.team, lap: c.lap, time_ms: c.ms, lap_time_str: `${m}:${s}` };
       }
     });
   }
@@ -917,24 +833,22 @@ function buildRaceStory(rootData, playerName, playerTeam, classification_data) {
 
   // Final classification (every driver) with total time, best lap, status.
   // Include DNFs (no position / non-finished status / short on laps) with is_dnf flag.
-  const rawEntries = (classification_data || [])
-    .map((e) => {
-      const fc = e["final-classification"] || {};
-      return {
-        position: fc.position || null,
-        name: String(e["driver-name"] || "").toUpperCase(),
-        team: e.team || "",
-        laps: fc["num-laps"] || 0,
-        time_s: fc["total-race-time"] || 0,
-        time_str: fc["total-race-time-str"] || "",
-        best_lap_ms: fc["best-lap-time-ms"] || 0,
-        best_lap_str: fc["best-lap-time-str"] || "",
-        status: fc["result-status"] || "",
-        points: fc.points || 0,
-        pits: fc["num-pit-stops"] || 0,
-      };
-    })
-    .filter((e) => e.name);
+  const rawEntries = (classification_data || []).map((e) => {
+    const fc = e["final-classification"] || {};
+    return {
+      position: fc.position || null,
+      name: String(e["driver-name"] || "").toUpperCase(),
+      team: e.team || "",
+      laps: fc["num-laps"] || 0,
+      time_s: fc["total-race-time"] || 0,
+      time_str: fc["total-race-time-str"] || "",
+      best_lap_ms: fc["best-lap-time-ms"] || 0,
+      best_lap_str: fc["best-lap-time-str"] || "",
+      status: fc["result-status"] || "",
+      points: fc.points || 0,
+      pits: fc["num-pit-stops"] || 0,
+    };
+  }).filter((e) => e.name);
   const maxLaps = rawEntries.reduce((m, e) => Math.max(m, e.laps || 0), 0);
   const decorated = rawEntries.map((e) => {
     const statusStr = String(e.status || "").toUpperCase();
@@ -959,20 +873,18 @@ function buildRaceStory(rootData, playerName, playerTeam, classification_data) {
   const classification = [...finishers, ...dnfs];
 
   // Per-driver lap times for the Compare tab
-  const driver_lap_times = (classification_data || [])
-    .map((e) => ({
-      name: String(e["driver-name"] || "").toUpperCase(),
-      team: e.team || "",
-      laps: (e["lap-time-history"]?.["lap-history-data"] || []).map((l, i) => ({
-        lap: i + 1,
-        ms: l["lap-time-in-ms"] || 0,
-        s1: l["sector-1-time-in-ms"] || 0,
-        s2: l["sector-2-time-in-ms"] || 0,
-        s3: l["sector-3-time-in-ms"] || 0,
-        valid: l["lap-valid-bit-flags"] === undefined || !!(l["lap-valid-bit-flags"] & 1),
-      })),
-    }))
-    .filter((d) => d.name && d.laps.length);
+  const driver_lap_times = (classification_data || []).map((e) => ({
+    name: String(e["driver-name"] || "").toUpperCase(),
+    team: e.team || "",
+    laps: (e["lap-time-history"]?.["lap-history-data"] || []).map((l, i) => ({
+      lap: i + 1,
+      ms: l["lap-time-in-ms"] || 0,
+      s1: l["sector-1-time-in-ms"] || 0,
+      s2: l["sector-2-time-in-ms"] || 0,
+      s3: l["sector-3-time-in-ms"] || 0,
+      valid: l["lap-valid-bit-flags"] === undefined || !!(l["lap-valid-bit-flags"] & 1),
+    })),
+  })).filter((d) => d.name && d.laps.length);
 
   return {
     player_name: playerName,
@@ -996,6 +908,7 @@ function processTelemetryData(data) {
     console.log("Loading pre-processed telemetry summary");
     return data;
   }
+
 
   const results = [];
   let track_name = null;
@@ -1036,8 +949,13 @@ function processTelemetryData(data) {
     }
     if (obj && typeof obj === "object") {
       const isPlayerVal = obj["is-player"];
-      if (isPlayerVal === true || String(isPlayerVal).toLowerCase() === "true") {
-        const driver_name = String(obj["driver-name"] || "PLAYER").toUpperCase();
+      if (
+        isPlayerVal === true ||
+        String(isPlayerVal).toLowerCase() === "true"
+      ) {
+        const driver_name = String(
+          obj["driver-name"] || "PLAYER",
+        ).toUpperCase();
 
         // Extract player-specific stints from global V2 history
         let player_stints_data = [];
@@ -1067,9 +985,13 @@ function processTelemetryData(data) {
           results:
             classification_data.length > 0
               ? classification_data.map((e) => ({
-                  name: String(e["driver-name"] || e.name || "UNKNOWN").toUpperCase(),
+                  name: String(
+                    e["driver-name"] || e.name || "UNKNOWN",
+                  ).toUpperCase(),
                   position:
-                    e["final-classification"]?.["position"] || e["track-position"] || e.position,
+                    e["final-classification"]?.["position"] ||
+                    e["track-position"] ||
+                    e.position,
                   best_lap:
                     e["final-classification"]?.["best-lap-time-str"] ||
                     e["best-lap-time-str"] ||
@@ -1080,15 +1002,26 @@ function processTelemetryData(data) {
                     e["final-classification"]?.["best-lap-time-str"] ||
                     e["best-lap-time-str"] ||
                     "",
-                  q2: e["final-classification"]?.["q2-time"] || e["q2-time"] || "",
-                  q3: e["final-classification"]?.["q3-time"] || e["q3-time"] || "",
+                  q2:
+                    e["final-classification"]?.["q2-time"] ||
+                    e["q2-time"] ||
+                    "",
+                  q3:
+                    e["final-classification"]?.["q3-time"] ||
+                    e["q3-time"] ||
+                    "",
                 }))
               : Array.isArray(tyre_stints_v2)
                 ? tyre_stints_v2.map((e) => ({
-                    name: String(e.name || e.driver_name || "UNKNOWN").toUpperCase(),
+                    name: String(
+                      e.name || e.driver_name || "UNKNOWN",
+                    ).toUpperCase(),
                     position:
-                      e["final-classification"]?.["position"] || e["track-position"] || e.position,
-                    best_lap: e["best-lap-time-str"] || e["best_lap_time_str"] || "N/A",
+                      e["final-classification"]?.["position"] ||
+                      e["track-position"] ||
+                      e.position,
+                    best_lap:
+                      e["best-lap-time-str"] || e["best_lap_time_str"] || "N/A",
                     q1: e["q1-time"] || e["q1_time"] || "",
                     q2: e["q2-time"] || e["q2_time"] || "",
                     q3: e["q3-time"] || e["q3_time"] || "",
@@ -1103,7 +1036,8 @@ function processTelemetryData(data) {
         const final_classification = obj["final-classification"] || {};
         const lap_data = obj["lap-data"] || {};
 
-        summary.starting_position = final_classification["grid-position"] ?? null;
+        summary.starting_position =
+          final_classification["grid-position"] ?? null;
         summary.finishing_position = lap_data["car-position"] ?? null;
 
         const lap0 = per_lap_info.find((l) => l["lap-number"] === 0);
@@ -1149,17 +1083,27 @@ function processTelemetryData(data) {
           };
 
           const scRaw = String(
-            lap["max-safety-car-status"] || ldata["safety-car-status"] || ldata["sc_status"] || "0",
+            lap["max-safety-car-status"] ||
+              ldata["safety-car-status"] ||
+              ldata["sc_status"] ||
+              "0",
           ).toUpperCase();
-          const pitRaw = String(ldata["pit-status"] || ldata["pit_status"] || "0").toUpperCase();
+          const pitRaw = String(
+            ldata["pit-status"] || ldata["pit_status"] || "0",
+          ).toUpperCase();
 
           // Check multiple possible keys for FIA flags
           const fiaFlags = String(
-            status["vehicle-fia-flags"] || status["fia-flags"] || ldata["fia-flags"] || "NONE",
+            status["vehicle-fia-flags"] ||
+              status["fia-flags"] ||
+              ldata["fia-flags"] ||
+              "NONE",
           ).toUpperCase();
 
-          let sc_status = scMap[scRaw] || (isNaN(parseInt(scRaw)) ? 0 : parseInt(scRaw));
-          let pit_status = pitMap[pitRaw] || (isNaN(parseInt(pitRaw)) ? 0 : parseInt(pitRaw));
+          let sc_status =
+            scMap[scRaw] || (isNaN(parseInt(scRaw)) ? 0 : parseInt(scRaw));
+          let pit_status =
+            pitMap[pitRaw] || (isNaN(parseInt(pitRaw)) ? 0 : parseInt(pitRaw));
 
           // Override pit status using explicit stint history data
           if (pit_laps_from_stints[lap_num]) {
@@ -1190,7 +1134,9 @@ function processTelemetryData(data) {
               RR: Number((tyre_wear_values[3] || 0).toFixed(2)),
             },
             ers_deployed_j: Number((ers["ers-deployed-j"] || 0).toFixed(0)),
-            ers_remaining_j: Number((status["ers-store-energy"] || 0).toFixed(0)),
+            ers_remaining_j: Number(
+              (status["ers-store-energy"] || 0).toFixed(0),
+            ),
             damage: {
               fl_wing: damage["front-left-wing-damage"] || 0,
               fr_wing: damage["front-right-wing-damage"] || 0,
@@ -1206,8 +1152,14 @@ function processTelemetryData(data) {
           });
         });
 
-        summary.race_story = buildRaceStory(data, driver_name, obj.team || "", classification_data);
+        summary.race_story = buildRaceStory(
+          data,
+          driver_name,
+          obj.team || "",
+          classification_data,
+        );
         results.push(summary);
+
       } else {
         Object.values(obj).forEach(findPlayerInObj);
       }
@@ -1223,56 +1175,48 @@ async function loadSavedSessions() {
     const db = getSupabaseClient();
     if (!db) return;
 
-    const uid = await resolveSessionUserId(db);
-    if (!uid) {
-      console.warn("No session user identity available; skipping saved sessions load.");
-      allSessions = [];
-      renderSeasonSelector();
-      renderSavedSessions(allSessions);
-      return;
-    }
-
     const { data: sessions, error } = await db
       .from("telemetry_sessions")
       .select("*")
-      .eq("user_id", uid)
       .order("season", { ascending: true })
       .order("session_date", { ascending: true });
 
     if (error) throw error;
 
-    const mappedSessions = (sessions || []).map((s) => ({
-      ...s,
-      starting_position: s.starting_pos,
-      finishing_position: s.finishing_pos,
-      created_at: s.session_date,
-      category: s.category || "Race",
-      session_type: s.session_type,
-      season: s.season || 1,
-      starting_fuel: s.starting_fuel,
-      stints: s.stints || [],
-      results: s.results || [],
-      race_story: s.race_story || null,
-    }));
+    if (sessions && sessions.length) {
+      // Map Supabase column names back to our app's object structure if they differ
+      const mappedSessions = sessions.map((s) => ({
+        ...s,
+        starting_position: s.starting_pos,
+        finishing_position: s.finishing_pos,
+        created_at: s.session_date,
+        category: s.category || "Race",
+        session_type: s.session_type,
+        season: s.season || 1,
+        starting_fuel: s.starting_fuel,
+        stints: s.stints || [],
+        results: s.results || [],
+        race_story: s.race_story || null,
+      }));
 
-    // Custom sorting: Season -> F1 2026 Calendar -> Date
-    mappedSessions.sort(sortSessionsByCalendar);
+      // Custom sorting: Season -> F1 2026 Calendar -> Date
+      mappedSessions.sort(sortSessionsByCalendar);
 
-    allSessions = mappedSessions;
-    renderSeasonSelector();
-    renderSavedSessions(allSessions);
+      allSessions = mappedSessions;
+      renderSeasonSelector();
 
-    if (!currentData && mappedSessions.length) {
-      // Prioritize showing a Race or Sprint as the default session
-      currentData =
-        mappedSessions.find(
-          (s) => s.category !== "Qualifying" && s.category !== "Sprint Shootout",
-        ) || mappedSessions[0];
+      renderSavedSessions(allSessions);
+
+      if (!currentData) {
+        // Prioritize showing a Race or Sprint as the default session
+        currentData =
+          mappedSessions.find(
+            (s) =>
+              s.category !== "Qualifying" && s.category !== "Sprint Shootout",
+          ) || mappedSessions[0];
+      }
+      renderContent();
     }
-    if (!currentData) {
-      currentData = null;
-    }
-    renderContent();
   } catch (err) {
     console.error("Failed to fetch sessions from Supabase", err);
   }
@@ -1285,8 +1229,12 @@ async function saveSessions(sessions) {
     throw new Error("Database connection is still loading. Please try again in a moment.");
   }
 
-  // Attach the signed-in user (or a provided UUID override) so RLS accepts the insert.
-  const uid = await resolveSessionUserId(db);
+  // Attach the signed-in user so RLS accepts the insert.
+  let uid = null;
+  try {
+    const { data } = await db.auth.getUser();
+    uid = data?.user?.id || null;
+  } catch (e) { /* ignore */ }
   if (!uid) {
     throw new Error("You must be signed in to save sessions.");
   }
@@ -1326,7 +1274,9 @@ async function saveSessions(sessions) {
     }
   }
 
-  const { error } = await db.from("telemetry_sessions").insert(dataToInsert);
+  const { error } = await db
+    .from("telemetry_sessions")
+    .insert(dataToInsert);
 
   if (error) throw error;
   await loadSavedSessions();
@@ -1343,7 +1293,8 @@ function getSessionBadges(session) {
   const playerName = (rs.player_name || session.driver_name || "").toUpperCase();
   const win = finish === 1;
   const pole = start === 1;
-  const fl = !!(rs.fastest_lap && (rs.fastest_lap.name || "").toUpperCase() === playerName);
+  const fl =
+    !!(rs.fastest_lap && (rs.fastest_lap.name || "").toUpperCase() === playerName);
   const ledEveryLap =
     Array.isArray(rs.position_history) &&
     rs.position_history.length > 1 &&
@@ -1359,7 +1310,12 @@ async function clearSessionStatus(statusType) {
   }
 
   const label = statusType === 1 ? "Safety Car" : "VSC";
-  if (!confirm(`Are you sure you want to clear all ${label} statuses for this session?`)) return;
+  if (
+    !confirm(
+      `Are you sure you want to clear all ${label} statuses for this session?`,
+    )
+  )
+    return;
 
   currentData.lap_history.forEach((lap) => {
     if (parseInt(lap.sc_status) === statusType) {
@@ -1405,7 +1361,10 @@ async function deleteSession(id, event) {
       return;
     }
 
-    const { error } = await db.from("telemetry_sessions").delete().eq("id", id);
+    const { error } = await db
+      .from("telemetry_sessions")
+      .delete()
+      .eq("id", id);
 
     if (error) throw error;
     await loadSavedSessions();
@@ -1493,18 +1452,6 @@ function renderSavedSessions(sessions) {
     .slice()
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
-  if (!displaySessions.length) {
-    grid.innerHTML = `
-      <div class="empty-hint" style="padding:18px;color:#888;line-height:1.5;">
-        No saved sessions found for this user yet.<br />
-        Try loading the app with <strong>?user_uuid=${getSessionUserIdOverride() || "YOUR_UUID"}</strong> or save a session again after signing in.
-      </div>
-    `;
-    renderStandingsTable();
-    container.style.display = "block";
-    return;
-  }
-
   const catLabel = (c) => {
     if (!c) return "";
     if (c === "Sprint Shootout") return "SHOOTOUT";
@@ -1540,7 +1487,8 @@ function renderSavedSessions(sessions) {
       </div>
     `;
 
-    card.querySelector(".delete-btn").onclick = (e) => deleteSession(session.id, e);
+    card.querySelector(".delete-btn").onclick = (e) =>
+      deleteSession(session.id, e);
 
     card.addEventListener("click", (e) => {
       if (e.target.closest(".delete-btn")) return;
@@ -1552,6 +1500,7 @@ function renderSavedSessions(sessions) {
     grid.appendChild(card);
   });
 
+
   renderStandingsTable();
 
   container.style.display = sessions.length ? "block" : "none";
@@ -1560,7 +1509,8 @@ function renderSavedSessions(sessions) {
 
 function determineWeatherIcon(session) {
   const laps = session.lap_history || [];
-  if (laps.length === 0) return '<span class="weather-icon" title="Dry Conditions">☀️</span>';
+  if (laps.length === 0)
+    return '<span class="weather-icon" title="Dry Conditions">☀️</span>';
 
   let hasDry = false;
   let hasWet = false;
@@ -1599,8 +1549,10 @@ function determineWeatherIcon(session) {
     }
   });
 
-  if (hasDry && hasWet) return '<span class="weather-icon" title="Mixed Conditions">⛅</span>';
-  if (hasWet) return '<span class="weather-icon" title="Rainy Conditions">🌧️</span>';
+  if (hasDry && hasWet)
+    return '<span class="weather-icon" title="Mixed Conditions">⛅</span>';
+  if (hasWet)
+    return '<span class="weather-icon" title="Rainy Conditions">🌧️</span>';
   return '<span class="weather-icon" title="Dry Conditions">☀️</span>';
 }
 
@@ -1629,16 +1581,22 @@ function renderContent() {
   renderRaceStory();
   renderCompareTab();
   document.getElementById("content").style.display = "block";
+
 }
 
 function showPracticeSectionIfNeeded() {
-  const practiceButton = document.querySelector('.section-tab[data-target="section-practice"]');
+  const practiceButton = document.querySelector(
+    '.section-tab[data-target="section-practice"]',
+  );
   if (!practiceButton) return;
 
   const practiceSection = document.getElementById("section-practice");
   if (!practiceSection) return;
 
-  if (currentData && (currentData.category === "Practice" || currentData.category === "Sprint")) {
+  if (
+    currentData &&
+    (currentData.category === "Practice" || currentData.category === "Sprint")
+  ) {
     practiceSection.style.display = "block";
   } else {
     practiceSection.style.display = "none";
@@ -1652,7 +1610,8 @@ function renderPracticeSection() {
   if (!practiceStintSection || !practiceLapContainer) return;
 
   const isEligibleForReview =
-    currentData && (currentData.category === "Practice" || currentData.category === "Sprint");
+    currentData &&
+    (currentData.category === "Practice" || currentData.category === "Sprint" || currentData.category === "Race");
 
   if (!isEligibleForReview) {
     practiceStintSection.style.display = "none";
@@ -1705,12 +1664,10 @@ function renderPracticeStints() {
     const compKey = String(stint.compound).toUpperCase();
     const dotColor = COMPOUND_COLORS[compKey] || "#888";
     const rgba = (hex, a) => {
-      const r = parseInt(hex.slice(1, 3), 16),
-        g = parseInt(hex.slice(3, 5), 16),
-        b = parseInt(hex.slice(5, 7), 16);
+      const r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
       return `rgba(${r},${g},${b},${a})`;
     };
-    const wearCls = (v) => (v < 1.0 ? "wear-low" : v < 2.0 ? "wear-med" : "wear-high");
+    const wearCls = (v) => v < 1.0 ? "wear-low" : v < 2.0 ? "wear-med" : "wear-high";
     const compoundBadge = `<span class="compound-badge" style="background:${rgba(dotColor, 0.12)};border-color:${rgba(dotColor, 0.45)};color:${dotColor}"><span class="compound-dot" style="background-color:${dotColor}"></span>${stint.compound}</span>`;
     const row = document.createElement("tr");
     row.innerHTML = `
@@ -1774,11 +1731,14 @@ function renderPracticeTable() {
 
   const startFuel =
     currentData.starting_fuel ||
-    (currentData.lap_history.length > 0 ? currentData.lap_history[0].fuel_kg : 0);
+    (currentData.lap_history.length > 0
+      ? currentData.lap_history[0].fuel_kg
+      : 0);
 
   let lastCompound = null;
   currentData.lap_history.forEach((lap, index) => {
-    const prevFuel = index === 0 ? startFuel : currentData.lap_history[index - 1].fuel_kg;
+    const prevFuel =
+      index === 0 ? startFuel : currentData.lap_history[index - 1].fuel_kg;
     const fuelConsumed = Math.max(0, prevFuel - lap.fuel_kg);
 
     // Cache fuel usage for this lap
@@ -1794,7 +1754,8 @@ function renderPracticeTable() {
     else if (scStatus === 1) statusLabel = "Safety Car";
     else if (scStatus === 2) statusLabel = "VSC";
 
-    const getWearClass = (val) => (val >= 80 ? "wear-critical" : val >= 60 ? "wear-warning" : "");
+    const getWearClass = (val) =>
+      val >= 80 ? "wear-critical" : val >= 60 ? "wear-warning" : "";
 
     const row = document.createElement("tr");
     row.style.cursor = "pointer";
@@ -1805,7 +1766,8 @@ function renderPracticeTable() {
     const currentComp = String(lap.current_tyre_compound).toUpperCase();
     if (
       index > 0 &&
-      (currentComp !== lastCompound || Number(currentData.lap_history[index - 1].pit_status) === 1)
+      (currentComp !== lastCompound ||
+        Number(currentData.lap_history[index - 1].pit_status) === 1)
     ) {
       row.classList.add("stint-boundary");
     }
@@ -1814,9 +1776,7 @@ function renderPracticeTable() {
     const prCompKey = String(lap.current_tyre_compound).toUpperCase();
     const prDotColor = COMPOUND_COLORS[prCompKey] || "#888";
     const prRgba = (hex, a) => {
-      const r = parseInt(hex.slice(1, 3), 16),
-        g = parseInt(hex.slice(3, 5), 16),
-        b = parseInt(hex.slice(5, 7), 16);
+      const r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
       return `rgba(${r},${g},${b},${a})`;
     };
     const prCompoundBadge = `<span class="compound-badge" style="background:${prRgba(prDotColor, 0.12)};border-color:${prRgba(prDotColor, 0.45)};color:${prDotColor}"><span class="compound-dot" style="background-color:${prDotColor}"></span>${lap.current_tyre_compound}</span>`;
@@ -1854,7 +1814,8 @@ function renderPracticeTable() {
       // Sync the select-all checkbox state
       const selectAllCb = document.getElementById("selectAllPracticeLaps");
       if (selectAllCb) {
-        selectAllCb.checked = selectedPracticeLaps.size === currentData.lap_history.length;
+        selectAllCb.checked =
+          selectedPracticeLaps.size === currentData.lap_history.length;
       }
 
       updateFuelCalculator();
@@ -1921,7 +1882,8 @@ function renderQualiResults() {
   const targetCat =
     currentData.category === "Race" || currentData.category === "Qualifying"
       ? "Qualifying"
-      : currentData.category === "Sprint" || currentData.category === "Sprint Shootout"
+      : currentData.category === "Sprint" ||
+          currentData.category === "Sprint Shootout"
         ? "Sprint Shootout"
         : null;
 
@@ -1950,7 +1912,9 @@ function renderQualiResults() {
   const teamsAssigned = getDriverTeams();
 
   // Sort segments logically (usually by their session_type name)
-  qualiSessions.sort((a, b) => (a.session_type || "").localeCompare(b.session_type || ""));
+  qualiSessions.sort((a, b) =>
+    (a.session_type || "").localeCompare(b.session_type || ""),
+  );
 
   qualiSessions.forEach((session) => {
     const segmentTitle = session.session_type || session.category || "Results";
@@ -1997,7 +1961,8 @@ function renderQualiResults() {
 
       let rowStyle = "";
       if (isPlayer) {
-        rowStyle = "background: rgba(225, 6, 0, 0.15); border-left: 3px solid var(--accent-red);";
+        rowStyle =
+          "background: rgba(225, 6, 0, 0.15); border-left: 3px solid var(--accent-red);";
       } else if (isEliminated) {
         rowStyle = "background: rgba(255, 75, 75, 0.08); color: #ff6b6b;";
       }
@@ -2052,7 +2017,8 @@ function updateQualiGapButton() {
 function renderSessionInfo() {
   const info = currentData;
   const laps = info.lap_history;
-  const startFuel = info.starting_fuel || (laps.length > 0 ? laps[0].fuel_kg : 0);
+  const startFuel =
+    info.starting_fuel || (laps.length > 0 ? laps[0].fuel_kg : 0);
   const lastFuel = laps.length > 0 ? laps[laps.length - 1].fuel_kg : startFuel;
   const totalFuelConsumed = Math.max(0, startFuel - lastFuel);
   const avgFuelPerLap = laps.length > 0 ? totalFuelConsumed / laps.length : 0;
@@ -2062,7 +2028,9 @@ function renderSessionInfo() {
   // and track evolution), then combined by clean-lap weight into a Total CV.
   // Rating = max(0, min(100, 100 − Total CV × 2500)).
   const pitLapNumbers = new Set(
-    laps.filter((l) => Number(l.pit_status || 0) === 1).map((l) => Number(l.lap)),
+    laps
+      .filter((l) => Number(l.pit_status || 0) === 1)
+      .map((l) => Number(l.lap)),
   );
   const isCleanForConsistency = (l) => {
     if (!l) return false;
@@ -2121,7 +2089,8 @@ function renderSessionInfo() {
     const trimmed = times.filter((t) => t <= median * 1.07);
     const sample = trimmed.length >= 3 ? trimmed : times;
     const mean = sample.reduce((a, b) => a + b, 0) / sample.length;
-    const variance = sample.reduce((a, b) => a + (b - mean) * (b - mean), 0) / sample.length;
+    const variance =
+      sample.reduce((a, b) => a + (b - mean) * (b - mean), 0) / sample.length;
     const stddev = Math.sqrt(variance);
     const cv = mean > 0 ? stddev / mean : 0;
     stintStats.push({ cv, cleanLaps: sample.length });
@@ -2132,14 +2101,19 @@ function renderSessionInfo() {
   let consistencyTitle =
     "Needs ≥3 clean racing laps in at least one stint (excludes lap 1, in/out laps, SC/VSC/Red, >107% of stint median)";
   if (totalCleanLaps >= 3 && stintStats.length > 0) {
-    const totalCV = stintStats.reduce((acc, s) => acc + s.cv * (s.cleanLaps / totalCleanLaps), 0);
+    const totalCV = stintStats.reduce(
+      (acc, s) => acc + s.cv * (s.cleanLaps / totalCleanLaps),
+      0,
+    );
     const rating = Math.max(0, Math.min(100, 100 - totalCV * 2500));
-    const tier = rating >= 92 ? "elite" : rating >= 82 ? "good" : rating >= 68 ? "mid" : "low";
+    const tier =
+      rating >= 92 ? "elite" : rating >= 82 ? "good" : rating >= 68 ? "mid" : "low";
     consistencyHtml = `<span class="consistency-pill consistency-${tier}">${rating.toFixed(1)}<span class="consistency-unit">/100</span></span>`;
     const perStint = stintStats
       .map((s, i) => `S${i + 1}: CV ${(s.cv * 100).toFixed(2)}% (${s.cleanLaps} laps)`)
       .join(" · ");
-    consistencyTitle = `Weighted Total CV ${(totalCV * 100).toFixed(3)}% across ${stintStats.length} stint${stintStats.length > 1 ? "s" : ""} · ${totalCleanLaps} clean laps · ${perStint}`;
+    consistencyTitle =
+      `Weighted Total CV ${(totalCV * 100).toFixed(3)}% across ${stintStats.length} stint${stintStats.length > 1 ? "s" : ""} · ${totalCleanLaps} clean laps · ${perStint}`;
   }
 
   const statusCounts = laps.reduce(
@@ -2247,7 +2221,10 @@ function computeSafetyCarPeriods(laps) {
 
   const cleanTimes = laps
     .filter(
-      (l) => Number(l.sc_status || 0) === 0 && Number(l.pit_status || 0) === 0 && Number(l.lap) > 1,
+      (l) =>
+        Number(l.sc_status || 0) === 0 &&
+        Number(l.pit_status || 0) === 0 &&
+        Number(l.lap) > 1,
     )
     .map((l) => timeStringToSeconds(l.lap_time))
     .filter((t) => typeof t === "number" && t > 0);
@@ -2279,7 +2256,11 @@ function computeSafetyCarPeriods(laps) {
     if (median !== null) {
       const firstT = timeStringToSeconds(laps[i].lap_time);
       const lastT = timeStringToSeconds(laps[j].lap_time);
-      if (typeof firstT === "number" && firstT > 0 && firstT - median < PARTIAL_THRESHOLD) {
+      if (
+        typeof firstT === "number" &&
+        firstT > 0 &&
+        firstT - median < PARTIAL_THRESHOLD
+      ) {
         // first SC lap is near normal pace → SC engaged near the end of it
         startOffset = 0;
       }
@@ -2376,13 +2357,16 @@ function calculateStints() {
       .map((stint) => {
         const startLap = stint["start-lap"];
         const endLap = stint["end-lap"];
-        const stintLaps = laps.filter((l) => l.lap >= startLap && l.lap <= endLap);
+        const stintLaps = laps.filter(
+          (l) => l.lap >= startLap && l.lap <= endLap,
+        );
 
         if (stintLaps.length === 0) return null;
 
         // Exclude red flag and pit laps from lap count
         const countableLaps = stintLaps.filter(
-          (l) => Number(l.sc_status || 0) !== 3 && Number(l.pit_status || 0) === 0,
+          (l) =>
+            Number(l.sc_status || 0) !== 3 && Number(l.pit_status || 0) === 0,
         );
         const lapCount = countableLaps.length;
         const lastLap = stintLaps[lapCount - 1];
@@ -2406,7 +2390,8 @@ function calculateStints() {
         let status = "Normal";
         if (wasRedFlagPit) status = "Red Flag Pit";
         else if (stintLaps.some((l) => l.sc_status === 3)) status = "Red Flag";
-        else if (stintLaps.some((l) => l.sc_status === 1)) status = "Safety Car";
+        else if (stintLaps.some((l) => l.sc_status === 1))
+          status = "Safety Car";
         else if (stintLaps.some((l) => l.sc_status === 2)) status = "VSC";
 
         // Average lap time for the stint (seconds)
@@ -2420,7 +2405,8 @@ function calculateStints() {
             : null;
 
         return {
-          compound: stint["tyre-set-data"]?.["visual-tyre-compound"] || "Unknown",
+          compound:
+            stint["tyre-set-data"]?.["visual-tyre-compound"] || "Unknown",
           lapCount: lapCount,
           avgLapSeconds: avgLapSeconds,
           avgFuel: fuelConsumed / lapCount,
@@ -2454,7 +2440,10 @@ function calculateStints() {
     if (prevLap) {
       if (lap.current_tyre_compound !== prevLap.current_tyre_compound) {
         isNewStint = true;
-      } else if (Number(prevLap.pit_status || 0) > 0 && Number(lap.pit_status || 0) === 0) {
+      } else if (
+        Number(prevLap.pit_status || 0) > 0 &&
+        Number(lap.pit_status || 0) === 0
+      ) {
         // Just came out of pits onto track
         isNewStint = true;
       }
@@ -2465,7 +2454,8 @@ function calculateStints() {
     if (sc === 3) currentStint.stintStatus = "Red Flag";
     else if (sc === 1 && currentStint.stintStatus !== "Red Flag")
       currentStint.stintStatus = "Safety Car";
-    else if (sc === 2 && currentStint.stintStatus === "Normal") currentStint.stintStatus = "VSC";
+    else if (sc === 2 && currentStint.stintStatus === "Normal")
+      currentStint.stintStatus = "VSC";
 
     // Special check for Red Flag Pit in fallback logic
     if (isNewStint && prevLap && prevLap.sc_status === 3) {
@@ -2480,7 +2470,14 @@ function calculateStints() {
         compound: lap.current_tyre_compound,
         laps: [],
         startFuel: prevLap.fuel_kg,
-        stintStatus: sc === 3 ? "Red Flag" : sc === 1 ? "Safety Car" : sc === 2 ? "VSC" : "Normal",
+        stintStatus:
+          sc === 3
+            ? "Red Flag"
+            : sc === 1
+              ? "Safety Car"
+              : sc === 2
+                ? "VSC"
+                : "Normal",
       };
     }
     currentStint.laps.push(lap);
@@ -2493,7 +2490,8 @@ function calculateStints() {
     .map((s) => {
       // Exclude red flag and pit laps from lap count
       const countableLaps = s.laps.filter(
-        (l) => Number(l.sc_status || 0) !== 3 && Number(l.pit_status || 0) === 0,
+        (l) =>
+          Number(l.sc_status || 0) !== 3 && Number(l.pit_status || 0) === 0,
       );
       const lapCount = countableLaps.length;
       if (lapCount === 0) return null;
@@ -2545,12 +2543,10 @@ function renderStints() {
     const compKey = String(stint.compound).toUpperCase();
     const dotColor = COMPOUND_COLORS[compKey] || "#888";
     const rgba = (hex, a) => {
-      const r = parseInt(hex.slice(1, 3), 16),
-        g = parseInt(hex.slice(3, 5), 16),
-        b = parseInt(hex.slice(5, 7), 16);
+      const r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
       return `rgba(${r},${g},${b},${a})`;
     };
-    const wearCls = (v) => (v < 1.0 ? "wear-low" : v < 2.0 ? "wear-med" : "wear-high");
+    const wearCls = (v) => v < 1.0 ? "wear-low" : v < 2.0 ? "wear-med" : "wear-high";
     const compoundBadge = `<span class="compound-badge" style="background:${rgba(dotColor, 0.12)};border-color:${rgba(dotColor, 0.45)};color:${dotColor}"><span class="compound-dot" style="background-color:${dotColor}"></span>${stint.compound}</span>`;
     const row = document.createElement("tr");
     row.innerHTML = `
@@ -2615,7 +2611,8 @@ function renderCharts() {
   if (avgLapSeconds !== null) {
     const mean = avgLapSeconds;
     const variance =
-      validLapTimes.reduce((acc, v) => acc + Math.pow(v - mean, 2), 0) / validLapTimes.length;
+      validLapTimes.reduce((acc, v) => acc + Math.pow(v - mean, 2), 0) /
+      validLapTimes.length;
     const stddev = Math.sqrt(variance);
     const padding = Math.max(3, stddev * 1.5, 5); // seconds padding
     yMinForAvg = Math.max(0, mean - padding);
@@ -2659,23 +2656,29 @@ function renderCharts() {
             stepSize: 0.5,
           },
         },
-        yMinForAvg !== null && yMaxForAvg !== null ? { min: yMinForAvg, max: yMaxForAvg } : {},
+        yMinForAvg !== null && yMaxForAvg !== null
+          ? { min: yMinForAvg, max: yMaxForAvg }
+          : {},
       ),
     },
   );
 
   renderPaceDeltaChart();
 
+
   // Fuel Chart
   // compute avg-based bounds for fuel (kg)
   let fuelMin = null;
   let fuelMax = null;
-  const fuelValues = laps.map((l) => l.fuel_kg).filter((v) => typeof v === "number" && !isNaN(v));
+  const fuelValues = laps
+    .map((l) => l.fuel_kg)
+    .filter((v) => typeof v === "number" && !isNaN(v));
   if (fuelValues.length > 0) {
     const sumFuel = fuelValues.reduce((a, b) => a + b, 0);
     const avgFuel = sumFuel / fuelValues.length;
     const varianceFuel =
-      fuelValues.reduce((acc, v) => acc + Math.pow(v - avgFuel, 2), 0) / fuelValues.length;
+      fuelValues.reduce((acc, v) => acc + Math.pow(v - avgFuel, 2), 0) /
+      fuelValues.length;
     const stdFuel = Math.sqrt(varianceFuel);
     const paddingFuel = Math.max(1, stdFuel * 1.5, 2);
     fuelMin = Math.max(0, avgFuel - paddingFuel);
@@ -2710,14 +2713,17 @@ function renderCharts() {
             stepSize: 0.5,
           },
         },
-        fuelMin !== null && fuelMax !== null ? { min: fuelMin, max: fuelMax } : {},
+        fuelMin !== null && fuelMax !== null
+          ? { min: fuelMin, max: fuelMax }
+          : {},
       ),
     },
   );
 
   // Fuel Consumption Chart - Calculate fuel consumed per lap
   const fuelConsumption = [];
-  const startFuel = currentData.starting_fuel || (laps.length > 0 ? laps[0].fuel_kg : 0);
+  const startFuel =
+    currentData.starting_fuel || (laps.length > 0 ? laps[0].fuel_kg : 0);
 
   for (let i = 0; i < laps.length; i++) {
     const prevFuel = i === 0 ? startFuel : laps[i - 1].fuel_kg;
@@ -2744,13 +2750,17 @@ function renderCharts() {
     false,
     (() => {
       // compute average-based bounds for fuel per lap
-      const valid = fuelConsumption.filter((v) => typeof v === "number" && !isNaN(v) && v > 0);
+      const valid = fuelConsumption.filter(
+        (v) => typeof v === "number" && !isNaN(v) && v > 0,
+      );
       let minF = null;
       let maxF = null;
       if (valid.length > 0) {
         const sum = valid.reduce((a, b) => a + b, 0);
         const avg = sum / valid.length;
-        const variance = valid.reduce((acc, v) => acc + Math.pow(v - avg, 2), 0) / valid.length;
+        const variance =
+          valid.reduce((acc, v) => acc + Math.pow(v - avg, 2), 0) /
+          valid.length;
         const std = Math.sqrt(variance);
         const padding = Math.max(0.2, std * 1.5, 0.5);
         minF = roundDownTo(Math.max(0, avg - padding), 0.25);
@@ -2829,14 +2839,17 @@ function renderCharts() {
   const s1 = laps.map((l) => timeStringToSeconds(l.s1));
   const s2 = laps.map((l) => timeStringToSeconds(l.s2));
   const s3 = laps.map((l) => timeStringToSeconds(l.s3));
-  const sectorValues = [].concat(s1, s2, s3).filter((v) => typeof v === "number" && v > 0);
+  const sectorValues = []
+    .concat(s1, s2, s3)
+    .filter((v) => typeof v === "number" && v > 0);
   let sectorMin = null;
   let sectorMax = null;
   if (sectorValues.length > 0) {
     const sumS = sectorValues.reduce((a, b) => a + b, 0);
     const avgS = sumS / sectorValues.length;
     const varianceS =
-      sectorValues.reduce((acc, v) => acc + Math.pow(v - avgS, 2), 0) / sectorValues.length;
+      sectorValues.reduce((acc, v) => acc + Math.pow(v - avgS, 2), 0) /
+      sectorValues.length;
     const stdS = Math.sqrt(varianceS);
     const paddingS = Math.max(0.5, stdS * 1.5, 1);
     sectorMin = Math.max(0, avgS - paddingS);
@@ -2910,7 +2923,9 @@ function renderCharts() {
             stepSize: 0.25,
           },
         },
-        sectorMin !== null && sectorMax !== null ? { min: sectorMin, max: sectorMax } : {},
+        sectorMin !== null && sectorMax !== null
+          ? { min: sectorMin, max: sectorMax }
+          : {},
       ),
     },
   );
@@ -2976,26 +2991,34 @@ function computeScaleBounds(
             if (
               Array.isArray(config.labels) &&
               config.labels.length > index &&
-              Number(config.labels[index]) === Number(lapHistoryArray[index]?.lap)
+              Number(config.labels[index]) ===
+                Number(lapHistoryArray[index]?.lap)
             ) {
               lapEntry = lapHistoryArray[index];
             } else if (Array.isArray(config.labels)) {
               const label = config.labels[index];
               const lapNumber = Number(label);
-              lapEntry = lapHistoryArray.find((lap) => Number(lap.lap) === lapNumber);
+              lapEntry = lapHistoryArray.find(
+                (lap) => Number(lap.lap) === lapNumber,
+              );
             } else {
               lapEntry = lapHistoryArray[index];
             }
 
             if (
               lapEntry &&
-              (Number(lapEntry.pit_status) === 1 || Number(lapEntry.sc_status) === 3)
+              (Number(lapEntry.pit_status) === 1 ||
+                Number(lapEntry.sc_status) === 3)
             ) {
               return;
             }
           }
 
-          if (typeof value === "number" && !isNaN(value) && (!formatAsTime || value > 0)) {
+          if (
+            typeof value === "number" &&
+            !isNaN(value) &&
+            (!formatAsTime || value > 0)
+          ) {
             values.push(value);
           }
         });
@@ -3022,16 +3045,24 @@ function computeScaleBounds(
 
 // Rounding helpers for nicer axis bounds
 function roundDownTo(value, step) {
-  if (typeof value !== "number" || typeof step !== "number" || step <= 0) return value;
+  if (typeof value !== "number" || typeof step !== "number" || step <= 0)
+    return value;
   return Math.floor(value / step) * step;
 }
 
 function roundUpTo(value, step) {
-  if (typeof value !== "number" || typeof step !== "number" || step <= 0) return value;
+  if (typeof value !== "number" || typeof step !== "number" || step <= 0)
+    return value;
   return Math.ceil(value / step) * step;
 }
 
-function createChart(canvasId, type, config, formatAsTime = false, extraOptions = {}) {
+function createChart(
+  canvasId,
+  type,
+  config,
+  formatAsTime = false,
+  extraOptions = {},
+) {
   const ctx = document.getElementById(canvasId).getContext("2d");
   const isMobile = isMobileDevice();
   const bounds = computeScaleBounds(
@@ -3077,11 +3108,17 @@ function createChart(canvasId, type, config, formatAsTime = false, extraOptions 
             : {}),
         },
     grid: {
-      color: isMobile ? "rgba(255, 255, 255, 0.05)" : "rgba(255, 255, 255, 0.1)",
-      ...(yAxisOverride.grid && typeof yAxisOverride.grid === "object" ? yAxisOverride.grid : {}),
+      color: isMobile
+        ? "rgba(255, 255, 255, 0.05)"
+        : "rgba(255, 255, 255, 0.1)",
+      ...(yAxisOverride.grid && typeof yAxisOverride.grid === "object"
+        ? yAxisOverride.grid
+        : {}),
     },
     ...Object.fromEntries(
-      Object.entries(yAxisOverride).filter(([key]) => key !== "ticks" && key !== "grid"),
+      Object.entries(yAxisOverride).filter(
+        ([key]) => key !== "ticks" && key !== "grid",
+      ),
     ),
   };
 
@@ -3115,7 +3152,9 @@ function createChart(canvasId, type, config, formatAsTime = false, extraOptions 
             } else if (Array.isArray(labels)) {
               const label = labels[idx];
               const lapNumber = Number(label);
-              lapEntry = lapHistory.find((lap) => Number(lap.lap) === lapNumber);
+              lapEntry = lapHistory.find(
+                (lap) => Number(lap.lap) === lapNumber,
+              );
             } else {
               lapEntry = lapHistory[idx];
             }
@@ -3128,7 +3167,8 @@ function createChart(canvasId, type, config, formatAsTime = false, extraOptions 
 
       if (vals.length > 0) {
         const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
-        const variance = vals.reduce((acc, v) => acc + Math.pow(v - mean, 2), 0) / vals.length;
+        const variance =
+          vals.reduce((acc, v) => acc + Math.pow(v - mean, 2), 0) / vals.length;
         const stddev = Math.sqrt(variance);
         const padding = formatAsTime
           ? Math.max(0.5, stddev * 1.5, 1)
@@ -3136,7 +3176,9 @@ function createChart(canvasId, type, config, formatAsTime = false, extraOptions 
 
         const step = formatAsTime
           ? 0.25
-          : extraOptions.yAxis && extraOptions.yAxis.ticks && extraOptions.yAxis.ticks.stepSize
+          : extraOptions.yAxis &&
+              extraOptions.yAxis.ticks &&
+              extraOptions.yAxis.ticks.stepSize
             ? extraOptions.yAxis.ticks.stepSize
             : 0.5;
         const vmin = roundDownTo(Math.max(0, mean - padding), step);
@@ -3203,8 +3245,8 @@ function createChart(canvasId, type, config, formatAsTime = false, extraOptions 
       // with half-lap precision at the start/end boundaries.
       const COLORS = {
         1: "rgba(173, 216, 230, 0.22)", // SC – light blue
-        2: "rgba(255, 215, 0, 0.18)", // VSC – amber
-        3: "rgba(255, 60, 60, 0.22)", // Red Flag – red
+        2: "rgba(255, 215, 0, 0.18)",   // VSC – amber
+        3: "rgba(255, 60, 60, 0.22)",   // Red Flag – red
       };
       const BORDERS = {
         1: "rgba(120, 180, 230, 0.55)",
@@ -3260,11 +3302,11 @@ function createChart(canvasId, type, config, formatAsTime = false, extraOptions 
 
       // 3. Fault overlays (ERS / DRS / engine / gearbox / aero)
       const FAULT_STYLES = {
-        ers: { color: "#ffb020", label: "ERS" },
-        drs: { color: "#5ad1ff", label: "DRS" },
-        engine: { color: "#ff5252", label: "ENG" },
+        ers:     { color: "#ffb020", label: "ERS" },
+        drs:     { color: "#5ad1ff", label: "DRS" },
+        engine:  { color: "#ff5252", label: "ENG" },
         gearbox: { color: "#c084fc", label: "GBX" },
-        aero: { color: "#9aff9a", label: "AERO" },
+        aero:    { color: "#9aff9a", label: "AERO" },
       };
       let prevDmg = null;
       laps.forEach((lap) => {
@@ -3276,20 +3318,8 @@ function createChart(canvasId, type, config, formatAsTime = false, extraOptions 
         if (prevDmg) {
           if ((d.engine || 0) - (prevDmg.engine || 0) >= 5) faults.push("engine");
           if ((d.gearbox || 0) - (prevDmg.gearbox || 0) >= 5) faults.push("gearbox");
-          const aeroNow =
-            (d.fl_wing || 0) +
-            (d.fr_wing || 0) +
-            (d.rear_wing || 0) +
-            (d.floor || 0) +
-            (d.diffuser || 0) +
-            (d.sidepod || 0);
-          const aeroPrev =
-            (prevDmg.fl_wing || 0) +
-            (prevDmg.fr_wing || 0) +
-            (prevDmg.rear_wing || 0) +
-            (prevDmg.floor || 0) +
-            (prevDmg.diffuser || 0) +
-            (prevDmg.sidepod || 0);
+          const aeroNow  = (d.fl_wing||0)+(d.fr_wing||0)+(d.rear_wing||0)+(d.floor||0)+(d.diffuser||0)+(d.sidepod||0);
+          const aeroPrev = (prevDmg.fl_wing||0)+(prevDmg.fr_wing||0)+(prevDmg.rear_wing||0)+(prevDmg.floor||0)+(prevDmg.diffuser||0)+(prevDmg.sidepod||0);
           if (aeroNow - aeroPrev >= 10) faults.push("aero");
         }
         prevDmg = d;
@@ -3360,7 +3390,9 @@ function createChart(canvasId, type, config, formatAsTime = false, extraOptions 
               callbacks: {
                 label: function (context) {
                   const value = context.parsed.y;
-                  return context.dataset.label + ": " + secondsToTimeString(value);
+                  return (
+                    context.dataset.label + ": " + secondsToTimeString(value)
+                  );
                 },
               },
               titleFont: {
@@ -3419,7 +3451,9 @@ function createChart(canvasId, type, config, formatAsTime = false, extraOptions 
                 } = chart;
 
                 const chartLabels = (chart.data && chart.data.labels) || [];
-                const flIdx = chartLabels.findIndex((v) => Number(v) === Number(fastestLapLap));
+                const flIdx = chartLabels.findIndex(
+                  (v) => Number(v) === Number(fastestLapLap),
+                );
                 const xPos = x.getPixelForValue(flIdx >= 0 ? flIdx : fastestLapLap);
                 ctx.save();
                 ctx.strokeStyle = "rgba(170, 88, 255, 0.95)";
@@ -3458,12 +3492,18 @@ function renderTable() {
 
   const startFuel =
     currentData.starting_fuel ||
-    (currentData.lap_history.length > 0 ? currentData.lap_history[0].fuel_kg : 0);
+    (currentData.lap_history.length > 0
+      ? currentData.lap_history[0].fuel_kg
+      : 0);
 
-  const lapTimes = currentData.lap_history.map((lap) => timeStringToSeconds(lap.lap_time));
+  const lapTimes = currentData.lap_history.map((lap) =>
+    timeStringToSeconds(lap.lap_time),
+  );
   const validLapTimes = lapTimes.filter((v) => typeof v === "number" && v > 0);
-  const fastestLapSeconds = validLapTimes.length > 0 ? Math.min(...validLapTimes) : null;
-  const fastestLapIndex = fastestLapSeconds !== null ? lapTimes.indexOf(fastestLapSeconds) : -1;
+  const fastestLapSeconds =
+    validLapTimes.length > 0 ? Math.min(...validLapTimes) : null;
+  const fastestLapIndex =
+    fastestLapSeconds !== null ? lapTimes.indexOf(fastestLapSeconds) : -1;
 
   const hist = currentData.lap_history;
   const tableLapTimes = hist.map((lap) => timeStringToSeconds(lap.lap_time));
@@ -3483,7 +3523,8 @@ function renderTable() {
 
   let lastCompound = null;
   hist.forEach((lap, index) => {
-    const prevFuel = index === 0 ? startFuel : currentData.lap_history[index - 1].fuel_kg;
+    const prevFuel =
+      index === 0 ? startFuel : currentData.lap_history[index - 1].fuel_kg;
     const fuelConsumed = Math.max(0, prevFuel - lap.fuel_kg);
 
     const pitStatus = Number(lap.pit_status || 0);
@@ -3496,7 +3537,8 @@ function renderTable() {
     else if (scStatus === 1) statusLabel = "Safety Car";
     else if (scStatus === 2) statusLabel = "VSC";
 
-    const getWearClass = (val) => (val >= 80 ? "wear-critical" : val >= 60 ? "wear-warning" : "");
+    const getWearClass = (val) =>
+      val >= 80 ? "wear-critical" : val >= 60 ? "wear-warning" : "";
 
     const row = document.createElement("tr");
     if (lap.lap === tableFastestLapNumber) {
@@ -3507,7 +3549,8 @@ function renderTable() {
     const currentComp = String(lap.current_tyre_compound).toUpperCase();
     if (
       index > 0 &&
-      (currentComp !== lastCompound || Number(currentData.lap_history[index - 1].pit_status) === 1)
+      (currentComp !== lastCompound ||
+        Number(currentData.lap_history[index - 1].pit_status) === 1)
     ) {
       row.classList.add("stint-boundary");
     }
@@ -3516,9 +3559,7 @@ function renderTable() {
     const rtCompKey = String(lap.current_tyre_compound).toUpperCase();
     const rtDotColor = COMPOUND_COLORS[rtCompKey] || "#888";
     const rtRgba = (hex, a) => {
-      const r = parseInt(hex.slice(1, 3), 16),
-        g = parseInt(hex.slice(3, 5), 16),
-        b = parseInt(hex.slice(5, 7), 16);
+      const r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
       return `rgba(${r},${g},${b},${a})`;
     };
     const rtCompoundBadge = `<span class="compound-badge" style="background:${rtRgba(rtDotColor, 0.12)};border-color:${rtRgba(rtDotColor, 0.45)};color:${rtDotColor}"><span class="compound-dot" style="background-color:${rtDotColor}"></span>${lap.current_tyre_compound}</span>`;
@@ -3607,7 +3648,8 @@ function renderStandingsTable() {
       const cat = (session.category || "").toLowerCase();
       const pos = parseInt(res.position);
       if (isDNF) pts = 0;
-      else if (cat === "race") pts = [0, 25, 18, 15, 12, 10, 8, 6, 4, 2, 1][pos] || 0;
+      else if (cat === "race")
+        pts = [0, 25, 18, 15, 12, 10, 8, 6, 4, 2, 1][pos] || 0;
       else if (cat === "sprint") pts = [0, 8, 7, 6, 5, 4, 3, 2, 1][pos] || 0;
       driversMap[driverName].points += pts;
     });
@@ -3657,11 +3699,14 @@ function renderStandingsTable() {
 
     // Calculate gap to the driver ahead
     const gap =
-      idx === 0 ? "—" : `−${Math.abs(driversMap[driverNames[idx - 1]].points - d.points)}`;
+      idx === 0
+        ? "—"
+        : `−${Math.abs(driversMap[driverNames[idx - 1]].points - d.points)}`;
 
     html += `<td class="col-pts pts-cell">${d.points}</td>`;
     html += `<td class="col-gap gap-cell">${gap}</td></tr>`;
   });
+
 
   html += `</tbody></table></div>`;
   // Build constructor standings based on assigned teams
@@ -3674,7 +3719,9 @@ function renderStandingsTable() {
       teamAgg[team].drivers.push(name);
     });
 
-    const teamNames = Object.keys(teamAgg).sort((a, b) => teamAgg[b].points - teamAgg[a].points); // Sort teams by points
+    const teamNames = Object.keys(teamAgg).sort(
+      (a, b) => teamAgg[b].points - teamAgg[a].points,
+    ); // Sort teams by points
 
     let constructorsHtml = `<div class="mt-5"><h3 class="mb-3" style="font-size: 1.1rem; color: #ddd; text-transform: uppercase; letter-spacing: 1px;">Constructor Standings</h3><div class="table-responsive constructor-table-container"><table class="table table-sm table-dark table-striped standings-table" style="font-size:0.75rem;"><thead><tr><th style="padding:12px 8px; width: 40px;" class="text-center">#</th><th style="padding:12px 8px; width: 160px;" class="text-start">Team</th><th style="padding:12px 8px;" class="text-start">Drivers</th><th style="padding:12px 8px; width: 70px;" class="text-end">Pts</th><th style="padding:12px 8px; width: 70px;" class="text-end">Gap</th></tr></thead><tbody>`;
 
@@ -3682,7 +3729,9 @@ function renderStandingsTable() {
       const info = teamAgg[t];
       const teamColor = TEAM_COLORS[t] || "#444";
       const gap =
-        idx === 0 ? "-" : `-${Math.abs(teamAgg[teamNames[idx - 1]].points - info.points)}`;
+        idx === 0
+          ? "-"
+          : `-${Math.abs(teamAgg[teamNames[idx - 1]].points - info.points)}`;
       constructorsHtml += `<tr class="standings-row"><td class="text-center" style="padding:10px 4px;">${idx + 1}</td><td class="text-start team-accent-cell" style="padding:10px 4px; white-space:nowrap; border-left: 4px solid ${teamColor} !important;"><strong>${t}</strong></td><td class="text-start" style="padding:10px 4px;">${info.drivers.map((d) => d.toUpperCase()).join(", ")}</td><td class="text-end" style="padding:10px 4px;"><strong>${info.points}</strong></td><td class="text-end" style="padding:10px 4px; color:#aaa;">${gap}</td></tr>`;
     });
 
@@ -3719,12 +3768,13 @@ function getTeamsForSeason(season) {
 
 function computeSeasonStandings(season) {
   const drivers = {};
-  const sessions = allSessions.filter(
-    (s) =>
-      s.season === season &&
-      ((s.category || "").toLowerCase() === "race" ||
-        (s.category || "").toLowerCase() === "sprint"),
-  );
+  const sessions = allSessions
+    .filter(
+      (s) =>
+        s.season === season &&
+        ((s.category || "").toLowerCase() === "race" ||
+          (s.category || "").toLowerCase() === "sprint"),
+    );
   sessions.forEach((session) => {
     const seen = new Set();
     const rsClass = session.race_story?.classification || [];
@@ -3737,8 +3787,7 @@ function computeSeasonStandings(season) {
     (session.results || []).forEach((res) => {
       const name = res.name;
       if (!name) return;
-      if (!drivers[name])
-        drivers[name] = { points: 0, wins: 0, podiums: 0, races: 0, fastest_laps: 0, dnfs: 0 };
+      if (!drivers[name]) drivers[name] = { points: 0, wins: 0, podiums: 0, races: 0, fastest_laps: 0, dnfs: 0 };
       const pos = parseInt(res.position);
       const cat = (session.category || "").toLowerCase();
       let pts = 0;
@@ -3765,22 +3814,21 @@ function computeSeasonStandings(season) {
       const name = (e.name || "").toUpperCase();
       if (!name || seen.has(name)) return;
       const isDNF = e.is_dnf || (e.status && !/FINISHED/i.test(e.status));
-      if (!drivers[name])
-        drivers[name] = { points: 0, wins: 0, podiums: 0, races: 0, fastest_laps: 0, dnfs: 0 };
+      if (!drivers[name]) drivers[name] = { points: 0, wins: 0, podiums: 0, races: 0, fastest_laps: 0, dnfs: 0 };
       drivers[name].races += 1;
       if ((session.category || "").toLowerCase() === "race" && isDNF) drivers[name].dnfs += 1;
       seen.add(name);
     });
     // Fastest lap credit (race only)
-    const flName = (session.race_story?.fastest_lap?.name || "").toUpperCase();
+    const flName = ((session.race_story?.fastest_lap?.name) || "").toUpperCase();
     if (flName && (session.category || "").toLowerCase() === "race") {
-      if (!drivers[flName])
-        drivers[flName] = { points: 0, wins: 0, podiums: 0, races: 0, fastest_laps: 0, dnfs: 0 };
+      if (!drivers[flName]) drivers[flName] = { points: 0, wins: 0, podiums: 0, races: 0, fastest_laps: 0, dnfs: 0 };
       drivers[flName].fastest_laps += 1;
     }
   });
   return drivers;
 }
+
 
 function renderRecordsTable() {
   const container = document.getElementById("records-container");
@@ -3806,17 +3854,7 @@ function renderRecordsTable() {
 
     Object.entries(standings).forEach(([name, s]) => {
       if (!driverAgg[name]) {
-        driverAgg[name] = {
-          points: 0,
-          wins: 0,
-          podiums: 0,
-          races: 0,
-          fastest_laps: 0,
-          dnfs: 0,
-          titles: 0,
-          seasons: new Set(),
-          lastTeam: null,
-        };
+        driverAgg[name] = { points: 0, wins: 0, podiums: 0, races: 0, fastest_laps: 0, dnfs: 0, titles: 0, seasons: new Set(), lastTeam: null };
       }
       driverAgg[name].points += s.points;
       driverAgg[name].wins += s.wins;
@@ -3827,6 +3865,7 @@ function renderRecordsTable() {
       driverAgg[name].seasons.add(season);
       if (teams[name]) driverAgg[name].lastTeam = teams[name];
     });
+
 
     // Driver champion of season
     const driverRanked = Object.entries(standings).sort((a, b) => b[1].points - a[1].points);
@@ -3848,15 +3887,7 @@ function renderRecordsTable() {
     Object.entries(teamSeason).forEach(([team, s]) => {
       if (team === "Unassigned") return;
       if (!teamAgg[team]) {
-        teamAgg[team] = {
-          points: 0,
-          wins: 0,
-          podiums: 0,
-          one_twos: 0,
-          front_row_lockouts: 0,
-          titles: 0,
-          seasons: new Set(),
-        };
+        teamAgg[team] = { points: 0, wins: 0, podiums: 0, one_twos: 0, front_row_lockouts: 0, titles: 0, seasons: new Set() };
       }
       teamAgg[team].points += s.points;
       teamAgg[team].wins += s.wins;
@@ -3889,15 +3920,7 @@ function renderRecordsTable() {
       const t2 = teams[p2.name] || null;
       if (!t1 || !t2 || t1 !== t2 || t1 === "Unassigned") return;
       if (!teamAgg[t1]) {
-        teamAgg[t1] = {
-          points: 0,
-          wins: 0,
-          podiums: 0,
-          one_twos: 0,
-          front_row_lockouts: 0,
-          titles: 0,
-          seasons: new Set(),
-        };
+        teamAgg[t1] = { points: 0, wins: 0, podiums: 0, one_twos: 0, front_row_lockouts: 0, titles: 0, seasons: new Set() };
       }
       if (isQuali) teamAgg[t1].front_row_lockouts = (teamAgg[t1].front_row_lockouts || 0) + 1;
       else teamAgg[t1].one_twos = (teamAgg[t1].one_twos || 0) + 1;
@@ -3924,10 +3947,9 @@ function renderRecordsTable() {
     .map(([name, d], idx) => {
       const team = d.lastTeam || "Unassigned";
       const color = TEAM_COLORS[team] || "#444";
-      const titleBadge =
-        d.titles > 0
-          ? `<span class="rec-title-badge" title="${d.titles} championship${d.titles > 1 ? "s" : ""}">★ ${d.titles}</span>`
-          : "";
+      const titleBadge = d.titles > 0
+        ? `<span class="rec-title-badge" title="${d.titles} championship${d.titles > 1 ? "s" : ""}">★ ${d.titles}</span>`
+        : "";
       return `<tr class="standings-row${idx === 0 ? " is-leader" : ""}">
         <td class="col-rank rank-cell"><span class="rank-num">${idx + 1}</span></td>
         <td class="col-driver driver-cell" style="--team-color:${color};">
@@ -3942,6 +3964,7 @@ function renderRecordsTable() {
         <td class="rec-num">${d.dnfs || 0}</td>
         <td class="rec-num">${d.seasons.size}</td>
       </tr>`;
+
     })
     .join("");
 
@@ -3949,10 +3972,9 @@ function renderRecordsTable() {
     .sort((a, b) => b[1].points - a[1].points)
     .map(([team, t], idx) => {
       const color = TEAM_COLORS[team] || "#444";
-      const titleBadge =
-        t.titles > 0
-          ? `<span class="rec-title-badge" title="${t.titles} constructor title${t.titles > 1 ? "s" : ""}">★ ${t.titles}</span>`
-          : "";
+      const titleBadge = t.titles > 0
+        ? `<span class="rec-title-badge" title="${t.titles} constructor title${t.titles > 1 ? "s" : ""}">★ ${t.titles}</span>`
+        : "";
       return `<tr class="standings-row${idx === 0 ? " is-leader" : ""}">
         <td class="col-rank rank-cell"><span class="rank-num">${idx + 1}</span></td>
         <td class="driver-cell" style="--team-color:${color};">
@@ -3975,7 +3997,7 @@ function renderRecordsTable() {
       const dChamp = driverChampions[season] || "—";
       const cChamp = constructorChampions[season] || "—";
       const isCurrent = season === currentMaxSeason;
-      const dColor = TEAM_COLORS[getTeamsForSeason(season)[dChamp] || ""] || "#444";
+      const dColor = TEAM_COLORS[(getTeamsForSeason(season)[dChamp]) || ""] || "#444";
       const cColor = TEAM_COLORS[cChamp] || "#444";
       return `<tr>
         <td class="rec-season">S${season}${isCurrent ? '<span class="rec-current">live</span>' : ""}</td>
@@ -4061,6 +4083,7 @@ function renderRecordsTable() {
     </div>
   `;
 }
+
 
 // Driver team assignment helpers
 function getDriverTeams() {
@@ -4222,7 +4245,8 @@ function renderDriverAssignments(driverNames) {
         const driver = card.getAttribute("data-driver");
         const sel = card.querySelector(".team-select");
         const custom = card.querySelector(".driver-team-custom");
-        let val = sel.value === "__custom__" ? (custom.value || "").trim() : sel.value;
+        let val =
+          sel.value === "__custom__" ? (custom.value || "").trim() : sel.value;
         if (val) teamsObj[driver] = val;
         else delete teamsObj[driver];
       });
@@ -4240,7 +4264,8 @@ function renderDriverAssignments(driverNames) {
         const driver = card.getAttribute("data-driver");
         const sel = card.querySelector(".team-select");
         const custom = card.querySelector(".driver-team-custom");
-        let val = sel.value === "__custom__" ? (custom.value || "").trim() : sel.value;
+        let val =
+          sel.value === "__custom__" ? (custom.value || "").trim() : sel.value;
         if (val) teamsObj[driver] = val;
         else delete teamsObj[driver];
       });
@@ -4353,7 +4378,8 @@ function secondsToTimeString(seconds) {
   const secondsFormatted = secs.toFixed(3);
   const secondsInt = Math.floor(secs);
   const secondsPadded =
-    String(secondsInt).padStart(2, "0") + secondsFormatted.substring(secondsFormatted.indexOf("."));
+    String(secondsInt).padStart(2, "0") +
+    secondsFormatted.substring(secondsFormatted.indexOf("."));
 
   return `${totalMinutes}:${secondsPadded}`;
 }
@@ -4368,15 +4394,7 @@ async function loadTrackNotes() {
   const client = getSupabaseClient({ silent: true });
   if (!client) return;
   try {
-    // Get current user to filter notes by user_id
-    const { data: authData } = await client.auth.getUser();
-    const uid = authData?.user?.id;
-    if (!uid) return; // Only load notes if user is authenticated
-
-    const { data, error } = await client
-      .from("track_notes")
-      .select("track_key, notes")
-      .eq("user_id", uid);
+    const { data, error } = await client.from("track_notes").select("track_key, notes");
     if (error) {
       console.warn("track_notes load failed", error);
       return;
@@ -4414,16 +4432,10 @@ async function saveTrackNote(trackKey, notes) {
   try {
     const { data: userData } = await client.auth.getUser();
     const uid = userData?.user?.id;
-    if (!uid) {
-      setNotesStatus("Sign in to save notes", true);
-      return;
-    }
+    if (!uid) { setNotesStatus("Sign in to save notes", true); return; }
     const { error } = await client
       .from("track_notes")
-      .upsert(
-        { track_key: trackKey, notes, updated_at: new Date().toISOString(), user_id: uid },
-        { onConflict: "track_key" },
-      );
+      .upsert({ track_key: trackKey, notes, updated_at: new Date().toISOString(), user_id: uid }, { onConflict: "track_key" });
     if (error) {
       console.error("track_notes save failed", error);
       setNotesStatus("Save failed: " + (error.message || "unknown"), true);
@@ -4443,8 +4455,7 @@ function renderNotesGrid() {
   if (!grid) return;
   if (grid.dataset.rendered === "1") return;
   grid.dataset.rendered = "1";
-  grid.innerHTML = NOTES_TRACKS.map(
-    (t, i) => `
+  grid.innerHTML = NOTES_TRACKS.map((t, i) => `
     <div class="note-card">
       <div class="note-head">
         <span class="note-round">R${String(i + 1).padStart(2, "0")}</span>
@@ -4457,8 +4468,7 @@ function renderNotesGrid() {
         placeholder="Setup notes, braking points, tyre strategy, reminders…"
       >${(trackNotesCache[t.key] || "").replace(/</g, "&lt;")}</textarea>
     </div>
-  `,
-  ).join("");
+  `).join("");
 
   grid.querySelectorAll("textarea.note-textarea").forEach((ta) => {
     ta.addEventListener("input", () => {
@@ -4485,10 +4495,16 @@ function renderNotesGrid() {
 }
 
 function initCollapsibleSections() {
+
+
   try {
     const tabContainer = document.querySelector(".collapsible-tabs");
-    const tabs = Array.from(document.querySelectorAll(".section-tab[data-target]"));
-    const sections = Array.from(document.querySelectorAll(".collapsible-section"));
+    const tabs = Array.from(
+      document.querySelectorAll(".section-tab[data-target]"),
+    );
+    const sections = Array.from(
+      document.querySelectorAll(".collapsible-section"),
+    );
     const activeKey = "active_collapsible_section";
     const orderKey = "collapsible_tab_order_v1";
     const storedActive = localStorage.getItem(activeKey);
@@ -4515,6 +4531,7 @@ function initCollapsibleSections() {
       if (targetId === "section-notes") renderNotesGrid();
     }
 
+
     tabs.forEach((tab) => {
       const targetId = tab.dataset.target;
       tab.addEventListener("click", (e) => {
@@ -4530,16 +4547,18 @@ function initCollapsibleSections() {
     if (tabContainer) {
       enableDragReorder(tabContainer, ".section-tab[data-target]", {
         onReorder: () => {
-          const order = Array.from(tabContainer.querySelectorAll(".section-tab[data-target]")).map(
-            (t) => t.dataset.target,
-          );
+          const order = Array.from(
+            tabContainer.querySelectorAll(".section-tab[data-target]"),
+          ).map((t) => t.dataset.target);
           localStorage.setItem(orderKey, JSON.stringify(order));
         },
       });
     }
 
     const defaultSection =
-      storedActive && document.getElementById(storedActive) ? storedActive : "section-standings";
+      storedActive && document.getElementById(storedActive)
+        ? storedActive
+        : "section-standings";
     activateSection(defaultSection);
   } catch (err) {
     console.warn("initCollapsibleSections failed", err);
@@ -4593,6 +4612,8 @@ function enableTableRowReorder(_tableSelector) {
   /* no-op */
 }
 
+
+
 // ============================================================
 //  Race Story (player-focused) — position, overtakes, stints, speed traps
 // ============================================================
@@ -4607,9 +4628,7 @@ const COMPOUND_FILL = {
 
 function normalizeTeamName(t) {
   if (!t) return "";
-  let s = String(t)
-    .replace(/['’]?\d{2,4}$/, "")
-    .trim();
+  let s = String(t).replace(/['’]?\d{2,4}$/, "").trim();
   s = s.replace(/_/g, " ").toLowerCase();
   if (s === "my team" || s === "myteam") return "My Team";
   // capitalize words
@@ -4637,8 +4656,13 @@ function renderRaceStory() {
   wrap.style.display = "block";
 
   // Backfill lap 0 (grid position) for sessions saved before lap-0 support.
-  const startPos = currentData.starting_position ?? currentData.starting_pos ?? null;
-  if (startPos && rs.position_history.length && rs.position_history[0].lap !== 0) {
+  const startPos =
+    currentData.starting_position ?? currentData.starting_pos ?? null;
+  if (
+    startPos &&
+    rs.position_history.length &&
+    rs.position_history[0].lap !== 0
+  ) {
     rs.position_history.unshift({ lap: 0, position: Number(startPos) });
   }
   (rs.podium || []).forEach((p) => {
@@ -4684,6 +4708,7 @@ function renderRaceStory() {
   renderCompareTab();
 }
 
+
 function renderFinalClassification(rs) {
   const el = document.getElementById("finalClassification");
   if (!el) return;
@@ -4697,7 +4722,9 @@ function renderFinalClassification(rs) {
   const finishers = rawList
     .filter((e) => !isDnfEntry(e))
     .sort((a, b) => (parseInt(a.position) || 999) - (parseInt(b.position) || 999));
-  const dnfs = rawList.filter(isDnfEntry).sort((a, b) => (b.laps || 0) - (a.laps || 0));
+  const dnfs = rawList
+    .filter(isDnfEntry)
+    .sort((a, b) => (b.laps || 0) - (a.laps || 0));
   const list = [...finishers, ...dnfs];
   const fl = rs.fastest_lap;
   const flName = fl ? (fl.name || "").toUpperCase() : "";
@@ -4741,7 +4768,8 @@ function renderFinalClassification(rs) {
       }
       const color = teamColorFor(e.team) || "#444";
       const pos = e.position;
-      const posClass = dnf ? "dnf" : pos === 1 ? "p1" : pos === 2 ? "p2" : pos === 3 ? "p3" : "";
+      const posClass =
+        dnf ? "dnf" : pos === 1 ? "p1" : pos === 2 ? "p2" : pos === 3 ? "p3" : "";
       const posLabel = dnf ? "DNF" : pos;
       return `<tr class="fc-row${isPlayer ? " is-player" : ""}${isFL ? " is-fl" : ""}${dnf ? " is-dnf" : ""}" style="--team-color:${color};">
         <td class="fc-pos"><span class="fc-pos-pill ${posClass}">${posLabel}</span></td>
@@ -4750,7 +4778,7 @@ function renderFinalClassification(rs) {
           <span class="fc-team">${e.team}</span>
         </td>
         <td class="fc-laps">${e.laps}</td>
-        <td class="fc-time">${e.time_str || (dnf ? e.status || "—" : "—")}</td>
+        <td class="fc-time">${e.time_str || (dnf ? (e.status || "—") : "—")}</td>
         <td class="fc-gap">${gapLeader}</td>
         <td class="fc-gap">${gapNext}</td>
         <td class="fc-best">${e.best_lap_str || "—"}</td>
@@ -4767,6 +4795,7 @@ function renderFinalClassification(rs) {
         ${fl.lap_time_str ? `<span class="fc-fl-time">${fl.lap_time_str}</span>` : ""}
         ${fl.lap ? `<span class="fc-fl-meta">Lap ${fl.lap}</span>` : ""}
       </div>`
+
     : "";
 
   el.innerHTML = `
@@ -4877,8 +4906,12 @@ function renderOvertakesChart(rs) {
     1,
   );
   const labels = Array.from({ length: lapMax }, (_, i) => i + 1);
-  const made = labels.map((l) => rs.overtakes_made.filter((o) => o.lap === l).length);
-  const suffered = labels.map((l) => -rs.overtakes_suffered.filter((o) => o.lap === l).length);
+  const made = labels.map(
+    (l) => rs.overtakes_made.filter((o) => o.lap === l).length,
+  );
+  const suffered = labels.map(
+    (l) => -rs.overtakes_suffered.filter((o) => o.lap === l).length,
+  );
 
   charts.overtakesChart = new Chart(ctx.getContext("2d"), {
     type: "bar",
@@ -4972,8 +5005,9 @@ function renderStintStrip() {
   const totalLaps = stints[stints.length - 1]["end-lap"] || 1;
   el.innerHTML = stints
     .map((s, i) => {
-      const compound = s["tyre-set-data"]?.["visual-tyre-compound"] || "Medium";
-      const len = ((s["end-lap"] - s["start-lap"] + 1) / totalLaps) * 100;
+      const compound =
+        s["tyre-set-data"]?.["visual-tyre-compound"] || "Medium";
+      const len = (s["end-lap"] - s["start-lap"] + 1) / totalLaps * 100;
       const color = COMPOUND_FILL[compound] || "#888";
       return `<div class="stint-block" style="flex-basis:${len}%;background:${color};color:${compound === "Hard" || compound === "Medium" ? "#111" : "#fff"}" title="Stint ${i + 1}: ${compound} (L${s["start-lap"]}–L${s["end-lap"]})">
         <span class="stint-compound">${compound}</span>
@@ -5041,19 +5075,12 @@ function renderDamageSection() {
   const active = components.filter(([k]) => laps.some((l) => (l.damage[k] || 0) > 0));
   const finalLap = laps[laps.length - 1];
   const finals = components.map(([k, label, c]) => ({
-    key: k,
-    label,
-    color: c,
-    value: finalLap.damage[k] || 0,
+    key: k, label, color: c, value: finalLap.damage[k] || 0,
   }));
   const pills = finals
-    .map(
-      (
-        f,
-      ) => `<span class="damage-pill" style="border-color:${f.color};color:${f.value > 0 ? f.color : "var(--secondary-text)"}">
+    .map((f) => `<span class="damage-pill" style="border-color:${f.color};color:${f.value > 0 ? f.color : "var(--secondary-text)"}">
       <b>${f.label}</b> ${f.value}%
-    </span>`,
-    )
+    </span>`)
     .join("");
   let chartWrap = "";
   if (active.length) {
@@ -5067,18 +5094,12 @@ function renderDamageSection() {
   const ersLaps = laps.filter((l) => l.damage.ers_fault).map((l) => l.lap);
   const faultPills = [];
   if (drsLaps.length) {
-    faultPills.push(
-      `<span class="damage-pill" style="border-color:#e10600;color:#e10600" title="Active Aero fault (wing did not open/close) on laps: ${drsLaps.join(", ")}"><b>⚠ Active Aero Fault</b> laps ${drsLaps[0]}${drsLaps.length > 1 ? "–" + drsLaps[drsLaps.length - 1] : ""}</span>`,
-    );
+    faultPills.push(`<span class="damage-pill" style="border-color:#e10600;color:#e10600" title="Active Aero fault (wing did not open/close) on laps: ${drsLaps.join(", ")}"><b>⚠ Active Aero Fault</b> laps ${drsLaps[0]}${drsLaps.length > 1 ? "–" + drsLaps[drsLaps.length - 1] : ""}</span>`);
   }
   if (ersLaps.length) {
-    faultPills.push(
-      `<span class="damage-pill" style="border-color:#f4d03f;color:#f4d03f" title="ERS fault on laps: ${ersLaps.join(", ")}"><b>⚠ ERS Fault</b> laps ${ersLaps[0]}${ersLaps.length > 1 ? "–" + ersLaps[ersLaps.length - 1] : ""}</span>`,
-    );
+    faultPills.push(`<span class="damage-pill" style="border-color:#f4d03f;color:#f4d03f" title="ERS fault on laps: ${ersLaps.join(", ")}"><b>⚠ ERS Fault</b> laps ${ersLaps[0]}${ersLaps.length > 1 ? "–" + ersLaps[ersLaps.length - 1] : ""}</span>`);
   }
-  const faultsHtml = faultPills.length
-    ? `<div class="damage-pills" style="margin-bottom:8px">${faultPills.join("")}</div>`
-    : "";
+  const faultsHtml = faultPills.length ? `<div class="damage-pills" style="margin-bottom:8px">${faultPills.join("")}</div>` : "";
   el.innerHTML = `${faultsHtml}<div class="damage-pills">${pills}</div>${chartWrap}`;
   if (active.length) {
     const ctx = document.getElementById("damageChart");
@@ -5200,19 +5221,13 @@ function renderCompareCharts(playerEntry, opponentName) {
       type: "bar",
       data: {
         labels,
-        datasets: [
-          {
-            label: "Delta (s) — negative = you were faster",
-            data: deltas,
-            backgroundColor: deltas.map((d) =>
-              d === null
-                ? "rgba(120,120,120,0.3)"
-                : d < 0
-                  ? "rgba(46,204,113,0.85)"
-                  : "rgba(225,6,0,0.85)",
-            ),
-          },
-        ],
+        datasets: [{
+          label: "Delta (s) — negative = you were faster",
+          data: deltas,
+          backgroundColor: deltas.map((d) =>
+            d === null ? "rgba(120,120,120,0.3)" : d < 0 ? "rgba(46,204,113,0.85)" : "rgba(225,6,0,0.85)"
+          ),
+        }],
       },
       options: {
         responsive: true,
@@ -5312,7 +5327,9 @@ function renderPaceDeltaChart() {
 
   const labels = rs.pace_delta.map((p) => p.lap);
   const data = rs.pace_delta.map((p) => +(p.delta_ms / 1000).toFixed(3));
-  const colors = data.map((v) => (v < 0 ? "rgba(46, 204, 113, 0.85)" : "rgba(225, 6, 0, 0.85)"));
+  const colors = data.map((v) =>
+    v < 0 ? "rgba(46, 204, 113, 0.85)" : "rgba(225, 6, 0, 0.85)",
+  );
 
   charts.paceDeltaChart = new Chart(ctx.getContext("2d"), {
     type: "bar",
@@ -5336,7 +5353,8 @@ function renderPaceDeltaChart() {
         pitLines: { laps: getPlayerPitLaps() },
         tooltip: {
           callbacks: {
-            label: (c) => `${c.parsed.y > 0 ? "+" : ""}${c.parsed.y.toFixed(3)} s vs median`,
+            label: (c) =>
+              `${c.parsed.y > 0 ? "+" : ""}${c.parsed.y.toFixed(3)} s vs median`,
           },
         },
       },
@@ -5346,7 +5364,9 @@ function renderPaceDeltaChart() {
           title: { display: true, text: "Δ seconds (− = faster)" },
           grid: {
             color: (ctx) =>
-              ctx.tick.value === 0 ? "rgba(255,255,255,0.5)" : "rgba(255,255,255,0.08)",
+              ctx.tick.value === 0
+                ? "rgba(255,255,255,0.5)"
+                : "rgba(255,255,255,0.08)",
           },
         },
       },
@@ -5392,13 +5412,7 @@ function renderPaceDeltaChart() {
     if (!t) return;
     if (tipEl) tipEl.classList.remove("show");
   });
-  window.addEventListener(
-    "scroll",
-    () => {
-      if (tipEl) tipEl.classList.remove("show");
-    },
-    true,
-  );
+  window.addEventListener("scroll", () => { if (tipEl) tipEl.classList.remove("show"); }, true);
 })();
 
 // Sidebar collapse toggle + mobile drawer behavior
@@ -5414,29 +5428,19 @@ function renderPaceDeltaChart() {
     } else {
       document.body.classList.remove("sidebar-drawer-open");
     }
-    try {
-      localStorage.setItem("sidebarCollapsed", collapsed ? "1" : "0");
-    } catch (e) {}
+    try { localStorage.setItem("sidebarCollapsed", collapsed ? "1" : "0"); } catch (e) {}
   };
 
   const closeDrawer = () => apply(true);
 
   document.addEventListener("DOMContentLoaded", () => {
     // On mobile, always start with the drawer closed regardless of prior state
-    const stored = (() => {
-      try {
-        return localStorage.getItem("sidebarCollapsed") === "1";
-      } catch (e) {
-        return false;
-      }
-    })();
+    const stored = (() => { try { return localStorage.getItem("sidebarCollapsed") === "1"; } catch (e) { return false; }})();
     const initial = isMobile() ? true : stored;
     apply(initial);
 
     document.getElementById("sidebarToggle")?.addEventListener("click", () => {
-      const collapsed = !document
-        .getElementById("appShell")
-        ?.classList.contains("sidebar-collapsed");
+      const collapsed = !document.getElementById("appShell")?.classList.contains("sidebar-collapsed");
       apply(collapsed);
     });
     document.getElementById("sidebarExpand")?.addEventListener("click", () => apply(false));
@@ -5444,8 +5448,7 @@ function renderPaceDeltaChart() {
 
     // Close drawer on Escape
     document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && document.body.classList.contains("sidebar-drawer-open"))
-        closeDrawer();
+      if (e.key === "Escape" && document.body.classList.contains("sidebar-drawer-open")) closeDrawer();
     });
 
     // On mobile: tapping a session row or season box should close the drawer
@@ -5488,3 +5491,4 @@ function renderPaceDeltaChart() {
     });
   });
 })();
+
