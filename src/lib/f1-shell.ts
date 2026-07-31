@@ -34,7 +34,12 @@ export function setSavedSeason(n: number) {
 }
 
 const CACHE_KEY = "f1.sessions.cache.v1";
-const CACHE_TTL_MS = 5 * 60 * 1000;
+const CACHE_TTL_MS = 15 * 1000;
+
+export function clearSessionsCache() {
+  if (typeof window === "undefined") return;
+  try { window.localStorage.removeItem(CACHE_KEY); } catch {}
+}
 
 export function loadCachedSessions(): Session[] | null {
   if (typeof window === "undefined") return null;
@@ -61,7 +66,7 @@ export function cacheIsFresh(): boolean {
   } catch { return false; }
 }
 
-async function currentAccessToken(): Promise<string | null> {
+export async function currentAccessToken(): Promise<string | null> {
   if (typeof window === "undefined") return null;
   try {
     const raw = window.localStorage.getItem("sb-kbjjtiajugxvhoboqxwb-auth-token");
@@ -155,7 +160,7 @@ export function appManageUrl() {
 const TRACK_FLAGS: Record<string, string> = {
   melbourne: "🇦🇺", shanghai: "🇨🇳", suzuka: "🇯🇵", sakhir: "🇧🇭",
   jeddah: "🇸🇦", miami: "🇺🇸", imola: "🇮🇹", monaco: "🇲🇨",
-  catalunya: "🇪🇸", montreal: "🇨🇦", austria: "🇦🇹", silverstone: "🇬🇧",
+  catalunya: "🇪🇸", montreal: "🇨🇦", austria: "🇦🇹", austria_reverse: "🇦🇹", silverstone: "🇬🇧",
   spa: "🇧🇪", hungaroring: "🇭🇺", zandvoort: "🇳🇱", monza: "🇮🇹",
   madrid: "🇪🇸", baku: "🇦🇿", singapore: "🇸🇬", texas: "🇺🇸",
   austin: "🇺🇸", mexico: "🇲🇽", mexico_city: "🇲🇽", interlagos: "🇧🇷",

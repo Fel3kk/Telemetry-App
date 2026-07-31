@@ -267,6 +267,7 @@ const F1_2026_CALENDAR = [
   "montreal",
   "monaco",
   "catalunya",
+  "austria_reverse",
   "austria",
   "silverstone",
   "spa",
@@ -296,6 +297,7 @@ const NOTES_TRACKS = [
   { key: "monaco", label: "Monaco", flag: "🇲🇨" },
   { key: "montreal", label: "Montreal", flag: "🇨🇦" },
   { key: "catalunya", label: "Catalunya", flag: "🇪🇸" },
+  { key: "austria_reverse", label: "Red Bull Ring (Reverse)", flag: "🇦🇹" },
   { key: "austria", label: "Red Bull Ring", flag: "🇦🇹" },
   { key: "silverstone", label: "Silverstone", flag: "🇬🇧" },
   { key: "spa", label: "Spa", flag: "🇧🇪" },
@@ -1280,6 +1282,11 @@ async function saveSessions(sessions) {
 
   if (error) throw error;
   await loadSavedSessions();
+  try {
+    if (window.parent && window.parent !== window) {
+      window.parent.postMessage({ type: "f1-sessions-updated", reason: "upload" }, "*");
+    }
+  } catch (e) { /* ignore */ }
 }
 
 // Compute Win / Pole / Fastest-lap / Grand-slam flags for a saved session
@@ -1368,6 +1375,11 @@ async function deleteSession(id, event) {
 
     if (error) throw error;
     await loadSavedSessions();
+    try {
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ type: "f1-sessions-updated", reason: "delete" }, "*");
+      }
+    } catch (e) { /* ignore */ }
   } catch (err) {
     console.error("Error deleting session", err);
     alert("Failed to delete session.");
@@ -1445,54 +1457,122 @@ function renderSavedSessions(sessions) {
     </div>
   `;
 
-  // Build flat list of sessions for the active season, sorted newest first
-  const displaySessions = sessions
+  // Build one row per (track, weekend-bucket). Practice/Quali/Shootout
+  // fold into either the Race or Sprint row for the same track rather than
+  // appearing as their own entries.
+  const seasonAll = sessions
     .filter((s) => s.season === currentSeason)
-    .filter((s) => s.category !== "Qualifying" && s.category !== "Sprint Shootout")
     .slice()
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
-  const catLabel = (c) => {
-    if (!c) return "";
-    if (c === "Sprint Shootout") return "SHOOTOUT";
-    return c.toUpperCase();
+  const bucketFor = (c) => {
+    const x = (c || "").toLowerCase();
+    if (x === "sprint" || x === "sprint qualifying" || x === "sprint shootout") return "Sprint";
+    return "Race";
+  };
+  const priority = (c) => {
+    const x = (c || "").toLowerCase();
+    if (x === "race") return 0;
+    if (x === "sprint") return 1;
+    if (x === "qualifying") return 2;
+    if (x === "sprint shootout" || x === "sprint qualifying") return 3;
+    if (x === "practice") return 4;
+    return 5;
   };
 
-  displaySessions.forEach((session) => {
-    const trackKey = (session.track_name || "").toLowerCase();
+  const groups = new Map();
+  for (const s of seasonAll) {
+    const trackKey = (s.track_name || "").toLowerCase();
+    const bucket = bucketFor(s.category);
+    const key = `${trackKey}::${bucket}`;
+    let g = groups.get(key);
+    if (!g) {
+      g = { track_name: s.track_name, bucket, sessions: [], rep: s };
+      groups.set(key, g);
+    }
+    g.sessions.push(s);
+    if (priority(s.category) < priority(g.rep.category)) g.rep = s;
+    else if (
+      priority(s.category) === priority(g.rep.category) &&
+      new Date(s.created_at) > new Date(g.rep.created_at)
+    ) g.rep = s;
+  }
+
+  const displayGroups = Array.from(groups.values()).sort(
+    (a, b) => new Date(b.rep.created_at) - new Date(a.rep.created_at),
+  );
+
+  displayGroups.forEach((group) => {
+    const rep = group.rep;
+    const trackKey = (group.track_name || "").toLowerCase();
     const flag = trackToFlag[trackKey] || "🏁";
-    const weatherIcon = determineWeatherIcon(session);
-    const badges = getSessionBadges(session);
+    const weatherIcon = determineWeatherIcon(rep);
+    // Aggregate badges across every session in the weekend.
+    const agg = { grandSlam: false, win: false, pole: false, fl: false };
+    group.sessions.forEach((s) => {
+      const b = getSessionBadges(s);
+      if (b.grandSlam) agg.grandSlam = true;
+      if (b.win) agg.win = true;
+      if (b.pole) agg.pole = true;
+      if (b.fl) agg.fl = true;
+    });
     const badgeHtml = [
-      badges.grandSlam ? '<span class="result-tag mini tag-gs" title="Grand Slam">GS</span>' : "",
-      badges.win ? '<span class="result-tag mini tag-w" title="Win">W</span>' : "",
-      badges.pole ? '<span class="result-tag mini tag-p" title="Pole">P</span>' : "",
-      badges.fl ? '<span class="result-tag mini tag-fl" title="Fastest Lap">FL</span>' : "",
+      agg.grandSlam ? '<span class="result-tag mini tag-gs" title="Grand Slam">GS</span>' : "",
+      agg.win ? '<span class="result-tag mini tag-w" title="Win">W</span>' : "",
+      agg.pole ? '<span class="result-tag mini tag-p" title="Pole">P</span>' : "",
+      agg.fl ? '<span class="result-tag mini tag-fl" title="Fastest Lap">FL</span>' : "",
     ].join("");
 
+    // Small chips showing which session types are uploaded for this weekend.
+    const seen = new Set();
+    const chips = group.sessions
+      .map((s) => {
+        const c = (s.category || "").toLowerCase();
+        let short = "";
+        if (c === "race") short = "R";
+        else if (c === "sprint") short = "S";
+        else if (c === "qualifying") short = "Q";
+        else if (c === "sprint shootout" || c === "sprint qualifying") short = "SQ";
+        else if (c === "practice") short = "P";
+        else short = (s.category || "?")[0];
+        if (seen.has(short)) return "";
+        seen.add(short);
+        return `<span class="sr-chip">${short}</span>`;
+      })
+      .join("");
+
+    const isActive =
+      currentData && group.sessions.some((s) => s.id === currentData.id);
+
     const card = document.createElement("div");
-    card.className = `session-row ${currentData && currentData.id === session.id ? "active" : ""}`;
+    card.className = `session-row ${isActive ? "active" : ""}`;
     card.innerHTML = `
-      <button class="delete-btn" title="Delete">🗑️</button>
+      <button class="delete-btn" title="Delete weekend">🗑️</button>
       <div class="sr-left">
         <div class="sr-track">
           <span class="flag-icon">${flag}</span>
-          <span class="sr-track-name">${session.track_name || "Unknown"}</span>
+          <span class="sr-track-name">${group.track_name || "Unknown"}</span>
         </div>
       </div>
       <div class="sr-right">
-        <span class="sr-cat">🏁 ${catLabel(session.category)}</span>
+        <span class="sr-cat">🏁 ${group.bucket.toUpperCase()}</span>
+        <span class="sr-chips">${chips}</span>
         <span class="sr-weather">${weatherIcon}</span>
         ${badgeHtml}
       </div>
     `;
 
-    card.querySelector(".delete-btn").onclick = (e) =>
-      deleteSession(session.id, e);
+    card.querySelector(".delete-btn").onclick = async (e) => {
+      e.stopPropagation();
+      if (!confirm(`Delete every uploaded session for ${group.track_name} (${group.bucket})?`)) return;
+      for (const s of group.sessions) {
+        try { await deleteSession(s.id, e); } catch {}
+      }
+    };
 
     card.addEventListener("click", (e) => {
       if (e.target.closest(".delete-btn")) return;
-      currentData = session;
+      currentData = rep;
       renderContent();
       renderSavedSessions(allSessions);
     });

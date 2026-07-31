@@ -107,6 +107,8 @@ function TrackPage() {
     return () => clearTimeout(id);
   }, [notes, seasonN, track]);
 
+  const notesTemplate = `SOFTS:\n\nMEDIUMS:\n\nHARDS:\n\nBATTERY MANAGEMENT:\n\nFUEL:\n\nSETUP:\n`;
+
   const [imgOk, setImgOk] = useState(true);
   const [imgSrc, setImgSrc] = useState<string>("");
   const triedFallback = useMemo(() => ({ v: false }), [canonicalName]);
@@ -157,12 +159,23 @@ function TrackPage() {
               {badgeAgg.fl && <Tag color="#a855f7">Fastest Lap</Tag>}
             </div>
             <p className="mb-4 text-sm text-white/70">{infoSummary}</p>
-            <label className="mb-1 block text-xs uppercase tracking-widest text-white/50">Notes</label>
+            <div className="mb-1 flex items-center justify-between">
+              <label className="block text-xs uppercase tracking-widest text-white/50">Notes</label>
+              {!notes && (
+                <button
+                  type="button"
+                  onClick={() => setNotes(notesTemplate)}
+                  className="text-[11px] font-semibold uppercase tracking-wider text-red-400 hover:text-red-300"
+                >
+                  Insert template
+                </button>
+              )}
+            </div>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Setup notes, strategy ideas, quali splits…"
-              className="min-h-[120px] w-full rounded-md border border-white/10 bg-white/[0.03] p-3 text-sm text-white outline-none focus:border-red-500/60"
+              placeholder={notesTemplate}
+              className="min-h-[180px] w-full whitespace-pre-wrap rounded-md border border-white/10 bg-white/[0.03] p-3 font-mono text-sm leading-relaxed text-white outline-none focus:border-red-500/60"
             />
           </div>
           <div className="overflow-hidden rounded-lg border border-white/10 bg-black/40">

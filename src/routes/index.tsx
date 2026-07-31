@@ -44,13 +44,19 @@ function MainPage() {
 
   useEffect(() => {
     let cancelled = false;
-    if (cacheIsFresh() && cached) { setLoading(false); return; }
-    setLoading(sessions.length === 0);
-    fetchSessions()
-      .then((rows) => { if (!cancelled) setSessions(rows); })
-      .catch((e) => { if (!cancelled) setErr(String(e)); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+    const refetch = () => {
+      setLoading(sessions.length === 0);
+      fetchSessions()
+        .then((rows) => { if (!cancelled) setSessions(rows); })
+        .catch((e) => { if (!cancelled) setErr(String(e)); })
+        .finally(() => { if (!cancelled) setLoading(false); });
+    };
+    refetch();
+    const onMsg = (ev: MessageEvent) => {
+      if (ev?.data?.type === "f1-sessions-updated") refetch();
+    };
+    window.addEventListener("message", onMsg);
+    return () => { cancelled = true; window.removeEventListener("message", onMsg); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

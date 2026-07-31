@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { SUPABASE_URL, SUPABASE_ANON_KEY, titleCaseTrack } from "@/lib/f1-shell";
+import { SUPABASE_URL, SUPABASE_ANON_KEY, titleCaseTrack, currentAccessToken } from "@/lib/f1-shell";
 import { ShellHeader, ShellPage } from "@/components/f1/ShellHeader";
 
 export const Route = createFileRoute("/season/$season/teammate")({
@@ -21,8 +21,12 @@ type FullSession = {
 type Team = { driver_name: string; team: string };
 
 async function sbFetch<T>(path: string): Promise<T> {
+  const token = await currentAccessToken();
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
-    headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${token || SUPABASE_ANON_KEY}`,
+    },
   });
   if (!res.ok) throw new Error(`Fetch failed (${res.status})`);
   return res.json();
