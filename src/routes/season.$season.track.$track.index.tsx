@@ -11,6 +11,7 @@ import {
   badgesFor,
   type Session,
 } from "@/lib/f1-shell";
+import { supabase } from "@/lib/supabase";
 import { ShellHeader, ShellPage } from "@/components/f1/ShellHeader";
 
 export const Route = createFileRoute("/season/$season/track/$track/")({
@@ -20,16 +21,41 @@ export const Route = createFileRoute("/season/$season/track/$track/")({
 type Opt = { view: string; label: string; icon: string; desc: string };
 
 const OPTIONS: Opt[] = [
-  { view: "standings",   label: "Standings",        icon: "🏆", desc: "Full season table for the championship" },
-  { view: "records",     label: "All-Time Records", icon: "📚", desc: "Career points, wins, podiums, DOTD" },
-  { view: "quali-results", label: "Qualifying",     icon: "⏱️", desc: "Q1–Q3 / shootout times" },
-  { view: "assignments", label: "Teams",            icon: "🏎️", desc: "Driver / constructor pairings" },
-  { view: "race-story",  label: "Race Story",       icon: "🎬", desc: "Position changes, stints, classification" },
-  { view: "compare",     label: "Compare Lap Times", icon: "🆚", desc: "Compare your lap times against any driver" },
-  { view: "graphs",      label: "Graphs",           icon: "📊", desc: "Lap times, fuel, ERS, tyre wear + faults" },
-  { view: "data",        label: "Laps",             icon: "📋", desc: "Per-lap table and stint summary" },
-  { view: "practice",    label: "Practice",         icon: "🏁", desc: "Free practice fuel calculator" },
-  { view: "teammate",    label: "Teammate H2H",     icon: "🤝", desc: "Every team's driver comparison this season" },
+  {
+    view: "standings",
+    label: "Standings",
+    icon: "🏆",
+    desc: "Full season table for the championship",
+  },
+  {
+    view: "records",
+    label: "All-Time Records",
+    icon: "📚",
+    desc: "Career points, wins, podiums, DOTD",
+  },
+  { view: "quali-results", label: "Qualifying", icon: "⏱️", desc: "Q1–Q3 / shootout times" },
+  { view: "assignments", label: "Teams", icon: "🏎️", desc: "Driver / constructor pairings" },
+  {
+    view: "race-story",
+    label: "Race Story",
+    icon: "🎬",
+    desc: "Position changes, stints, classification",
+  },
+  {
+    view: "compare",
+    label: "Compare Lap Times",
+    icon: "🆚",
+    desc: "Compare your lap times against any driver",
+  },
+  { view: "graphs", label: "Graphs", icon: "📊", desc: "Lap times, fuel, ERS, tyre wear + faults" },
+  { view: "data", label: "Laps", icon: "📋", desc: "Per-lap table and stint summary" },
+  { view: "practice", label: "Practice", icon: "🏁", desc: "Free practice fuel calculator" },
+  {
+    view: "teammate",
+    label: "Teammate H2H",
+    icon: "🤝",
+    desc: "Every team's driver comparison this season",
+  },
 ];
 
 function matchesCat(s: Session, bucket: string | undefined) {
@@ -37,7 +63,8 @@ function matchesCat(s: Session, bucket: string | undefined) {
   // Practice always surfaces alongside the race weekend regardless of cat filter.
   if (c === "Practice") return true;
   if (!bucket) return true;
-  if (bucket === "Sprint") return c === "Sprint" || c === "Sprint Qualifying" || c === "Sprint Shootout";
+  if (bucket === "Sprint")
+    return c === "Sprint" || c === "Sprint Qualifying" || c === "Sprint Shootout";
   return c !== "Sprint" && c !== "Sprint Qualifying" && c !== "Sprint Shootout";
 }
 
@@ -54,7 +81,9 @@ function TrackPage() {
   useEffect(() => {
     const cached = loadCachedSessions();
     if (cached) setSessions(cached);
-    fetchSessions(seasonN).then(setSessions).catch(() => {});
+    fetchSessions(seasonN)
+      .then(setSessions)
+      .catch(() => {});
   }, [seasonN]);
 
   // Load persisted ordering
@@ -65,22 +94,28 @@ function TrackPage() {
       if (raw) {
         const saved: string[] = JSON.parse(raw);
         const known = OPTIONS.map((o) => o.view);
-        const merged = [...saved.filter((v) => known.includes(v)), ...known.filter((v) => !saved.includes(v))];
+        const merged = [
+          ...saved.filter((v) => known.includes(v)),
+          ...known.filter((v) => !saved.includes(v)),
+        ];
         setOrder(merged);
       }
     } catch {}
   }, []);
   useEffect(() => {
-    try { localStorage.setItem(`f1.track.order.v1`, JSON.stringify(order)); } catch {}
+    try {
+      localStorage.setItem(`f1.track.order.v1`, JSON.stringify(order));
+    } catch {}
   }, [order]);
 
   const trackSessions = useMemo(
-    () => sessions.filter(
-      (s) =>
-        Number(s.season) === seasonN &&
-        trackSlug(s.track_name) === trackSlug(track) &&
-        matchesCat(s, cat),
-    ),
+    () =>
+      sessions.filter(
+        (s) =>
+          Number(s.season) === seasonN &&
+          trackSlug(s.track_name) === trackSlug(track) &&
+          matchesCat(s, cat),
+      ),
     [sessions, track, seasonN, cat],
   );
   const canonicalName = trackSessions[0]?.track_name ?? track;
@@ -94,25 +129,87 @@ function TrackPage() {
   const badgeAgg: Record<string, boolean> = {};
   trackSessions.forEach((s) => {
     const b = badgesFor(s);
-    Object.entries(b).forEach(([k, v]) => { if (v) badgeAgg[k] = true; });
+    Object.entries(b).forEach(([k, v]) => {
+      if (v) badgeAgg[k] = true;
+    });
   });
 
   useEffect(() => {
-    const key = `f1.notes.${seasonN}.${trackSlug(track)}`;
-    setNotes(localStorage.getItem(key) || "");
-  }, [seasonN, track]);
+    const localKey = `f1.notes.${seasonN}.${trackSlug(track)}`;
+    // Load local cache immediately
+    setNotes(localStorage.getItem(localKey) || "");
+
+    // Try to load DB-backed notes for this track (per-track, not per-season)
+    let mounted = true;
+    (async () => {
+      try {
+        const dbKey = trackSlug(canonicalName || track);
+        const { data, error } = await supabase
+          .from("track_notes")
+          .select("notes")
+          .eq("track_key", dbKey)
+          .maybeSingle();
+        if (error) {
+          // ignore DB read errors — keep local value
+          console.warn("load track_notes failed", error);
+          return;
+        }
+        if (mounted && data?.notes != null) {
+          setNotes(data.notes);
+          try {
+            localStorage.setItem(localKey, data.notes);
+          } catch (_) {}
+        }
+      } catch (err) {
+        console.warn("track_notes load error", err);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [seasonN, track, canonicalName]);
+
   useEffect(() => {
-    const key = `f1.notes.${seasonN}.${trackSlug(track)}`;
-    const id = setTimeout(() => localStorage.setItem(key, notes), 400);
+    const localKey = `f1.notes.${seasonN}.${trackSlug(track)}`;
+    const id = setTimeout(() => {
+      try {
+        localStorage.setItem(localKey, notes);
+      } catch (_) {}
+
+      // Also try to persist to DB (if signed-in)
+      (async () => {
+        try {
+          const client = supabase;
+          if (!client) return;
+          const { data: userData } = await client.auth.getUser();
+          const uid = userData?.user?.id;
+          if (!uid) return; // don't attempt DB write when anonymous
+          const dbKey = trackSlug(canonicalName || track);
+          const { error } = await client
+            .from("track_notes")
+            .upsert(
+              { track_key: dbKey, notes, updated_at: new Date().toISOString(), user_id: uid },
+              { onConflict: "track_key" },
+            );
+          if (error) console.warn("track_notes save failed", error);
+        } catch (err) {
+          console.warn("track_notes save error", err);
+        }
+      })();
+    }, 400);
     return () => clearTimeout(id);
-  }, [notes, seasonN, track]);
+  }, [notes, seasonN, track, canonicalName]);
 
   const notesTemplate = `SOFTS:\n\nMEDIUMS:\n\nHARDS:\n\nBATTERY MANAGEMENT:\n\nFUEL:\n\nSETUP:\n`;
 
   const [imgOk, setImgOk] = useState(true);
   const [imgSrc, setImgSrc] = useState<string>("");
   const triedFallback = useMemo(() => ({ v: false }), [canonicalName]);
-  useEffect(() => { setImgSrc(trackMapUrl(canonicalName)); setImgOk(true); triedFallback.v = false; }, [canonicalName, triedFallback]);
+  useEffect(() => {
+    setImgSrc(trackMapUrl(canonicalName));
+    setImgOk(true);
+    triedFallback.v = false;
+  }, [canonicalName, triedFallback]);
 
   const orderedOptions = useMemo(() => {
     const byView = new Map(OPTIONS.map((o) => [o.view, o]));
@@ -149,7 +246,10 @@ function TrackPage() {
             </div>
             <div className="mb-3 flex flex-wrap gap-2" suppressHydrationWarning>
               {cats.map((c) => (
-                <span key={c} className="rounded border border-white/15 px-2 py-0.5 text-xs font-semibold uppercase tracking-wider text-white/70">
+                <span
+                  key={c}
+                  className="rounded border border-white/15 px-2 py-0.5 text-xs font-semibold uppercase tracking-wider text-white/70"
+                >
                   {c}
                 </span>
               ))}
@@ -179,14 +279,16 @@ function TrackPage() {
             />
           </div>
           <div className="overflow-hidden rounded-lg border border-white/10 bg-black/40">
-          {imgOk ? (
+            {imgOk ? (
               <img
                 src={imgSrc || trackMapUrl(canonicalName)}
                 alt={canonicalName}
                 className="h-full w-full object-contain p-4"
                 onError={() => {
-                  if (!triedFallback.v) { triedFallback.v = true; setImgSrc(trackMapFallbackUrl(canonicalName)); }
-                  else setImgOk(false);
+                  if (!triedFallback.v) {
+                    triedFallback.v = true;
+                    setImgSrc(trackMapFallbackUrl(canonicalName));
+                  } else setImgOk(false);
                 }}
               />
             ) : (
@@ -205,16 +307,29 @@ function TrackPage() {
           {orderedOptions.map((o) => {
             const isTeammate = o.view === "teammate";
             const linkProps = isTeammate
-              ? { to: "/season/$season/teammate" as const, params: { season }, search: undefined as any }
-              : { to: "/season/$season/track/$track/$view" as const, params: { season, track, view: o.view }, search: { cat } };
+              ? {
+                  to: "/season/$season/teammate" as const,
+                  params: { season },
+                  search: undefined as any,
+                }
+              : {
+                  to: "/season/$season/track/$track/$view" as const,
+                  params: { season, track, view: o.view },
+                  search: { cat },
+                };
             return (
               <div
                 key={o.view}
                 draggable
                 onDragStart={() => setDragging(o.view)}
                 onDragEnd={() => setDragging(null)}
-                onDragOver={(e) => { e.preventDefault(); }}
-                onDrop={(e) => { e.preventDefault(); if (dragging) reorder(dragging, o.view); }}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  if (dragging) reorder(dragging, o.view);
+                }}
                 className={"flex transition " + (dragging === o.view ? "opacity-40" : "")}
               >
                 <Link
@@ -239,7 +354,10 @@ function TrackPage() {
 
 function Tag({ color, children }: { color: string; children: React.ReactNode }) {
   return (
-    <span className="rounded-sm px-2 py-0.5 text-[11px] font-black text-black" style={{ background: color }}>
+    <span
+      className="rounded-sm px-2 py-0.5 text-[11px] font-black text-black"
+      style={{ background: color }}
+    >
       {children}
     </span>
   );
