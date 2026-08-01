@@ -174,8 +174,17 @@ export function trackFlag(name: string) {
 
 export type SessionBadges = { win?: boolean; pole?: boolean; fl?: boolean; podium?: boolean; gs?: boolean };
 export function badgesFor(s: Session): SessionBadges {
+  const cat = (s.category || "").toLowerCase();
+  const isRaceLike = cat === "race" || cat === "sprint";
+  const isQualiLike =
+    cat === "qualifying" || cat === "sprint qualifying" || cat === "sprint shootout";
   const finish = Number(s.finishing_position);
   const start = Number(s.starting_position);
+  if (isQualiLike) {
+    // Qualifying stores the grid slot in the finishing position column.
+    return { pole: finish === 1 || start === 1 };
+  }
+  if (!isRaceLike) return {};
   return {
     win: finish === 1,
     pole: start === 1,
