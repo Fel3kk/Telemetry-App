@@ -5249,10 +5249,12 @@ function renderDamageSection() {
 
 function fmtLapMs(ms) {
   if (!ms || ms <= 0) return "—";
-  const m = Math.floor(ms / 60000);
+  const h = Math.floor(ms / 3600000);
+  const m = Math.floor((ms % 3600000) / 60000);
   const s = ((ms % 60000) / 1000).toFixed(3).padStart(6, "0");
-  return `${m}:${s}`;
+  return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${s}` : `${m}:${s}`;
 }
+
 
 function renderCompareTab() {
   const empty = document.getElementById("compareEmpty");
