@@ -200,7 +200,7 @@ function TrackPage() {
     return () => clearTimeout(id);
   }, [notes, seasonN, track, canonicalName]);
 
-  const notesTemplate = `SOFTS:\n\nMEDIUMS:\n\nHARDS:\n\nBATTERY MANAGEMENT:\n\nFUEL:\n\nSETUP:\n`;
+  const notesTemplate = `SOFTS:\n\nMEDIUMS:\n\nHARDS:\n\nBATTERY MANAGEMENT:\n`;
 
   const [imgOk, setImgOk] = useState(true);
   const [imgSrc, setImgSrc] = useState<string>("");
@@ -275,7 +275,7 @@ function TrackPage() {
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder={notesTemplate}
-              className="min-h-[180px] w-full whitespace-pre-wrap rounded-md border border-white/10 bg-white/[0.03] p-3 font-mono text-sm leading-relaxed text-white outline-none focus:border-red-500/60"
+              className="min-h-[340px] w-full resize-y whitespace-pre-wrap rounded-md border border-white/10 bg-white/[0.03] p-3 font-mono text-sm leading-relaxed text-white outline-none focus:border-red-500/60"
             />
           </div>
           <div className="overflow-hidden rounded-lg border border-white/10 bg-black/40">
