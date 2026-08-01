@@ -1,3 +1,33 @@
+// ---------------------------------------------------------------
+// Security: HTML escaping / sanitization for untrusted telemetry text.
+// Uploaded JSON and DB rows are user-controlled and are rendered via
+// innerHTML in many places, so all strings are neutralized on ingest.
+// ---------------------------------------------------------------
+function escapeHtml(value) {
+  return String(value == null ? "" : value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+function sanitizeText(value) {
+  if (value == null) return value;
+  return String(value).replace(/[<>"'`&\\]/g, "").slice(0, 300);
+}
+function sanitizeDeep(value, depth) {
+  depth = depth || 0;
+  if (depth > 12) return null;
+  if (typeof value === "string") return sanitizeText(value);
+  if (Array.isArray(value)) return value.map((v) => sanitizeDeep(v, depth + 1));
+  if (value && typeof value === "object") {
+    const out = {};
+    for (const k of Object.keys(value)) out[sanitizeText(k)] = sanitizeDeep(value[k], depth + 1);
+    return out;
+  }
+  return value;
+}
+
 let allSessions = [];
 let currentData = null;
 let currentSeason = 1;
@@ -620,6 +650,7 @@ async function handleFileUpload(e) {
         data = parsedLines;
       }
 
+      data = sanitizeDeep(data);
       const playerData = processTelemetryData(data);
       if (playerData && playerData.length > 0) {
         const session = playerData[0];
@@ -1182,7 +1213,7 @@ async function loadSavedSessions() {
 
     if (sessions && sessions.length) {
       // Map Supabase column names back to our app's object structure if they differ
-      const mappedSessions = sessions.map((s) => ({
+      const mappedSessions = sanitizeDeep(sessions).map((s) => ({
         ...s,
         starting_position: s.starting_pos,
         finishing_position: s.finishing_pos,
@@ -3756,7 +3787,7 @@ function renderStandingsTable() {
 // ------- All-time Records / Stats -------
 function getTeamsForSeason(season) {
   try {
-    const raw = JSON.parse(localStorage.getItem("driverTeamsBySeason") || "{}");
+    const raw = sanitizeDeep(JSON.parse(localStorage.getItem("driverTeamsBySeason") || "{}"));
     return raw[String(season)] || {};
   } catch (_) {
     return {};
@@ -4085,7 +4116,7 @@ function renderRecordsTable() {
 // Driver team assignment helpers
 function getDriverTeams() {
   try {
-    const raw = JSON.parse(localStorage.getItem("driverTeamsBySeason") || "{}");
+    const raw = sanitizeDeep(JSON.parse(localStorage.getItem("driverTeamsBySeason") || "{}"));
     return raw[String(currentSeason)] || {};
   } catch (err) {
     return {};
@@ -4321,8 +4352,8 @@ async function saveDriverTeamsToDB(obj) {
   if (!uid) throw new Error("You must be signed in to save.");
   const rows = Object.entries(obj).map(([driver, team]) => ({
     season: currentSeason,
-    driver_name: driver,
-    team: team,
+    driver_name: sanitizeText(driver),
+    team: sanitizeText(team),
     user_id: uid,
   }));
 
@@ -4343,7 +4374,7 @@ async function loadDriverTeamsFromDB(season) {
     .eq("season", season);
   if (error) throw error;
   const map = {};
-  (data || []).forEach((r) => (map[r.driver_name] = r.team));
+  (data || []).forEach((r) => (map[sanitizeText(r.driver_name)] = sanitizeText(r.team)));
   return map;
 }
 
