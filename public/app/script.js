@@ -5390,10 +5390,20 @@ function renderCompareCharts(playerEntry, opponentName) {
         maintainAspectRatio: false,
         interaction: { mode: "index", intersect: false },
         scales: {
-          y: { title: { display: true, text: "Lap time (s)" } },
+          y: {
+            title: { display: true, text: "Lap time (m:ss.mmm)" },
+            ticks: { callback: (v) => fmtLapMs(Number(v) * 1000) },
+          },
           x: { title: { display: true, text: "Lap" } },
         },
-        plugins: { legend: { position: "bottom" } },
+        plugins: {
+          legend: { position: "bottom" },
+          tooltip: {
+            callbacks: {
+              label: (c) => `${c.dataset.label}: ${fmtLapMs(Number(c.parsed.y) * 1000)}`,
+            },
+          },
+        },
       },
     });
   }
