@@ -3787,7 +3787,7 @@ function renderStandingsTable() {
 // ------- All-time Records / Stats -------
 function getTeamsForSeason(season) {
   try {
-    const raw = JSON.parse(localStorage.getItem("driverTeamsBySeason") || "{}");
+    const raw = sanitizeDeep(JSON.parse(localStorage.getItem("driverTeamsBySeason") || "{}"));
     return raw[String(season)] || {};
   } catch (_) {
     return {};
@@ -4116,7 +4116,7 @@ function renderRecordsTable() {
 // Driver team assignment helpers
 function getDriverTeams() {
   try {
-    const raw = JSON.parse(localStorage.getItem("driverTeamsBySeason") || "{}");
+    const raw = sanitizeDeep(JSON.parse(localStorage.getItem("driverTeamsBySeason") || "{}"));
     return raw[String(currentSeason)] || {};
   } catch (err) {
     return {};
@@ -4352,8 +4352,8 @@ async function saveDriverTeamsToDB(obj) {
   if (!uid) throw new Error("You must be signed in to save.");
   const rows = Object.entries(obj).map(([driver, team]) => ({
     season: currentSeason,
-    driver_name: driver,
-    team: team,
+    driver_name: sanitizeText(driver),
+    team: sanitizeText(team),
     user_id: uid,
   }));
 
