@@ -5249,10 +5249,12 @@ function renderDamageSection() {
 
 function fmtLapMs(ms) {
   if (!ms || ms <= 0) return "—";
-  const m = Math.floor(ms / 60000);
+  const h = Math.floor(ms / 3600000);
+  const m = Math.floor((ms % 3600000) / 60000);
   const s = ((ms % 60000) / 1000).toFixed(3).padStart(6, "0");
-  return `${m}:${s}`;
+  return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${s}` : `${m}:${s}`;
 }
+
 
 function renderCompareTab() {
   const empty = document.getElementById("compareEmpty");
@@ -5313,12 +5315,24 @@ function renderCompareCharts(playerEntry, opponentName) {
   const avgDelta = validDeltas.length
     ? validDeltas.reduce((a, b) => a + b, 0) / validDeltas.length
     : 0;
-  const totalYou = youMs.filter((v) => v).reduce((a, b) => a + b, 0);
-  const totalOpp = oppMs.filter((v) => v).reduce((a, b) => a + b, 0);
+  // Only count laps where BOTH drivers have a valid time, so the totals are
+  // directly comparable and consistent with the average delta.
+  let totalYou = 0;
+  let totalOpp = 0;
+  let commonLaps = 0;
+  for (let i = 0; i < maxLaps; i++) {
+    if (youMs[i] && oppMs[i]) {
+      totalYou += youMs[i];
+      totalOpp += oppMs[i];
+      commonLaps++;
+    }
+  }
   const summary = document.getElementById("compareSummary");
   if (summary) {
-    summary.innerHTML = `Avg delta: <b style="color:${avgDelta < 0 ? "#2ecc71" : "#e10600"}">${avgDelta > 0 ? "+" : ""}${avgDelta.toFixed(3)}s</b> · Total: <b>${fmtLapMs(totalYou)}</b> vs <b>${fmtLapMs(totalOpp)}</b>`;
+    const diff = (totalYou - totalOpp) / 1000;
+    summary.innerHTML = `Avg delta: <b style="color:${avgDelta < 0 ? "#2ecc71" : "#e10600"}">${avgDelta > 0 ? "+" : ""}${avgDelta.toFixed(3)}s</b> · Total over ${commonLaps} common lap${commonLaps === 1 ? "" : "s"}: <b>${fmtLapMs(totalYou)}</b> vs <b>${fmtLapMs(totalOpp)}</b> (<b style="color:${diff < 0 ? "#2ecc71" : "#e10600"}">${diff > 0 ? "+" : ""}${diff.toFixed(3)}s</b>)`;
   }
+
   const thYou = document.getElementById("compareThYou");
   const thOpp = document.getElementById("compareThOpp");
   if (thYou) thYou.textContent = `You (${playerEntry.name})`;
