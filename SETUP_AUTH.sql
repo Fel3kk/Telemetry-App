@@ -31,9 +31,20 @@ BEGIN
   END LOOP;
 END $$;
 
--- 4) Per-user policies — a signed-in user sees & mutates only their own rows
---    PLUS a one-time "claim orphans": authenticated users may update rows where
---    user_id IS NULL (used once on first login to attach legacy data to Felek).
+-- 3b) Data API grants — no anon access, everything is owner-private
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.telemetry_sessions TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.driver_teams       TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.track_notes        TO authenticated;
+GRANT ALL ON public.telemetry_sessions TO service_role;
+GRANT ALL ON public.driver_teams       TO service_role;
+GRANT ALL ON public.track_notes        TO service_role;
+REVOKE ALL ON public.telemetry_sessions FROM anon;
+REVOKE ALL ON public.driver_teams       FROM anon;
+REVOKE ALL ON public.track_notes        FROM anon;
+
+-- 4) Per-user policies — a signed-in user sees & mutates only their own rows.
+--    There is deliberately NO "claim orphans" policy: allowing any signed-in
+--    user to UPDATE rows where user_id IS NULL lets anyone steal legacy data.
 
 -- telemetry_sessions
 CREATE POLICY "own select" ON public.telemetry_sessions
@@ -44,8 +55,6 @@ CREATE POLICY "own update" ON public.telemetry_sessions
   FOR UPDATE TO authenticated USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
 CREATE POLICY "own delete" ON public.telemetry_sessions
   FOR DELETE TO authenticated USING (user_id = auth.uid());
-CREATE POLICY "claim orphans" ON public.telemetry_sessions
-  FOR UPDATE TO authenticated USING (user_id IS NULL) WITH CHECK (user_id = auth.uid());
 
 -- driver_teams
 CREATE POLICY "own select" ON public.driver_teams
@@ -56,8 +65,6 @@ CREATE POLICY "own update" ON public.driver_teams
   FOR UPDATE TO authenticated USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
 CREATE POLICY "own delete" ON public.driver_teams
   FOR DELETE TO authenticated USING (user_id = auth.uid());
-CREATE POLICY "claim orphans" ON public.driver_teams
-  FOR UPDATE TO authenticated USING (user_id IS NULL) WITH CHECK (user_id = auth.uid());
 
 -- track_notes
 CREATE POLICY "own select" ON public.track_notes
@@ -68,14 +75,13 @@ CREATE POLICY "own update" ON public.track_notes
   FOR UPDATE TO authenticated USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
 CREATE POLICY "own delete" ON public.track_notes
   FOR DELETE TO authenticated USING (user_id = auth.uid());
-CREATE POLICY "claim orphans" ON public.track_notes
-  FOR UPDATE TO authenticated USING (user_id IS NULL) WITH CHECK (user_id = auth.uid());
 
 -- =============================================================
--- After running this, open the app, sign up with username "felek"
--- and any password. On first login the app auto-claims every row
--- where user_id IS NULL, attaching all existing data to Felek.
--- Later signups will start with an empty, private account.
+-- After running this, sign up in the app, then attach any legacy rows to
+-- that account ONCE from this SQL editor (service role), e.g.:
+--   UPDATE public.telemetry_sessions SET user_id = '<your-auth-uid>' WHERE user_id IS NULL;
+--   UPDATE public.driver_teams       SET user_id = '<your-auth-uid>' WHERE user_id IS NULL;
+--   UPDATE public.track_notes        SET user_id = '<your-auth-uid>' WHERE user_id IS NULL;
 -- =============================================================
 
 -- Optional: also turn OFF "Confirm email" in Auth → Providers → Email
