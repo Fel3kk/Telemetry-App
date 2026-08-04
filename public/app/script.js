@@ -1069,9 +1069,32 @@ function processTelemetryData(data) {
         const final_classification = obj["final-classification"] || {};
         const lap_data = obj["lap-data"] || {};
 
-        summary.starting_position =
-          final_classification["grid-position"] ?? null;
-        summary.finishing_position = lap_data["car-position"] ?? null;
+        // Qualifying/shootout packets do not carry a real grid, and
+        // lap-data.car-position is the *live* position at the moment the file
+        // was written (mid out-lap), which is why Q1/Q2/Q3 exports for the same
+        // weekend disagreed. Use the classification position instead.
+        const stypeLower = String(session_type || "").toLowerCase();
+        const isQualiLike =
+          stypeLower.includes("qualifying") ||
+          stypeLower.includes("quali") ||
+          stypeLower.includes("shootout");
+
+        if (isQualiLike) {
+          summary.starting_position = null;
+          summary.finishing_position =
+            final_classification["position"] ??
+            obj["track-position"] ??
+            lap_data["car-position"] ??
+            null;
+        } else {
+          summary.starting_position =
+            final_classification["grid-position"] ?? null;
+          summary.finishing_position =
+            lap_data["car-position"] ??
+            final_classification["position"] ??
+            null;
+        }
+
 
         const lap0 = per_lap_info.find((l) => l["lap-number"] === 0);
         if (lap0) {
@@ -1579,6 +1602,7 @@ function renderSavedSessions(sessions) {
     card.className = `session-row ${isActive ? "active" : ""}`;
     card.innerHTML = `
       <button class="delete-btn" title="Delete weekend">🗑️</button>
+      <button class="expand-btn" title="Show individual sessions">▾</button>
       <div class="sr-left">
         <div class="sr-track">
           <span class="flag-icon">${flag}</span>
@@ -1601,14 +1625,54 @@ function renderSavedSessions(sessions) {
       }
     };
 
+    // Per-session list with individual delete buttons.
+    const sublist = document.createElement("div");
+    sublist.className = "sr-sublist";
+    sublist.style.display = "none";
+    group.sessions
+      .slice()
+      .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+      .forEach((s) => {
+        const row = document.createElement("div");
+        row.className = "sr-subrow" + (currentData && currentData.id === s.id ? " active" : "");
+        const label = s.session_type || s.category || "Session";
+        const when = s.created_at ? new Date(s.created_at).toLocaleDateString() : "";
+        row.innerHTML = `
+          <span class="sr-sub-label">${label}</span>
+          <span class="sr-sub-date">${when}</span>
+          <button class="sr-sub-del" title="Delete this session">🗑️</button>
+        `;
+        row.querySelector(".sr-sub-del").onclick = async (e) => {
+          e.stopPropagation();
+          await deleteSession(s.id, e);
+        };
+        row.addEventListener("click", (e) => {
+          if (e.target.closest(".sr-sub-del")) return;
+          currentData = s;
+          renderContent();
+          renderSavedSessions(allSessions);
+        });
+        sublist.appendChild(row);
+      });
+
+    card.querySelector(".expand-btn").onclick = (e) => {
+      e.stopPropagation();
+      const open = sublist.style.display === "none";
+      sublist.style.display = open ? "block" : "none";
+      e.currentTarget.textContent = open ? "▴" : "▾";
+    };
+
+
     card.addEventListener("click", (e) => {
-      if (e.target.closest(".delete-btn")) return;
+      if (e.target.closest(".delete-btn") || e.target.closest(".expand-btn")) return;
       currentData = rep;
       renderContent();
       renderSavedSessions(allSessions);
     });
 
     grid.appendChild(card);
+    grid.appendChild(sublist);
+
   });
 
 
@@ -4544,14 +4608,30 @@ async function saveTrackNote(trackKey, notes) {
     const { data: userData } = await client.auth.getUser();
     const uid = userData?.user?.id;
     if (!uid) { setNotesStatus("Sign in to save notes", true); return; }
-    const { error } = await client
+    // Do NOT upsert on track_key: that conflict target is global, so with RLS
+    // a row belonging to another user (or a missing unique index) makes the
+    // write silently fail. Look the row up per user, then update or insert.
+    const { data: existing, error: findErr } = await client
       .from("track_notes")
-      .upsert({ track_key: trackKey, notes, updated_at: new Date().toISOString(), user_id: uid }, { onConflict: "track_key" });
+      .select("id")
+      .eq("track_key", trackKey)
+      .eq("user_id", uid)
+      .maybeSingle();
+    if (findErr) {
+      console.error("track_notes lookup failed", findErr);
+      setNotesStatus("Save failed: " + (findErr.message || "unknown"), true);
+      return;
+    }
+    const payload = { track_key: trackKey, notes, updated_at: new Date().toISOString(), user_id: uid };
+    const { error } = existing?.id
+      ? await client.from("track_notes").update(payload).eq("id", existing.id)
+      : await client.from("track_notes").insert(payload);
     if (error) {
       console.error("track_notes save failed", error);
       setNotesStatus("Save failed: " + (error.message || "unknown"), true);
       return;
     }
+
     trackNotesCache[trackKey] = notes;
     setNotesStatus("Saved ✓");
     setTimeout(() => setNotesStatus(""), 1500);

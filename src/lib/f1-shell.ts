@@ -181,8 +181,9 @@ export function badgesFor(s: Session): SessionBadges {
   const finish = Number(s.finishing_position);
   const start = Number(s.starting_position);
   if (isQualiLike) {
-    // Qualifying stores the grid slot in the finishing position column.
-    return { pole: finish === 1 || start === 1 };
+    // Qualifying stores the resulting grid slot in the finishing position column.
+    // starting_position is meaningless for quali packets, so never read it here.
+    return { pole: finish === 1 };
   }
   if (!isRaceLike) return {};
   return {
