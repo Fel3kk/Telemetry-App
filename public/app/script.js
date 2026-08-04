@@ -4608,14 +4608,30 @@ async function saveTrackNote(trackKey, notes) {
     const { data: userData } = await client.auth.getUser();
     const uid = userData?.user?.id;
     if (!uid) { setNotesStatus("Sign in to save notes", true); return; }
-    const { error } = await client
+    // Do NOT upsert on track_key: that conflict target is global, so with RLS
+    // a row belonging to another user (or a missing unique index) makes the
+    // write silently fail. Look the row up per user, then update or insert.
+    const { data: existing, error: findErr } = await client
       .from("track_notes")
-      .upsert({ track_key: trackKey, notes, updated_at: new Date().toISOString(), user_id: uid }, { onConflict: "track_key" });
+      .select("id")
+      .eq("track_key", trackKey)
+      .eq("user_id", uid)
+      .maybeSingle();
+    if (findErr) {
+      console.error("track_notes lookup failed", findErr);
+      setNotesStatus("Save failed: " + (findErr.message || "unknown"), true);
+      return;
+    }
+    const payload = { track_key: trackKey, notes, updated_at: new Date().toISOString(), user_id: uid };
+    const { error } = existing?.id
+      ? await client.from("track_notes").update(payload).eq("id", existing.id)
+      : await client.from("track_notes").insert(payload);
     if (error) {
       console.error("track_notes save failed", error);
       setNotesStatus("Save failed: " + (error.message || "unknown"), true);
       return;
     }
+
     trackNotesCache[trackKey] = notes;
     setNotesStatus("Saved ✓");
     setTimeout(() => setNotesStatus(""), 1500);
