@@ -1745,6 +1745,48 @@ body.light-theme #driver-assignments-container { background: #ffffff; }
 }
 .session-row:hover .delete-btn { opacity: 0.6; }
 .session-row .delete-btn:hover { opacity: 1; color: var(--f1-red); }
+.session-row .expand-btn {
+  position: absolute; bottom: 2px; right: 4px;
+  width: 18px; height: 16px; padding: 0;
+  background: transparent; border: none; cursor: pointer;
+  font-size: 0.65em; line-height: 1;
+  color: var(--text-mute); opacity: 0.55;
+}
+.session-row .expand-btn:hover { opacity: 1; color: var(--f1-red); }
+
+.sr-sublist {
+  margin: 0 0 6px 14px;
+  border-left: 1px solid rgba(255,255,255,0.12);
+  padding-left: 8px;
+}
+.sr-subrow {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 6px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 0.72rem;
+}
+.sr-subrow:hover { background: rgba(255,255,255,0.05); }
+.sr-subrow.active { background: rgba(225,6,0,0.12); }
+.sr-sub-label {
+  font-weight: 700; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.sr-sub-date { color: var(--text-mute); font-size: 0.68rem; }
+.sr-sub-del {
+  background: transparent; border: none; cursor: pointer;
+  color: var(--text-mute); font-size: 0.75em; padding: 0 2px;
+  opacity: 0.6;
+}
+.sr-sub-del:hover { opacity: 1; color: var(--f1-red); }
+@media (max-width: 880px) {
+  .session-row .expand-btn, .sr-sub-del { opacity: 0.9; }
+  .sr-subrow { padding: 9px 6px; font-size: 0.8rem; }
+}
+
 .result-tag.mini {
   font-size: 0.55rem; padding: 1px 5px;
   border-radius: 4px; font-weight: 800;
