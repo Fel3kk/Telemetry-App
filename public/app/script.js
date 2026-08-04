@@ -1664,13 +1664,15 @@ function renderSavedSessions(sessions) {
 
 
     card.addEventListener("click", (e) => {
-      if (e.target.closest(".delete-btn")) return;
+      if (e.target.closest(".delete-btn") || e.target.closest(".expand-btn")) return;
       currentData = rep;
       renderContent();
       renderSavedSessions(allSessions);
     });
 
     grid.appendChild(card);
+    grid.appendChild(sublist);
+
   });
 
 
