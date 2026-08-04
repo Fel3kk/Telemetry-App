@@ -185,13 +185,25 @@ function TrackPage() {
           const uid = userData?.user?.id;
           if (!uid) return; // don't attempt DB write when anonymous
           const dbKey = trackSlug(canonicalName || track);
-          const { error } = await client
+          // Per-user lookup then update/insert. Upserting on `track_key`
+          // alone can collide with another user's row under RLS and fail.
+          const { data: existing } = await client
             .from("track_notes")
-            .upsert(
-              { track_key: dbKey, notes, updated_at: new Date().toISOString(), user_id: uid },
-              { onConflict: "track_key" },
-            );
+            .select("id")
+            .eq("track_key", dbKey)
+            .eq("user_id", uid)
+            .maybeSingle();
+          const payload = {
+            track_key: dbKey,
+            notes,
+            updated_at: new Date().toISOString(),
+            user_id: uid,
+          };
+          const { error } = existing?.id
+            ? await client.from("track_notes").update(payload).eq("id", existing.id)
+            : await client.from("track_notes").insert(payload);
           if (error) console.warn("track_notes save failed", error);
+
         } catch (err) {
           console.warn("track_notes save error", err);
         }
