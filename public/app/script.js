@@ -1069,9 +1069,32 @@ function processTelemetryData(data) {
         const final_classification = obj["final-classification"] || {};
         const lap_data = obj["lap-data"] || {};
 
-        summary.starting_position =
-          final_classification["grid-position"] ?? null;
-        summary.finishing_position = lap_data["car-position"] ?? null;
+        // Qualifying/shootout packets do not carry a real grid, and
+        // lap-data.car-position is the *live* position at the moment the file
+        // was written (mid out-lap), which is why Q1/Q2/Q3 exports for the same
+        // weekend disagreed. Use the classification position instead.
+        const stypeLower = String(session_type || "").toLowerCase();
+        const isQualiLike =
+          stypeLower.includes("qualifying") ||
+          stypeLower.includes("quali") ||
+          stypeLower.includes("shootout");
+
+        if (isQualiLike) {
+          summary.starting_position = null;
+          summary.finishing_position =
+            final_classification["position"] ??
+            obj["track-position"] ??
+            lap_data["car-position"] ??
+            null;
+        } else {
+          summary.starting_position =
+            final_classification["grid-position"] ?? null;
+          summary.finishing_position =
+            lap_data["car-position"] ??
+            final_classification["position"] ??
+            null;
+        }
+
 
         const lap0 = per_lap_info.find((l) => l["lap-number"] === 0);
         if (lap0) {
