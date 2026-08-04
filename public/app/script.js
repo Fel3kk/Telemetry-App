@@ -1602,6 +1602,7 @@ function renderSavedSessions(sessions) {
     card.className = `session-row ${isActive ? "active" : ""}`;
     card.innerHTML = `
       <button class="delete-btn" title="Delete weekend">🗑️</button>
+      <button class="expand-btn" title="Show individual sessions">▾</button>
       <div class="sr-left">
         <div class="sr-track">
           <span class="flag-icon">${flag}</span>
@@ -1623,6 +1624,44 @@ function renderSavedSessions(sessions) {
         try { await deleteSession(s.id, e); } catch {}
       }
     };
+
+    // Per-session list with individual delete buttons.
+    const sublist = document.createElement("div");
+    sublist.className = "sr-sublist";
+    sublist.style.display = "none";
+    group.sessions
+      .slice()
+      .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+      .forEach((s) => {
+        const row = document.createElement("div");
+        row.className = "sr-subrow" + (currentData && currentData.id === s.id ? " active" : "");
+        const label = s.session_type || s.category || "Session";
+        const when = s.created_at ? new Date(s.created_at).toLocaleDateString() : "";
+        row.innerHTML = `
+          <span class="sr-sub-label">${label}</span>
+          <span class="sr-sub-date">${when}</span>
+          <button class="sr-sub-del" title="Delete this session">🗑️</button>
+        `;
+        row.querySelector(".sr-sub-del").onclick = async (e) => {
+          e.stopPropagation();
+          await deleteSession(s.id, e);
+        };
+        row.addEventListener("click", (e) => {
+          if (e.target.closest(".sr-sub-del")) return;
+          currentData = s;
+          renderContent();
+          renderSavedSessions(allSessions);
+        });
+        sublist.appendChild(row);
+      });
+
+    card.querySelector(".expand-btn").onclick = (e) => {
+      e.stopPropagation();
+      const open = sublist.style.display === "none";
+      sublist.style.display = open ? "block" : "none";
+      e.currentTarget.textContent = open ? "▴" : "▾";
+    };
+
 
     card.addEventListener("click", (e) => {
       if (e.target.closest(".delete-btn")) return;
