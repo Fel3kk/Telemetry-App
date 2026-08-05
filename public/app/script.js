@@ -90,21 +90,69 @@ function _embedSelectSession() {
       /^p[123]$/.test(st) || st.includes("practice") || st.includes("fp")
     );
   };
-  const match = allSessions.find((s) => {
-    if (Number(s.season) !== seasonN) return false;
-    if ((s.track_name || "").toLowerCase() !== wanted) return false;
-    if (isPracticeView) return isPracticeLikeSession(s);
-    return !wantedCat || (s.category || "").toLowerCase() === wantedCat;
-  });
+  const sprintCats = ["sprint", "sprint qualifying", "sprint shootout"];
+  const inBucket = (s) => {
+    const c = (s.category || "").toLowerCase();
+    if (c === "practice") return true; // practice belongs to either weekend bucket
+    return wantedCat === "sprint" ? sprintCats.includes(c) : !sprintCats.includes(c);
+  };
+  const rank = (s) => {
+    const c = (s.category || "").toLowerCase();
+    if (c === "race") return 0;
+    if (c === "sprint") return 1;
+    if (c === "qualifying") return 2;
+    if (c === "sprint qualifying" || c === "sprint shootout") return 3;
+    if (c === "practice") return 4;
+    return 5;
+  };
+  const trackSessions = allSessions.filter(
+    (s) =>
+      Number(s.season) === seasonN &&
+      (s.track_name || "").toLowerCase() === wanted,
+  );
+  let candidates;
+  if (isPracticeView) {
+    candidates = trackSessions.filter(isPracticeLikeSession);
+  } else {
+    const exact = wantedCat
+      ? trackSessions.filter((s) => (s.category || "").toLowerCase() === wantedCat)
+      : [];
+    // No Race/Sprint uploaded yet: fall back to the best session actually
+    // uploaded for THIS weekend (quali, then practice) instead of another track.
+    candidates = exact.length ? exact : trackSessions.filter(inBucket);
+  }
+  const match = candidates.slice().sort((a, b) => rank(a) - rank(b))[0];
   if (match) {
     currentData = match;
+    const _es = document.getElementById("embedEmptyState");
+    if (_es) _es.style.display = "none";
     try { renderContent(); } catch (e) { console.warn(e); }
     if (isPracticeView) { try { _embedRenderPracticePicker(); } catch (e) { console.warn(e); } }
     _embedNotifyReady("ok");
   } else {
+    currentData = null;
+    _embedShowEmptyState();
     if (isPracticeView) { try { _embedRenderPracticePicker(); } catch (e) { console.warn(e); } }
     _embedNotifyReady("no-match");
   }
+}
+
+function _embedShowEmptyState() {
+  const content = document.getElementById("content");
+  if (content) content.style.display = "none";
+  let box = document.getElementById("embedEmptyState");
+  if (!box) {
+    box = document.createElement("div");
+    box.id = "embedEmptyState";
+    box.style.cssText =
+      "margin:40px auto;max-width:520px;text-align:center;padding:28px;border:1px solid rgba(255,255,255,0.12);border-radius:12px;background:rgba(255,255,255,0.03);color:var(--secondary-text,#9aa)";
+    box.innerHTML =
+      '<div style="font-size:2rem;margin-bottom:8px">\uD83D\uDCED</div>' +
+      '<div style="font-weight:800;color:#fff;margin-bottom:6px">No data for this session yet</div>' +
+      '<div style="font-size:0.9rem">Upload the telemetry file for this weekend to see it here.</div>';
+    (document.querySelector(".main-content") || document.body).appendChild(box);
+  }
+  box.style.display = "block";
 }
 
 // Render a session picker at the top of the practice section listing every
@@ -1263,7 +1311,7 @@ async function loadSavedSessions() {
 
       renderSavedSessions(allSessions);
 
-      if (!currentData) {
+      if (!currentData && !EMBED_VIEW) {
         // Prioritize showing a Race or Sprint as the default session
         currentData =
           mappedSessions.find(
@@ -1271,7 +1319,10 @@ async function loadSavedSessions() {
               s.category !== "Qualifying" && s.category !== "Sprint Shootout",
           ) || mappedSessions[0];
       }
-      renderContent();
+      // In embed mode never fall back to an unrelated track's session:
+      // the embed picks its own session (or shows an empty state).
+      if (EMBED_VIEW) _embedSelectSession();
+      else renderContent();
     }
   } catch (err) {
     console.error("Failed to fetch sessions from Supabase", err);
