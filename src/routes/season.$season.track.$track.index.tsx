@@ -134,10 +134,19 @@ function TrackPage() {
     });
   });
 
+  // Guards so an empty initial state can never overwrite stored notes:
+  // saving only starts once the DB read for this track has settled, and we
+  // never re-write a value identical to what we last loaded/saved.
+  const [notesReady, setNotesReady] = useState(false);
+  const lastSaved = useMemo(() => ({ v: null as string | null }), []);
+
   useEffect(() => {
     const localKey = `f1.notes.${seasonN}.${trackSlug(track)}`;
+    setNotesReady(false);
+    lastSaved.v = null;
     // Load local cache immediately
-    setNotes(localStorage.getItem(localKey) || "");
+    const local = localStorage.getItem(localKey) || "";
+    setNotes(local);
 
     // Try to load DB-backed notes for this track (per-track, not per-season)
     let mounted = true;
@@ -149,17 +158,22 @@ function TrackPage() {
           .select("notes")
           .eq("track_key", dbKey)
           .maybeSingle();
+        if (!mounted) return;
         if (error) {
-          // ignore DB read errors — keep local value
+          // ignore DB read errors — keep local value, but never write back
           console.warn("load track_notes failed", error);
           return;
         }
-        if (mounted && data?.notes != null) {
+        if (data?.notes != null) {
           setNotes(data.notes);
+          lastSaved.v = data.notes;
           try {
             localStorage.setItem(localKey, data.notes);
           } catch (_) {}
+        } else {
+          lastSaved.v = local;
         }
+        setNotesReady(true);
       } catch (err) {
         console.warn("track_notes load error", err);
       }
@@ -167,14 +181,17 @@ function TrackPage() {
     return () => {
       mounted = false;
     };
-  }, [seasonN, track, canonicalName]);
+  }, [seasonN, track, canonicalName, lastSaved]);
 
   useEffect(() => {
+    if (!notesReady) return;
     const localKey = `f1.notes.${seasonN}.${trackSlug(track)}`;
     const id = setTimeout(() => {
       try {
         localStorage.setItem(localKey, notes);
       } catch (_) {}
+
+      if (notes === lastSaved.v) return;
 
       // Also try to persist to DB (if signed-in)
       (async () => {
@@ -203,14 +220,15 @@ function TrackPage() {
             ? await client.from("track_notes").update(payload).eq("id", existing.id)
             : await client.from("track_notes").insert(payload);
           if (error) console.warn("track_notes save failed", error);
-
+          else lastSaved.v = notes;
         } catch (err) {
           console.warn("track_notes save error", err);
         }
       })();
     }, 400);
     return () => clearTimeout(id);
-  }, [notes, seasonN, track, canonicalName]);
+  }, [notes, notesReady, seasonN, track, canonicalName, lastSaved]);
+
 
   const notesTemplate = `SOFTS:\n\nMEDIUMS:\n\nHARDS:\n\nBATTERY MANAGEMENT:\n`;
 
