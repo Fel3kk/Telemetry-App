@@ -967,9 +967,25 @@ function buildRaceStory(rootData, playerName, playerTeam, classification_data) {
     })),
   })).filter((d) => d.name && d.laps.length);
 
+  // Starting grid (when the packet carries grid positions)
+  const starting_grid = (classification_data || [])
+    .map((e) => {
+      const fc = e["final-classification"] || {};
+      const gp = Number(fc["grid-position"] || 0);
+      return {
+        position: gp,
+        name: String(e["driver-name"] || "").toUpperCase(),
+        team: e.team || "",
+      };
+    })
+    .filter((e) => e.name && e.position > 0);
+  const gridSeen = new Set(starting_grid.map((e) => e.position));
+  const validGrid = gridSeen.size === starting_grid.length && starting_grid.length > 2;
+
   return {
     player_name: playerName,
     player_team: playerTeam,
+    starting_grid: validGrid ? starting_grid.sort((a, b) => a.position - b.position) : [],
     position_history,
     podium,
     overtakes_made,

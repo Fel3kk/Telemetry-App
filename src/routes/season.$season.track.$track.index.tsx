@@ -34,6 +34,7 @@ const OPTIONS: Opt[] = [
     desc: "Career points, wins, podiums, DOTD",
   },
   { view: "quali-results", label: "Qualifying", icon: "⏱️", desc: "Q1–Q3 / shootout times" },
+  { view: "grid", label: "Starting Grid", icon: "🚦", desc: "Pole to the back row, weekend lineup" },
   { view: "assignments", label: "Teams", icon: "🏎️", desc: "Driver / constructor pairings" },
   {
     view: "race-story",
