@@ -967,8 +967,28 @@ function buildRaceStory(rootData, playerName, playerTeam, classification_data) {
     })),
   })).filter((d) => d.name && d.laps.length);
 
-  // Starting grid (when the packet carries grid positions)
-  const starting_grid = (classification_data || [])
+  // Starting grid — authoritative source is the race file itself (lap 0 of the
+  // position history), which already reflects any grid penalties applied.
+  const teamByName = {};
+  (classification_data || []).forEach((e) => {
+    const n = String(e["driver-name"] || "").toUpperCase();
+    if (n) teamByName[n] = e.team || "";
+  });
+
+  const lapZeroGrid = (positionHistoryRoot || [])
+    .map((p) => {
+      const hist = p["driver-position-history"] || [];
+      const zero = hist.find((h) => Number(h["lap-number"]) === 0);
+      const name = String(p.name || "").toUpperCase();
+      return {
+        position: Number(zero?.position || 0),
+        name,
+        team: p.team || teamByName[name] || "",
+      };
+    })
+    .filter((e) => e.name && e.position > 0);
+
+  const fcGrid = (classification_data || [])
     .map((e) => {
       const fc = e["final-classification"] || {};
       const gp = Number(fc["grid-position"] || 0);
@@ -979,8 +999,18 @@ function buildRaceStory(rootData, playerName, playerTeam, classification_data) {
       };
     })
     .filter((e) => e.name && e.position > 0);
-  const gridSeen = new Set(starting_grid.map((e) => e.position));
-  const validGrid = gridSeen.size === starting_grid.length && starting_grid.length > 2;
+
+  const gridIsValid = (arr) =>
+    arr.length > 2 && new Set(arr.map((e) => e.position)).size === arr.length;
+
+  const chosenGrid = gridIsValid(lapZeroGrid)
+    ? lapZeroGrid
+    : gridIsValid(fcGrid)
+      ? fcGrid
+      : [];
+  const starting_grid = chosenGrid;
+  const validGrid = chosenGrid.length > 0;
+
 
   return {
     player_name: playerName,
