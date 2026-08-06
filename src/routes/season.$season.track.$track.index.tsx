@@ -318,8 +318,23 @@ function TrackPage() {
               {badgeAgg.fl && <Tag color="#a855f7">Fastest Lap</Tag>}
             </div>
             <p className="mb-4 text-sm text-white/70">{infoSummary}</p>
-            <div className="mb-1 flex items-center justify-between">
-              <label className="block text-xs uppercase tracking-widest text-white/50">Notes</label>
+            <div className="mb-1 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <label className="block text-xs uppercase tracking-widest text-white/50">Notes</label>
+                <span
+                  className={
+                    "text-[11px] font-semibold " +
+                    (saveStatus === "saved"
+                      ? "text-emerald-400"
+                      : saveStatus === "error"
+                        ? "text-red-400"
+                        : "text-white/45")
+                  }
+                >
+                  {saveLabel[saveStatus]}
+                </span>
+              </div>
+
               {!notes && (
                 <button
                   type="button"
