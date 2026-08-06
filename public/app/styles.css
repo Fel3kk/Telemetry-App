@@ -2692,3 +2692,76 @@ body.embed-upload .download-btn.small:hover {
   color: rgba(255,255,255,0.75);
   border: 1px solid rgba(255,255,255,0.12);
 }
+
+/* ---------- Starting Grid ---------- */
+.sg-meta { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.sg-chip {
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.04);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--secondary-text);
+}
+.sg-track {
+  position: relative;
+  padding: 18px 10px 8px;
+  border-radius: 14px;
+  background:
+    repeating-linear-gradient(180deg, rgba(255,255,255,0.035) 0 2px, transparent 2px 26px),
+    rgba(0,0,0,0.35);
+  border: 1px solid rgba(255,255,255,0.08);
+}
+.sg-grid { display: flex; flex-direction: column; gap: 10px; }
+.sg-slot {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: min(100%, 460px);
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--team-color) 26%, transparent), rgba(255,255,255,0.03));
+  border: 1px solid rgba(255,255,255,0.09);
+  border-left: 4px solid var(--team-color);
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+.sg-slot:hover { transform: translateX(3px); border-color: color-mix(in srgb, var(--team-color) 70%, transparent); }
+.sg-right { margin-left: auto; }
+.sg-slot.is-player {
+  box-shadow: 0 0 0 1px var(--accent-red) inset;
+  background: linear-gradient(90deg, rgba(225,6,0,0.28), rgba(255,255,255,0.03));
+}
+.sg-slot.is-pole { border-color: rgba(255,215,0,0.55); }
+.sg-pos {
+  font-size: 1.1rem;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  color: #fff;
+  text-align: center;
+}
+.sg-slot.is-pole .sg-pos { color: #ffd700; }
+.sg-name { font-weight: 800; font-size: 0.92rem; letter-spacing: 0.02em; }
+.sg-team { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--secondary-text); }
+.sg-time { font-family: "Roboto Mono", monospace; font-size: 0.82rem; color: var(--secondary-text); white-space: nowrap; }
+.sg-pole-badge {
+  background: #ffd700; color: #000; font-size: 0.6rem; font-weight: 900;
+  padding: 1px 5px; border-radius: 3px; vertical-align: middle;
+}
+.sg-startline {
+  margin-top: 14px;
+  text-align: center;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.35em;
+  color: rgba(255,255,255,0.45);
+  padding-top: 10px;
+  border-top: 3px dashed rgba(255,255,255,0.2);
+}
+@media (max-width: 640px) {
+  .sg-slot { width: 100%; grid-template-columns: 44px minmax(0,1fr) auto; gap: 8px; padding: 9px 10px; }
+  .sg-right { margin-left: 0; }
+  .sg-time { font-size: 0.74rem; }
+}

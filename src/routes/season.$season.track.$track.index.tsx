@@ -34,6 +34,7 @@ const OPTIONS: Opt[] = [
     desc: "Career points, wins, podiums, DOTD",
   },
   { view: "quali-results", label: "Qualifying", icon: "⏱️", desc: "Q1–Q3 / shootout times" },
+  { view: "grid", label: "Starting Grid", icon: "🚦", desc: "Pole to the back row, weekend lineup" },
   { view: "assignments", label: "Teams", icon: "🏎️", desc: "Driver / constructor pairings" },
   {
     view: "race-story",
@@ -138,11 +139,15 @@ function TrackPage() {
   // saving only starts once the DB read for this track has settled, and we
   // never re-write a value identical to what we last loaded/saved.
   const [notesReady, setNotesReady] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<
+    "idle" | "editing" | "saving" | "saved" | "local" | "error"
+  >("idle");
   const lastSaved = useMemo(() => ({ v: null as string | null }), []);
 
   useEffect(() => {
     const localKey = `f1.notes.${seasonN}.${trackSlug(track)}`;
     setNotesReady(false);
+    setSaveStatus("idle");
     lastSaved.v = null;
     // Load local cache immediately
     const local = localStorage.getItem(localKey) || "";
@@ -153,15 +158,18 @@ function TrackPage() {
     (async () => {
       try {
         const dbKey = trackSlug(canonicalName || track);
-        const { data, error } = await supabase
-          .from("track_notes")
-          .select("notes")
-          .eq("track_key", dbKey)
-          .maybeSingle();
+        const { data: userData } = await supabase.auth.getUser();
+        const uid = userData?.user?.id;
+        let query = supabase.from("track_notes").select("notes").eq("track_key", dbKey);
+        if (uid) query = query.eq("user_id", uid);
+        const { data, error } = await query.maybeSingle();
         if (!mounted) return;
         if (error) {
-          // ignore DB read errors — keep local value, but never write back
+          // keep the local value and treat it as the baseline so we never
+          // overwrite the stored note with an empty editor state
           console.warn("load track_notes failed", error);
+          lastSaved.v = local;
+          setNotesReady(true);
           return;
         }
         if (data?.notes != null) {
@@ -176,6 +184,9 @@ function TrackPage() {
         setNotesReady(true);
       } catch (err) {
         console.warn("track_notes load error", err);
+        if (!mounted) return;
+        lastSaved.v = local;
+        setNotesReady(true);
       }
     })();
     return () => {
@@ -185,6 +196,7 @@ function TrackPage() {
 
   useEffect(() => {
     if (!notesReady) return;
+    if (notes !== lastSaved.v) setSaveStatus("editing");
     const localKey = `f1.notes.${seasonN}.${trackSlug(track)}`;
     const id = setTimeout(() => {
       try {
@@ -192,15 +204,16 @@ function TrackPage() {
       } catch (_) {}
 
       if (notes === lastSaved.v) return;
+      setSaveStatus("saving");
 
       // Also try to persist to DB (if signed-in)
       (async () => {
         try {
           const client = supabase;
-          if (!client) return;
+          if (!client) return setSaveStatus("local");
           const { data: userData } = await client.auth.getUser();
           const uid = userData?.user?.id;
-          if (!uid) return; // don't attempt DB write when anonymous
+          if (!uid) return setSaveStatus("local"); // anonymous → local only
           const dbKey = trackSlug(canonicalName || track);
           // Per-user lookup then update/insert. Upserting on `track_key`
           // alone can collide with another user's row under RLS and fail.
@@ -219,15 +232,31 @@ function TrackPage() {
           const { error } = existing?.id
             ? await client.from("track_notes").update(payload).eq("id", existing.id)
             : await client.from("track_notes").insert(payload);
-          if (error) console.warn("track_notes save failed", error);
-          else lastSaved.v = notes;
+          if (error) {
+            console.warn("track_notes save failed", error);
+            setSaveStatus("error");
+          } else {
+            lastSaved.v = notes;
+            setSaveStatus("saved");
+          }
         } catch (err) {
           console.warn("track_notes save error", err);
+          setSaveStatus("error");
         }
       })();
     }, 400);
     return () => clearTimeout(id);
   }, [notes, notesReady, seasonN, track, canonicalName, lastSaved]);
+
+  const saveLabel: Record<string, string> = {
+    idle: "",
+    editing: "Editing…",
+    saving: "Saving…",
+    saved: "Saved ✓",
+    local: "Saved on this device (sign in to sync)",
+    error: "Save failed — retry by editing again",
+  };
+
 
 
   const notesTemplate = `SOFTS:\n\nMEDIUMS:\n\nHARDS:\n\nBATTERY MANAGEMENT:\n`;
@@ -289,8 +318,23 @@ function TrackPage() {
               {badgeAgg.fl && <Tag color="#a855f7">Fastest Lap</Tag>}
             </div>
             <p className="mb-4 text-sm text-white/70">{infoSummary}</p>
-            <div className="mb-1 flex items-center justify-between">
-              <label className="block text-xs uppercase tracking-widest text-white/50">Notes</label>
+            <div className="mb-1 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <label className="block text-xs uppercase tracking-widest text-white/50">Notes</label>
+                <span
+                  className={
+                    "text-[11px] font-semibold " +
+                    (saveStatus === "saved"
+                      ? "text-emerald-400"
+                      : saveStatus === "error"
+                        ? "text-red-400"
+                        : "text-white/45")
+                  }
+                >
+                  {saveLabel[saveStatus]}
+                </span>
+              </div>
+
               {!notes && (
                 <button
                   type="button"

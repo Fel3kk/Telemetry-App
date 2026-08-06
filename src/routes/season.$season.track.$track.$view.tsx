@@ -11,6 +11,7 @@ const LABELS: Record<string, string> = {
   standings: "Standings",
   records: "All-Time Records",
   "quali-results": "Qualifying",
+  grid: "Starting Grid",
   assignments: "Teams",
   "race-story": "Race Story",
   compare: "Compare Lap Times",

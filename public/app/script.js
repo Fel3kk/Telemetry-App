@@ -967,9 +967,25 @@ function buildRaceStory(rootData, playerName, playerTeam, classification_data) {
     })),
   })).filter((d) => d.name && d.laps.length);
 
+  // Starting grid (when the packet carries grid positions)
+  const starting_grid = (classification_data || [])
+    .map((e) => {
+      const fc = e["final-classification"] || {};
+      const gp = Number(fc["grid-position"] || 0);
+      return {
+        position: gp,
+        name: String(e["driver-name"] || "").toUpperCase(),
+        team: e.team || "",
+      };
+    })
+    .filter((e) => e.name && e.position > 0);
+  const gridSeen = new Set(starting_grid.map((e) => e.position));
+  const validGrid = gridSeen.size === starting_grid.length && starting_grid.length > 2;
+
   return {
     player_name: playerName,
     player_team: playerTeam,
+    starting_grid: validGrid ? starting_grid.sort((a, b) => a.position - b.position) : [],
     position_history,
     podium,
     overtakes_made,
@@ -1803,6 +1819,7 @@ function renderContent() {
   renderStints();
   renderTable();
   renderQualiResults();
+  renderStartingGrid();
   renderPracticeSection();
   renderRaceStory();
   renderCompareTab();
@@ -5758,3 +5775,119 @@ function renderPaceDeltaChart() {
   });
 })();
 
+
+/* ---------------------------------------------------------------
+   Starting Grid
+   Builds the weekend's grid from (a) stored grid positions when the
+   telemetry carried them, or (b) the qualifying segments for the
+   weekend (Q3 → P1-10, Q2 → P11-16, Q1 → the rest).
+---------------------------------------------------------------- */
+function buildStartingGridData() {
+  if (!currentData) return [];
+  const teams = typeof getDriverTeams === "function" ? getDriverTeams() : {};
+  const rs = currentData.race_story;
+
+  if (rs && Array.isArray(rs.starting_grid) && rs.starting_grid.length) {
+    return [...rs.starting_grid]
+      .filter((e) => e && e.position > 0 && e.name)
+      .sort((a, b) => a.position - b.position)
+      .map((e) => ({
+        position: Number(e.position),
+        name: String(e.name).toUpperCase(),
+        team: e.team || teams[e.name] || "Unassigned",
+        time: e.lap_time_str || "",
+        source: "Telemetry grid",
+      }));
+  }
+
+  // Fallback: rebuild from qualifying segments of the same weekend
+  const isSprintish =
+    currentData.category === "Sprint" ||
+    currentData.category === "Sprint Shootout";
+  const targetCat = isSprintish ? "Sprint Shootout" : "Qualifying";
+  const currentNormalized = normalizeTrackName(currentData.track_name);
+  const qualiSessions = (allSessions || []).filter(
+    (s) =>
+      normalizeTrackName(s.track_name) === currentNormalized &&
+      s.season === currentData.season &&
+      s.category === targetCat &&
+      Array.isArray(s.results) &&
+      s.results.length,
+  );
+  if (!qualiSessions.length) return [];
+
+  const rank = (s) => {
+    const t = String(s.session_type || "").toLowerCase();
+    if (/3/.test(t)) return 3;
+    if (/2/.test(t)) return 2;
+    return 1;
+  };
+  // Highest segment first so it wins the top slots
+  const ordered = [...qualiSessions].sort((a, b) => rank(b) - rank(a));
+
+  const byPos = new Map();
+  const taken = new Set();
+  ordered.forEach((session) => {
+    const label = session.session_type || session.category || "Qualifying";
+    [...session.results]
+      .map((r) => ({ ...r, pos: parseInt(r.position) }))
+      .filter((r) => r.pos > 0 && r.name)
+      .sort((a, b) => a.pos - b.pos)
+      .forEach((r) => {
+        const name = String(r.name).toUpperCase();
+        if (taken.has(name)) return;
+        if (byPos.has(r.pos)) return;
+        taken.add(name);
+        byPos.set(r.pos, {
+          position: r.pos,
+          name,
+          team: teams[r.name] || teams[name] || "Unassigned",
+          time: r.best_lap && r.best_lap !== "N/A" ? r.best_lap : "",
+          source: label,
+        });
+      });
+  });
+
+  return Array.from(byPos.values()).sort((a, b) => a.position - b.position);
+}
+
+function renderStartingGrid() {
+  const section = document.getElementById("section-grid");
+  const container = document.getElementById("startingGridContainer");
+  if (!section || !container) return;
+
+  const rows = buildStartingGridData();
+  const playerName = String(currentData?.driver_name || "").toUpperCase();
+
+  if (!rows.length) {
+    container.innerHTML = `<div class="race-story-empty">No grid available for this weekend yet — upload the qualifying (or sprint shootout) telemetry to build it.</div>`;
+    return;
+  }
+
+  const sourceLabel = rows[0].source || "";
+  const tiles = rows
+    .map((r) => {
+      const color = teamColorFor(r.team) || "#444";
+      const isPlayer = playerName && r.name === playerName;
+      const side = r.position % 2 === 1 ? "left" : "right";
+      return `<div class="sg-slot sg-${side}${isPlayer ? " is-player" : ""}${r.position === 1 ? " is-pole" : ""}" style="--team-color:${color}">
+        <div class="sg-pos">P${r.position}</div>
+        <div class="sg-info">
+          <div class="sg-name">${r.name}${r.position === 1 ? ' <span class="sg-pole-badge">POLE</span>' : ""}</div>
+          <div class="sg-team">${r.team}</div>
+        </div>
+        <div class="sg-time">${r.time || "—"}</div>
+      </div>`;
+    })
+    .join("");
+
+  container.innerHTML = `
+    <div class="sg-meta">
+      <span class="sg-chip">🚦 ${rows.length} cars</span>
+      ${sourceLabel ? `<span class="sg-chip">Source: ${sourceLabel}</span>` : ""}
+    </div>
+    <div class="sg-track">
+      <div class="sg-grid">${tiles}</div>
+      <div class="sg-startline">START / FINISH</div>
+    </div>`;
+}
