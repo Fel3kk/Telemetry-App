@@ -5815,7 +5815,26 @@ function renderPaceDeltaChart() {
 function buildStartingGridData() {
   if (!currentData) return [];
   const teams = typeof getDriverTeams === "function" ? getDriverTeams() : {};
-  const rs = currentData.race_story;
+  const currentTrack = normalizeTrackName(currentData.track_name);
+
+  // Prefer the race (or sprint) file of the same weekend — its lap-0 order is
+  // the real starting grid, penalties included.
+  const weekendRace = (allSessions || []).find(
+    (s) =>
+      normalizeTrackName(s.track_name) === currentTrack &&
+      s.season === currentData.season &&
+      (s.category === "Race" || s.category === "Sprint") &&
+      s.race_story &&
+      Array.isArray(s.race_story.starting_grid) &&
+      s.race_story.starting_grid.length,
+  );
+
+  const rs =
+    (currentData.race_story &&
+    Array.isArray(currentData.race_story.starting_grid) &&
+    currentData.race_story.starting_grid.length
+      ? currentData.race_story
+      : null) || weekendRace?.race_story;
 
   if (rs && Array.isArray(rs.starting_grid) && rs.starting_grid.length) {
     return [...rs.starting_grid]
@@ -5826,9 +5845,10 @@ function buildStartingGridData() {
         name: String(e.name).toUpperCase(),
         team: e.team || teams[e.name] || "Unassigned",
         time: e.lap_time_str || "",
-        source: "Telemetry grid",
+        source: "Race start (lap 0)",
       }));
   }
+
 
   // Fallback: rebuild from qualifying segments of the same weekend
   const isSprintish =
