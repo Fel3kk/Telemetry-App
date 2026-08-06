@@ -967,8 +967,28 @@ function buildRaceStory(rootData, playerName, playerTeam, classification_data) {
     })),
   })).filter((d) => d.name && d.laps.length);
 
-  // Starting grid (when the packet carries grid positions)
-  const starting_grid = (classification_data || [])
+  // Starting grid — authoritative source is the race file itself (lap 0 of the
+  // position history), which already reflects any grid penalties applied.
+  const teamByName = {};
+  (classification_data || []).forEach((e) => {
+    const n = String(e["driver-name"] || "").toUpperCase();
+    if (n) teamByName[n] = e.team || "";
+  });
+
+  const lapZeroGrid = (positionHistoryRoot || [])
+    .map((p) => {
+      const hist = p["driver-position-history"] || [];
+      const zero = hist.find((h) => Number(h["lap-number"]) === 0);
+      const name = String(p.name || "").toUpperCase();
+      return {
+        position: Number(zero?.position || 0),
+        name,
+        team: p.team || teamByName[name] || "",
+      };
+    })
+    .filter((e) => e.name && e.position > 0);
+
+  const fcGrid = (classification_data || [])
     .map((e) => {
       const fc = e["final-classification"] || {};
       const gp = Number(fc["grid-position"] || 0);
@@ -979,8 +999,18 @@ function buildRaceStory(rootData, playerName, playerTeam, classification_data) {
       };
     })
     .filter((e) => e.name && e.position > 0);
-  const gridSeen = new Set(starting_grid.map((e) => e.position));
-  const validGrid = gridSeen.size === starting_grid.length && starting_grid.length > 2;
+
+  const gridIsValid = (arr) =>
+    arr.length > 2 && new Set(arr.map((e) => e.position)).size === arr.length;
+
+  const chosenGrid = gridIsValid(lapZeroGrid)
+    ? lapZeroGrid
+    : gridIsValid(fcGrid)
+      ? fcGrid
+      : [];
+  const starting_grid = chosenGrid;
+  const validGrid = chosenGrid.length > 0;
+
 
   return {
     player_name: playerName,
@@ -5785,7 +5815,26 @@ function renderPaceDeltaChart() {
 function buildStartingGridData() {
   if (!currentData) return [];
   const teams = typeof getDriverTeams === "function" ? getDriverTeams() : {};
-  const rs = currentData.race_story;
+  const currentTrack = normalizeTrackName(currentData.track_name);
+
+  // Prefer the race (or sprint) file of the same weekend — its lap-0 order is
+  // the real starting grid, penalties included.
+  const weekendRace = (allSessions || []).find(
+    (s) =>
+      normalizeTrackName(s.track_name) === currentTrack &&
+      s.season === currentData.season &&
+      (s.category === "Race" || s.category === "Sprint") &&
+      s.race_story &&
+      Array.isArray(s.race_story.starting_grid) &&
+      s.race_story.starting_grid.length,
+  );
+
+  const rs =
+    (currentData.race_story &&
+    Array.isArray(currentData.race_story.starting_grid) &&
+    currentData.race_story.starting_grid.length
+      ? currentData.race_story
+      : null) || weekendRace?.race_story;
 
   if (rs && Array.isArray(rs.starting_grid) && rs.starting_grid.length) {
     return [...rs.starting_grid]
@@ -5796,9 +5845,10 @@ function buildStartingGridData() {
         name: String(e.name).toUpperCase(),
         team: e.team || teams[e.name] || "Unassigned",
         time: e.lap_time_str || "",
-        source: "Telemetry grid",
+        source: "Race start (lap 0)",
       }));
   }
+
 
   // Fallback: rebuild from qualifying segments of the same weekend
   const isSprintish =
