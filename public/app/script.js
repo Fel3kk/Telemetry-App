@@ -1369,6 +1369,9 @@ async function loadSavedSessions() {
       // the embed picks its own session (or shows an empty state).
       if (EMBED_VIEW) _embedSelectSession();
       else renderContent();
+
+      // Rebuild grids for races saved before grid capture existed.
+      backfillStartingGrids();
     }
   } catch (err) {
     console.error("Failed to fetch sessions from Supabase", err);
@@ -2230,7 +2233,7 @@ function renderQualiResults() {
       else if (lowerTitle.includes("2") && pos > 10) isEliminated = true;
 
       const team = teamsAssigned[res.name] || "Unassigned";
-      const teamColor = TEAM_COLORS[team] || "#444";
+      const teamColor = teamColorFor(team);
 
       let rowStyle = "";
       if (isPlayer) {
@@ -3948,7 +3951,7 @@ function renderStandingsTable() {
   driverNames.forEach((name, idx) => {
     const d = driversMap[name];
     const team = teamsAssigned[name] || "Unassigned";
-    const teamColor = TEAM_COLORS[team] || "#444";
+    const teamColor = teamColorFor(team);
     const leaderClass = idx === 0 ? " is-leader" : "";
     html += `<tr class="standings-row${leaderClass}"><td class="col-rank rank-cell"><span class="rank-num">${idx + 1}</span></td><td class="col-driver driver-cell" style="--team-color:${teamColor};"><span class="driver-name">${name.toUpperCase()}</span><span class="driver-team">${team}</span></td>`;
 
@@ -4000,7 +4003,7 @@ function renderStandingsTable() {
 
     teamNames.forEach((t, idx) => {
       const info = teamAgg[t];
-      const teamColor = TEAM_COLORS[t] || "#444";
+      const teamColor = teamColorFor(t);
       const gap =
         idx === 0
           ? "-"
@@ -4219,7 +4222,7 @@ function renderRecordsTable() {
     .sort((a, b) => b[1].points - a[1].points)
     .map(([name, d], idx) => {
       const team = d.lastTeam || "Unassigned";
-      const color = TEAM_COLORS[team] || "#444";
+      const color = teamColorFor(team);
       const titleBadge = d.titles > 0
         ? `<span class="rec-title-badge" title="${d.titles} championship${d.titles > 1 ? "s" : ""}">★ ${d.titles}</span>`
         : "";
@@ -4244,7 +4247,7 @@ function renderRecordsTable() {
   const teamRows = Object.entries(teamAgg)
     .sort((a, b) => b[1].points - a[1].points)
     .map(([team, t], idx) => {
-      const color = TEAM_COLORS[team] || "#444";
+      const color = teamColorFor(team);
       const titleBadge = t.titles > 0
         ? `<span class="rec-title-badge" title="${t.titles} constructor title${t.titles > 1 ? "s" : ""}">★ ${t.titles}</span>`
         : "";
@@ -4270,8 +4273,8 @@ function renderRecordsTable() {
       const dChamp = driverChampions[season] || "—";
       const cChamp = constructorChampions[season] || "—";
       const isCurrent = season === currentMaxSeason;
-      const dColor = TEAM_COLORS[(getTeamsForSeason(season)[dChamp]) || ""] || "#444";
-      const cColor = TEAM_COLORS[cChamp] || "#444";
+      const dColor = teamColorFor(getTeamsForSeason(season)[dChamp] || "");
+      const cColor = teamColorFor(cChamp);
       return `<tr>
         <td class="rec-season">S${season}${isCurrent ? '<span class="rec-current">live</span>' : ""}</td>
         <td><span class="rec-champ-dot" style="background:${dColor};"></span>${dChamp.toUpperCase()}</td>
@@ -4924,9 +4927,48 @@ function normalizeTeamName(t) {
   return s.replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+// Alias table keyed by a squashed lowercase form so odd casings
+// ("MCLAREN", "mclaren_2026", "Red_Bull") all resolve to the right colour.
+const TEAM_COLOR_ALIASES = {
+  mclaren: "#f58020",
+  mercedes: "#27f4d2",
+  ferrari: "#f91536",
+  scuderiaferrari: "#f91536",
+  redbull: "#3671c6",
+  redbullracing: "#3671c6",
+  oracleredbullracing: "#3671c6",
+  astonmartin: "#229971",
+  alpine: "#0093cc",
+  bwtalpine: "#0093cc",
+  renault: "#0093cc",
+  williams: "#64c4ff",
+  racingbulls: "#6692ff",
+  visacashapprb: "#6692ff",
+  rb: "#6692ff",
+  alphatauri: "#6692ff",
+  tororosso: "#6692ff",
+  haas: "#b6babd",
+  haasf1team: "#b6babd",
+  audi: "#f04646",
+  sauber: "#f04646",
+  kicksauber: "#f04646",
+  alfaromeo: "#f04646",
+  cadillac: "#7c7c7c",
+  myteam: "#b81d89",
+};
+
+function teamColorKey(team) {
+  return String(team || "")
+    .replace(/['’]?\d{2,4}$/, "")
+    .toLowerCase()
+    .replace(/[^a-z]/g, "");
+}
+
 function teamColorFor(team) {
   const norm = normalizeTeamName(team);
-  return TEAM_COLORS[norm] || "#9aa0a6";
+  return (
+    TEAM_COLORS[norm] || TEAM_COLOR_ALIASES[teamColorKey(team)] || "#9aa0a6"
+  );
 }
 
 function renderRaceStory() {
@@ -5851,15 +5893,24 @@ function buildStartingGridData() {
 
 
   // Fallback: rebuild from qualifying segments of the same weekend
+  return gridFromQualiFor(currentData, teams);
+}
+
+// Rebuild a grid for `session` from the qualifying (or sprint shootout)
+// telemetry saved for the same weekend.
+function gridFromQualiFor(session, teamsMap) {
+  if (!session) return [];
+  const teams =
+    teamsMap ||
+    (typeof getDriverTeams === "function" ? getDriverTeams() : {});
   const isSprintish =
-    currentData.category === "Sprint" ||
-    currentData.category === "Sprint Shootout";
+    session.category === "Sprint" || session.category === "Sprint Shootout";
   const targetCat = isSprintish ? "Sprint Shootout" : "Qualifying";
-  const currentNormalized = normalizeTrackName(currentData.track_name);
+  const currentNormalized = normalizeTrackName(session.track_name);
   const qualiSessions = (allSessions || []).filter(
     (s) =>
       normalizeTrackName(s.track_name) === currentNormalized &&
-      s.season === currentData.season &&
+      s.season === session.season &&
       s.category === targetCat &&
       Array.isArray(s.results) &&
       s.results.length,
@@ -5877,9 +5928,9 @@ function buildStartingGridData() {
 
   const byPos = new Map();
   const taken = new Set();
-  ordered.forEach((session) => {
-    const label = session.session_type || session.category || "Qualifying";
-    [...session.results]
+  ordered.forEach((qs) => {
+    const label = qs.session_type || qs.category || "Qualifying";
+    [...qs.results]
       .map((r) => ({ ...r, pos: parseInt(r.position) }))
       .filter((r) => r.pos > 0 && r.name)
       .sort((a, b) => a.pos - b.pos)
@@ -5901,6 +5952,49 @@ function buildStartingGridData() {
   return Array.from(byPos.values()).sort((a, b) => a.position - b.position);
 }
 
+// One-shot backfill: older saved races were stored before starting grids were
+// captured. Rebuild those from the weekend's qualifying data and persist them
+// so every Grand Prix has a Starting Grid.
+let _gridBackfillDone = false;
+async function backfillStartingGrids() {
+  if (_gridBackfillDone) return;
+  _gridBackfillDone = true;
+  const db = typeof getSupabaseClient === "function" ? getSupabaseClient() : null;
+  const teams = typeof getDriverTeams === "function" ? getDriverTeams() : {};
+  let changed = 0;
+
+  for (const s of allSessions || []) {
+    if (s.category !== "Race" && s.category !== "Sprint") continue;
+    const rs = s.race_story;
+    if (!rs) continue;
+    if (Array.isArray(rs.starting_grid) && rs.starting_grid.length) continue;
+
+    const grid = gridFromQualiFor(s, teams)
+      .filter((e) => e.position > 0 && e.name)
+      .map((e) => ({ position: e.position, name: e.name, team: e.team }));
+    if (grid.length < 3) continue;
+
+    rs.starting_grid = grid;
+    changed++;
+    if (db && s.id) {
+      try {
+        await db
+          .from("telemetry_sessions")
+          .update({ race_story: rs })
+          .eq("id", s.id);
+      } catch (err) {
+        console.warn("grid backfill save failed", err);
+      }
+    }
+  }
+
+  if (changed) {
+    try {
+      renderStartingGrid();
+    } catch (_) {}
+  }
+}
+
 function renderStartingGrid() {
   const section = document.getElementById("section-grid");
   const container = document.getElementById("startingGridContainer");
@@ -5920,10 +6014,10 @@ function renderStartingGrid() {
       const color = teamColorFor(r.team) || "#444";
       const isPlayer = playerName && r.name === playerName;
       const side = r.position % 2 === 1 ? "left" : "right";
-      return `<div class="sg-slot sg-${side}${isPlayer ? " is-player" : ""}${r.position === 1 ? " is-pole" : ""}" style="--team-color:${color}">
+      return `<div class="sg-slot sg-${side}${isPlayer ? " is-player" : ""}" style="--team-color:${color}">
         <div class="sg-pos">P${r.position}</div>
         <div class="sg-info">
-          <div class="sg-name">${r.name}${r.position === 1 ? ' <span class="sg-pole-badge">POLE</span>' : ""}</div>
+          <div class="sg-name">${r.name}</div>
           <div class="sg-team">${r.team}</div>
         </div>
         <div class="sg-time">${r.time || "—"}</div>
