@@ -5879,16 +5879,28 @@ function buildStartingGridData() {
       : null) || weekendRace?.race_story;
 
   if (rs && Array.isArray(rs.starting_grid) && rs.starting_grid.length) {
+    // Compare against the weekend's qualifying order so we can flag drivers
+    // who lost places between qualifying and the actual race start.
+    const qualiPos = new Map();
+    gridFromQualiFor(weekendRace || currentData, teams).forEach((q) =>
+      qualiPos.set(q.name, q.position),
+    );
+
     return [...rs.starting_grid]
       .filter((e) => e && e.position > 0 && e.name)
       .sort((a, b) => a.position - b.position)
-      .map((e) => ({
-        position: Number(e.position),
-        name: String(e.name).toUpperCase(),
-        team: e.team || teams[e.name] || "Unassigned",
-        time: e.lap_time_str || "",
-        source: "Race start (lap 0)",
-      }));
+      .map((e) => {
+        const name = String(e.name).toUpperCase();
+        const qp = qualiPos.get(name);
+        return {
+          position: Number(e.position),
+          name,
+          team: e.team || teams[e.name] || "Unassigned",
+          time: e.lap_time_str || "",
+          source: "Race start (lap 0)",
+          penalty: !!(qp && Number(e.position) > qp),
+        };
+      });
   }
 
 
