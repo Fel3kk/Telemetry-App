@@ -4924,9 +4924,48 @@ function normalizeTeamName(t) {
   return s.replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+// Alias table keyed by a squashed lowercase form so odd casings
+// ("MCLAREN", "mclaren_2026", "Red_Bull") all resolve to the right colour.
+const TEAM_COLOR_ALIASES = {
+  mclaren: "#f58020",
+  mercedes: "#27f4d2",
+  ferrari: "#f91536",
+  scuderiaferrari: "#f91536",
+  redbull: "#3671c6",
+  redbullracing: "#3671c6",
+  oracleredbullracing: "#3671c6",
+  astonmartin: "#229971",
+  alpine: "#0093cc",
+  bwtalpine: "#0093cc",
+  renault: "#0093cc",
+  williams: "#64c4ff",
+  racingbulls: "#6692ff",
+  visacashapprb: "#6692ff",
+  rb: "#6692ff",
+  alphatauri: "#6692ff",
+  tororosso: "#6692ff",
+  haas: "#b6babd",
+  haasf1team: "#b6babd",
+  audi: "#f04646",
+  sauber: "#f04646",
+  kicksauber: "#f04646",
+  alfaromeo: "#f04646",
+  cadillac: "#7c7c7c",
+  myteam: "#b81d89",
+};
+
+function teamColorKey(team) {
+  return String(team || "")
+    .replace(/['’]?\d{2,4}$/, "")
+    .toLowerCase()
+    .replace(/[^a-z]/g, "");
+}
+
 function teamColorFor(team) {
   const norm = normalizeTeamName(team);
-  return TEAM_COLORS[norm] || "#9aa0a6";
+  return (
+    TEAM_COLORS[norm] || TEAM_COLOR_ALIASES[teamColorKey(team)] || "#9aa0a6"
+  );
 }
 
 function renderRaceStory() {
@@ -5920,10 +5959,10 @@ function renderStartingGrid() {
       const color = teamColorFor(r.team) || "#444";
       const isPlayer = playerName && r.name === playerName;
       const side = r.position % 2 === 1 ? "left" : "right";
-      return `<div class="sg-slot sg-${side}${isPlayer ? " is-player" : ""}${r.position === 1 ? " is-pole" : ""}" style="--team-color:${color}">
+      return `<div class="sg-slot sg-${side}${isPlayer ? " is-player" : ""}" style="--team-color:${color}">
         <div class="sg-pos">P${r.position}</div>
         <div class="sg-info">
-          <div class="sg-name">${r.name}${r.position === 1 ? ' <span class="sg-pole-badge">POLE</span>' : ""}</div>
+          <div class="sg-name">${r.name}</div>
           <div class="sg-team">${r.team}</div>
         </div>
         <div class="sg-time">${r.time || "—"}</div>
