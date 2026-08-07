@@ -2230,7 +2230,7 @@ function renderQualiResults() {
       else if (lowerTitle.includes("2") && pos > 10) isEliminated = true;
 
       const team = teamsAssigned[res.name] || "Unassigned";
-      const teamColor = TEAM_COLORS[team] || "#444";
+      const teamColor = teamColorFor(team);
 
       let rowStyle = "";
       if (isPlayer) {
@@ -3948,7 +3948,7 @@ function renderStandingsTable() {
   driverNames.forEach((name, idx) => {
     const d = driversMap[name];
     const team = teamsAssigned[name] || "Unassigned";
-    const teamColor = TEAM_COLORS[team] || "#444";
+    const teamColor = teamColorFor(team);
     const leaderClass = idx === 0 ? " is-leader" : "";
     html += `<tr class="standings-row${leaderClass}"><td class="col-rank rank-cell"><span class="rank-num">${idx + 1}</span></td><td class="col-driver driver-cell" style="--team-color:${teamColor};"><span class="driver-name">${name.toUpperCase()}</span><span class="driver-team">${team}</span></td>`;
 
@@ -4000,7 +4000,7 @@ function renderStandingsTable() {
 
     teamNames.forEach((t, idx) => {
       const info = teamAgg[t];
-      const teamColor = TEAM_COLORS[t] || "#444";
+      const teamColor = teamColorFor(t);
       const gap =
         idx === 0
           ? "-"
@@ -4219,7 +4219,7 @@ function renderRecordsTable() {
     .sort((a, b) => b[1].points - a[1].points)
     .map(([name, d], idx) => {
       const team = d.lastTeam || "Unassigned";
-      const color = TEAM_COLORS[team] || "#444";
+      const color = teamColorFor(team);
       const titleBadge = d.titles > 0
         ? `<span class="rec-title-badge" title="${d.titles} championship${d.titles > 1 ? "s" : ""}">★ ${d.titles}</span>`
         : "";
@@ -4244,7 +4244,7 @@ function renderRecordsTable() {
   const teamRows = Object.entries(teamAgg)
     .sort((a, b) => b[1].points - a[1].points)
     .map(([team, t], idx) => {
-      const color = TEAM_COLORS[team] || "#444";
+      const color = teamColorFor(team);
       const titleBadge = t.titles > 0
         ? `<span class="rec-title-badge" title="${t.titles} constructor title${t.titles > 1 ? "s" : ""}">★ ${t.titles}</span>`
         : "";
@@ -4270,8 +4270,8 @@ function renderRecordsTable() {
       const dChamp = driverChampions[season] || "—";
       const cChamp = constructorChampions[season] || "—";
       const isCurrent = season === currentMaxSeason;
-      const dColor = TEAM_COLORS[(getTeamsForSeason(season)[dChamp]) || ""] || "#444";
-      const cColor = TEAM_COLORS[cChamp] || "#444";
+      const dColor = teamColorFor(getTeamsForSeason(season)[dChamp] || "");
+      const cColor = teamColorFor(cChamp);
       return `<tr>
         <td class="rec-season">S${season}${isCurrent ? '<span class="rec-current">live</span>' : ""}</td>
         <td><span class="rec-champ-dot" style="background:${dColor};"></span>${dChamp.toUpperCase()}</td>
