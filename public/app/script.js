@@ -6029,7 +6029,7 @@ function renderStartingGrid() {
       return `<div class="sg-slot sg-${side}${isPlayer ? " is-player" : ""}" style="--team-color:${color}">
         <div class="sg-pos">P${r.position}</div>
         <div class="sg-info">
-          <div class="sg-name">${r.name}</div>
+          <div class="sg-name">${r.name}${r.penalty ? `<span class="sg-pen" title="Grid penalty applied">PEN</span>` : ""}</div>
           <div class="sg-team">${r.team}</div>
         </div>
         <div class="sg-time">${r.time || "—"}</div>
