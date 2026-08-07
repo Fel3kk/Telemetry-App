@@ -2741,7 +2741,8 @@ body.embed-upload .download-btn.small:hover {
   color: #fff;
   text-align: center;
 }
-.sg-name { font-weight: 800; font-size: 0.92rem; letter-spacing: 0.02em; }
+.sg-name { font-weight: 800; font-size: 0.92rem; letter-spacing: 0.02em; display: flex; align-items: center; gap: 6px; }
+.sg-pen { font-size: 0.58rem; font-weight: 900; letter-spacing: 0.08em; padding: 1px 5px; border-radius: 3px; background: #f59e0b; color: #1a1204; }
 .sg-team { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--secondary-text); }
 .sg-time { font-family: "Roboto Mono", monospace; font-size: 0.82rem; color: var(--secondary-text); white-space: nowrap; }
 .sg-startline {
