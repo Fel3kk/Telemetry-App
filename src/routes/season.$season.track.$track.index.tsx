@@ -144,6 +144,7 @@ function TrackPage() {
   >("idle");
   const lastSaved = useRef<string | null>(null);
   const saveSequence = useRef(0);
+  const saveQueue = useRef<Promise<void>>(Promise.resolve());
 
   useEffect(() => {
     const localKey = `f1.notes.${seasonN}.${trackSlug(track)}`;
@@ -214,8 +215,9 @@ function TrackPage() {
       setSaveStatus("saving");
       const sequence = ++saveSequence.current;
 
-      // Also try to persist to DB (if signed-in)
-      (async () => {
+      // Serialize writes so a slower older request can never overwrite a
+      // newer note after rapid edits.
+      saveQueue.current = saveQueue.current.catch(() => {}).then(async () => {
         try {
           const client = supabase;
           if (!client) return setSaveStatus("local");
@@ -253,7 +255,7 @@ function TrackPage() {
           console.warn("track_notes save error", err);
           if (sequence === saveSequence.current) setSaveStatus("error");
         }
-      })();
+      });
     }, 700);
     return () => clearTimeout(id);
   }, [notes, notesReady, seasonN, track, canonicalName, lastSaved]);

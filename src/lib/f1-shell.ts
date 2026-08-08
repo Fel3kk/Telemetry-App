@@ -209,7 +209,7 @@ export function badgesFor(s: Session): SessionBadges {
     pole: classifiedStart === 1,
     podium: !dnf && classifiedFinish >= 1 && classifiedFinish <= 3,
     fl: !!(s.race_story?.player_fastest_lap ?? false),
-    gs: !!(s.race_story?.grand_slam ?? false),
+    gs: !dnf && !!(s.race_story?.grand_slam ?? false),
     dnf,
   };
 }
