@@ -1183,9 +1183,11 @@ function processTelemetryData(data) {
         } else {
           summary.starting_position =
             final_classification["grid-position"] ?? null;
+          // The lap packet is only a live position and can remain P3 after a
+          // retirement. Final classification is authoritative for results.
           summary.finishing_position =
-            lap_data["car-position"] ??
             final_classification["position"] ??
+            lap_data["car-position"] ??
             null;
         }
 
@@ -1452,8 +1454,21 @@ function getSessionBadges(session) {
   const start = Number(session.starting_position ?? session.starting_pos);
   const rs = session.race_story || {};
   const playerName = (rs.player_name || session.driver_name || "").toUpperCase();
-  const win = finish === 1;
-  const pole = start === 1;
+  const playerResult = Array.isArray(rs.classification)
+    ? rs.classification.find((entry) => String(entry?.name || "").toUpperCase() === playerName)
+    : null;
+  const status = String(playerResult?.status || "").toUpperCase();
+  const dnf = !!playerResult && (
+    playerResult.is_dnf === true ||
+    (!!status && !/FINISHED|ACTIVE/.test(status))
+  );
+  const classifiedFinish = Number(playerResult?.position || finish);
+  const gridEntry = Array.isArray(rs.starting_grid)
+    ? rs.starting_grid.find((entry) => String(entry?.name || "").toUpperCase() === playerName)
+    : null;
+  const classifiedStart = Number(gridEntry?.position || start);
+  const win = !dnf && classifiedFinish === 1;
+  const pole = classifiedStart === 1;
   const fl =
     !!(rs.fastest_lap && (rs.fastest_lap.name || "").toUpperCase() === playerName);
   const ledEveryLap =
@@ -1461,7 +1476,7 @@ function getSessionBadges(session) {
     rs.position_history.length > 1 &&
     rs.position_history.filter((p) => p.lap >= 1).every((p) => p.position === 1);
   const grandSlam = cat === "race" && win && pole && fl && ledEveryLap;
-  return { win, pole, fl, grandSlam };
+  return { win, pole, fl, grandSlam, dnf };
 }
 
 async function clearSessionStatus(statusType) {
@@ -1662,19 +1677,21 @@ function renderSavedSessions(sessions) {
     const flag = trackToFlag[trackKey] || "🏁";
     const weatherIcon = determineWeatherIcon(rep);
     // Aggregate badges across every session in the weekend.
-    const agg = { grandSlam: false, win: false, pole: false, fl: false };
+    const agg = { grandSlam: false, win: false, pole: false, fl: false, dnf: false };
     group.sessions.forEach((s) => {
       const b = getSessionBadges(s);
       if (b.grandSlam) agg.grandSlam = true;
       if (b.win) agg.win = true;
       if (b.pole) agg.pole = true;
       if (b.fl) agg.fl = true;
+      if (b.dnf) agg.dnf = true;
     });
     const badgeHtml = [
       agg.grandSlam ? '<span class="result-tag mini tag-gs" title="Grand Slam">GS</span>' : "",
       agg.win ? '<span class="result-tag mini tag-w" title="Win">W</span>' : "",
       agg.pole ? '<span class="result-tag mini tag-p" title="Pole">P</span>' : "",
       agg.fl ? '<span class="result-tag mini tag-fl" title="Fastest Lap">FL</span>' : "",
+      agg.dnf ? '<span class="result-tag mini tag-dnf" title="Did Not Finish">DNF</span>' : "",
     ].join("");
 
     // Small chips showing which session types are uploaded for this weekend.

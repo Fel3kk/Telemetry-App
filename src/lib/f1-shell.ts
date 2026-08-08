@@ -172,7 +172,7 @@ export function trackFlag(name: string) {
   return TRACK_FLAGS[trackSlug(name)] || "🏁";
 }
 
-export type SessionBadges = { win?: boolean; pole?: boolean; fl?: boolean; podium?: boolean; gs?: boolean };
+export type SessionBadges = { win?: boolean; pole?: boolean; fl?: boolean; podium?: boolean; gs?: boolean; dnf?: boolean };
 export function badgesFor(s: Session): SessionBadges {
   const cat = (s.category || "").toLowerCase();
   const isRaceLike = cat === "race" || cat === "sprint";
@@ -186,12 +186,31 @@ export function badgesFor(s: Session): SessionBadges {
     return { pole: finish === 1 };
   }
   if (!isRaceLike) return {};
+  const playerName = String(s.race_story?.player_name || s.driver_name || "").toUpperCase();
+  const playerResult = Array.isArray(s.race_story?.classification)
+    ? s.race_story.classification.find(
+        (entry: any) => String(entry?.name || "").toUpperCase() === playerName,
+      )
+    : null;
+  const status = String(playerResult?.status || "").toUpperCase();
+  const dnf = Boolean(
+    playerResult &&
+      (playerResult.is_dnf === true || (status.length > 0 && !/FINISHED|ACTIVE/.test(status))),
+  );
+  const classifiedFinish = Number(playerResult?.position || finish);
+  const gridEntry = Array.isArray(s.race_story?.starting_grid)
+    ? s.race_story.starting_grid.find(
+        (entry: any) => String(entry?.name || "").toUpperCase() === playerName,
+      )
+    : null;
+  const classifiedStart = Number(gridEntry?.position || start);
   return {
-    win: finish === 1,
-    pole: start === 1,
-    podium: finish >= 1 && finish <= 3,
+    win: !dnf && classifiedFinish === 1,
+    pole: classifiedStart === 1,
+    podium: !dnf && classifiedFinish >= 1 && classifiedFinish <= 3,
     fl: !!(s.race_story?.player_fastest_lap ?? false),
     gs: !!(s.race_story?.grand_slam ?? false),
+    dnf,
   };
 }
 

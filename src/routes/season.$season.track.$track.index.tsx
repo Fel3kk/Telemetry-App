@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   fetchSessions,
   loadCachedSessions,
@@ -142,7 +142,8 @@ function TrackPage() {
   const [saveStatus, setSaveStatus] = useState<
     "idle" | "editing" | "saving" | "saved" | "local" | "error"
   >("idle");
-  const lastSaved = useMemo(() => ({ v: null as string | null }), []);
+  const lastSaved = useRef<string | null>(null);
+  const saveSequence = useRef(0);
 
   useEffect(() => {
     const localKey = `f1.notes.${seasonN}.${trackSlug(track)}`;
@@ -160,7 +161,12 @@ function TrackPage() {
         const dbKey = trackSlug(canonicalName || track);
         const { data: userData } = await supabase.auth.getUser();
         const uid = userData?.user?.id;
-        let query = supabase.from("track_notes").select("notes").eq("track_key", dbKey);
+        let query = supabase
+          .from("track_notes")
+          .select("notes")
+          .eq("track_key", dbKey)
+          .order("updated_at", { ascending: false })
+          .limit(1);
         if (uid) query = query.eq("user_id", uid);
         const { data, error } = await query.maybeSingle();
         if (!mounted) return;
@@ -198,13 +204,15 @@ function TrackPage() {
     if (!notesReady) return;
     if (notes !== lastSaved.v) setSaveStatus("editing");
     const localKey = `f1.notes.${seasonN}.${trackSlug(track)}`;
+    // Local persistence is synchronous so a quick navigation cannot discard
+    // the latest keystrokes while the database debounce is still pending.
+    try {
+      localStorage.setItem(localKey, notes);
+    } catch (_) {}
     const id = setTimeout(() => {
-      try {
-        localStorage.setItem(localKey, notes);
-      } catch (_) {}
-
       if (notes === lastSaved.v) return;
       setSaveStatus("saving");
+      const sequence = ++saveSequence.current;
 
       // Also try to persist to DB (if signed-in)
       (async () => {
@@ -222,6 +230,8 @@ function TrackPage() {
             .select("id")
             .eq("track_key", dbKey)
             .eq("user_id", uid)
+            .order("updated_at", { ascending: false })
+            .limit(1)
             .maybeSingle();
           const payload = {
             track_key: dbKey,
@@ -234,17 +244,17 @@ function TrackPage() {
             : await client.from("track_notes").insert(payload);
           if (error) {
             console.warn("track_notes save failed", error);
-            setSaveStatus("error");
+            if (sequence === saveSequence.current) setSaveStatus("error");
           } else {
             lastSaved.v = notes;
-            setSaveStatus("saved");
+            if (sequence === saveSequence.current) setSaveStatus("saved");
           }
         } catch (err) {
           console.warn("track_notes save error", err);
-          setSaveStatus("error");
+          if (sequence === saveSequence.current) setSaveStatus("error");
         }
       })();
-    }, 400);
+    }, 700);
     return () => clearTimeout(id);
   }, [notes, notesReady, seasonN, track, canonicalName, lastSaved]);
 
