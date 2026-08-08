@@ -1814,6 +1814,11 @@ body.light-theme #driver-assignments-container { background: #ffffff; }
   color: #fff;
   box-shadow: 0 0 6px rgba(225,6,0,0.55);
 }
+
+.result-tag.mini.tag-dnf {
+  background: #ef4444;
+  color: #fff;
+}
 .rs-pill.rs-grand-slam {
   background: linear-gradient(135deg, #ff3b3b, #e10600);
   color: #fff; border-color: transparent; font-weight: 800;

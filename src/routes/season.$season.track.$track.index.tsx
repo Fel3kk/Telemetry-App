@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   fetchSessions,
   loadCachedSessions,
@@ -142,13 +142,16 @@ function TrackPage() {
   const [saveStatus, setSaveStatus] = useState<
     "idle" | "editing" | "saving" | "saved" | "local" | "error"
   >("idle");
-  const lastSaved = useMemo(() => ({ v: null as string | null }), []);
+  const lastSaved = useRef<string | null>(null);
+  const saveSequence = useRef(0);
+  const saveQueue = useRef<Promise<void>>(Promise.resolve());
+  const noteTrackKey = trackSlug(track);
 
   useEffect(() => {
-    const localKey = `f1.notes.${seasonN}.${trackSlug(track)}`;
+    const localKey = `f1.notes.${seasonN}.${noteTrackKey}`;
     setNotesReady(false);
     setSaveStatus("idle");
-    lastSaved.v = null;
+    lastSaved.current = null;
     // Load local cache immediately
     const local = localStorage.getItem(localKey) || "";
     setNotes(local);
@@ -157,10 +160,15 @@ function TrackPage() {
     let mounted = true;
     (async () => {
       try {
-        const dbKey = trackSlug(canonicalName || track);
+        const dbKey = noteTrackKey;
         const { data: userData } = await supabase.auth.getUser();
         const uid = userData?.user?.id;
-        let query = supabase.from("track_notes").select("notes").eq("track_key", dbKey);
+        let query = supabase
+          .from("track_notes")
+          .select("notes")
+          .eq("track_key", dbKey)
+          .order("updated_at", { ascending: false })
+          .limit(1);
         if (uid) query = query.eq("user_id", uid);
         const { data, error } = await query.maybeSingle();
         if (!mounted) return;
@@ -168,53 +176,56 @@ function TrackPage() {
           // keep the local value and treat it as the baseline so we never
           // overwrite the stored note with an empty editor state
           console.warn("load track_notes failed", error);
-          lastSaved.v = local;
+          lastSaved.current = local;
           setNotesReady(true);
           return;
         }
         if (data?.notes != null) {
           setNotes(data.notes);
-          lastSaved.v = data.notes;
+          lastSaved.current = data.notes;
           try {
             localStorage.setItem(localKey, data.notes);
           } catch (_) {}
         } else {
-          lastSaved.v = local;
+          lastSaved.current = local;
         }
         setNotesReady(true);
       } catch (err) {
         console.warn("track_notes load error", err);
         if (!mounted) return;
-        lastSaved.v = local;
+        lastSaved.current = local;
         setNotesReady(true);
       }
     })();
     return () => {
       mounted = false;
     };
-  }, [seasonN, track, canonicalName, lastSaved]);
+  }, [seasonN, noteTrackKey]);
 
   useEffect(() => {
     if (!notesReady) return;
-    if (notes !== lastSaved.v) setSaveStatus("editing");
-    const localKey = `f1.notes.${seasonN}.${trackSlug(track)}`;
+    if (notes !== lastSaved.current) setSaveStatus("editing");
+    const localKey = `f1.notes.${seasonN}.${noteTrackKey}`;
+    // Local persistence is synchronous so a quick navigation cannot discard
+    // the latest keystrokes while the database debounce is still pending.
+    try {
+      localStorage.setItem(localKey, notes);
+    } catch (_) {}
     const id = setTimeout(() => {
-      try {
-        localStorage.setItem(localKey, notes);
-      } catch (_) {}
-
-      if (notes === lastSaved.v) return;
+      if (notes === lastSaved.current) return;
       setSaveStatus("saving");
+      const sequence = ++saveSequence.current;
 
-      // Also try to persist to DB (if signed-in)
-      (async () => {
+      // Serialize writes so a slower older request can never overwrite a
+      // newer note after rapid edits.
+      saveQueue.current = saveQueue.current.catch(() => {}).then(async () => {
         try {
           const client = supabase;
           if (!client) return setSaveStatus("local");
           const { data: userData } = await client.auth.getUser();
           const uid = userData?.user?.id;
           if (!uid) return setSaveStatus("local"); // anonymous → local only
-          const dbKey = trackSlug(canonicalName || track);
+          const dbKey = noteTrackKey;
           // Per-user lookup then update/insert. Upserting on `track_key`
           // alone can collide with another user's row under RLS and fail.
           const { data: existing } = await client
@@ -222,6 +233,8 @@ function TrackPage() {
             .select("id")
             .eq("track_key", dbKey)
             .eq("user_id", uid)
+            .order("updated_at", { ascending: false })
+            .limit(1)
             .maybeSingle();
           const payload = {
             track_key: dbKey,
@@ -234,19 +247,19 @@ function TrackPage() {
             : await client.from("track_notes").insert(payload);
           if (error) {
             console.warn("track_notes save failed", error);
-            setSaveStatus("error");
+            if (sequence === saveSequence.current) setSaveStatus("error");
           } else {
-            lastSaved.v = notes;
-            setSaveStatus("saved");
+            lastSaved.current = notes;
+            if (sequence === saveSequence.current) setSaveStatus("saved");
           }
         } catch (err) {
           console.warn("track_notes save error", err);
-          setSaveStatus("error");
+          if (sequence === saveSequence.current) setSaveStatus("error");
         }
-      })();
-    }, 400);
+      });
+    }, 700);
     return () => clearTimeout(id);
-  }, [notes, notesReady, seasonN, track, canonicalName, lastSaved]);
+  }, [notes, notesReady, seasonN, noteTrackKey]);
 
   const saveLabel: Record<string, string> = {
     idle: "",

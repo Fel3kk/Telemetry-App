@@ -202,9 +202,9 @@ function TrackCard({ season, track, category, sessions }: { season: number; trac
         <div className="absolute right-2 top-2 flex flex-wrap gap-1">
           {badgeAgg.gs && <Tag color="#c084fc">GS</Tag>}
           {badgeAgg.win && <Tag color="#ffd700">W</Tag>}
-          {badgeAgg.pole && <Tag color="#5ad1ff">P</Tag>}
           {badgeAgg.fl && <Tag color="#a855f7">FL</Tag>}
           {!badgeAgg.win && badgeAgg.podium && <Tag color="#cd7f32">P3</Tag>}
+           {badgeAgg.dnf && <Tag color="#ef4444">DNF</Tag>}
         </div>
       </div>
       <div className="flex flex-1 flex-col gap-2 p-3">
