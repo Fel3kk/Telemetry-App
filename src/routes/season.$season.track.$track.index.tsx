@@ -149,7 +149,7 @@ function TrackPage() {
     const localKey = `f1.notes.${seasonN}.${trackSlug(track)}`;
     setNotesReady(false);
     setSaveStatus("idle");
-    lastSaved.v = null;
+    lastSaved.current = null;
     // Load local cache immediately
     const local = localStorage.getItem(localKey) || "";
     setNotes(local);
@@ -174,24 +174,24 @@ function TrackPage() {
           // keep the local value and treat it as the baseline so we never
           // overwrite the stored note with an empty editor state
           console.warn("load track_notes failed", error);
-          lastSaved.v = local;
+          lastSaved.current = local;
           setNotesReady(true);
           return;
         }
         if (data?.notes != null) {
           setNotes(data.notes);
-          lastSaved.v = data.notes;
+          lastSaved.current = data.notes;
           try {
             localStorage.setItem(localKey, data.notes);
           } catch (_) {}
         } else {
-          lastSaved.v = local;
+          lastSaved.current = local;
         }
         setNotesReady(true);
       } catch (err) {
         console.warn("track_notes load error", err);
         if (!mounted) return;
-        lastSaved.v = local;
+        lastSaved.current = local;
         setNotesReady(true);
       }
     })();
@@ -202,7 +202,7 @@ function TrackPage() {
 
   useEffect(() => {
     if (!notesReady) return;
-    if (notes !== lastSaved.v) setSaveStatus("editing");
+    if (notes !== lastSaved.current) setSaveStatus("editing");
     const localKey = `f1.notes.${seasonN}.${trackSlug(track)}`;
     // Local persistence is synchronous so a quick navigation cannot discard
     // the latest keystrokes while the database debounce is still pending.
@@ -210,7 +210,7 @@ function TrackPage() {
       localStorage.setItem(localKey, notes);
     } catch (_) {}
     const id = setTimeout(() => {
-      if (notes === lastSaved.v) return;
+      if (notes === lastSaved.current) return;
       setSaveStatus("saving");
       const sequence = ++saveSequence.current;
 
@@ -246,7 +246,7 @@ function TrackPage() {
             console.warn("track_notes save failed", error);
             if (sequence === saveSequence.current) setSaveStatus("error");
           } else {
-            lastSaved.v = notes;
+            lastSaved.current = notes;
             if (sequence === saveSequence.current) setSaveStatus("saved");
           }
         } catch (err) {
