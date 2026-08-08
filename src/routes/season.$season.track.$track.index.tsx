@@ -145,9 +145,10 @@ function TrackPage() {
   const lastSaved = useRef<string | null>(null);
   const saveSequence = useRef(0);
   const saveQueue = useRef<Promise<void>>(Promise.resolve());
+  const noteTrackKey = trackSlug(track);
 
   useEffect(() => {
-    const localKey = `f1.notes.${seasonN}.${trackSlug(track)}`;
+    const localKey = `f1.notes.${seasonN}.${noteTrackKey}`;
     setNotesReady(false);
     setSaveStatus("idle");
     lastSaved.current = null;
@@ -159,7 +160,7 @@ function TrackPage() {
     let mounted = true;
     (async () => {
       try {
-        const dbKey = trackSlug(canonicalName || track);
+        const dbKey = noteTrackKey;
         const { data: userData } = await supabase.auth.getUser();
         const uid = userData?.user?.id;
         let query = supabase
@@ -199,12 +200,12 @@ function TrackPage() {
     return () => {
       mounted = false;
     };
-  }, [seasonN, track, canonicalName, lastSaved]);
+  }, [seasonN, noteTrackKey]);
 
   useEffect(() => {
     if (!notesReady) return;
     if (notes !== lastSaved.current) setSaveStatus("editing");
-    const localKey = `f1.notes.${seasonN}.${trackSlug(track)}`;
+    const localKey = `f1.notes.${seasonN}.${noteTrackKey}`;
     // Local persistence is synchronous so a quick navigation cannot discard
     // the latest keystrokes while the database debounce is still pending.
     try {
@@ -224,7 +225,7 @@ function TrackPage() {
           const { data: userData } = await client.auth.getUser();
           const uid = userData?.user?.id;
           if (!uid) return setSaveStatus("local"); // anonymous → local only
-          const dbKey = trackSlug(canonicalName || track);
+          const dbKey = noteTrackKey;
           // Per-user lookup then update/insert. Upserting on `track_key`
           // alone can collide with another user's row under RLS and fail.
           const { data: existing } = await client
@@ -258,7 +259,7 @@ function TrackPage() {
       });
     }, 700);
     return () => clearTimeout(id);
-  }, [notes, notesReady, seasonN, track, canonicalName, lastSaved]);
+  }, [notes, notesReady, seasonN, noteTrackKey]);
 
   const saveLabel: Record<string, string> = {
     idle: "",
