@@ -1689,7 +1689,6 @@ function renderSavedSessions(sessions) {
     const badgeHtml = [
       agg.grandSlam ? '<span class="result-tag mini tag-gs" title="Grand Slam">GS</span>' : "",
       agg.win ? '<span class="result-tag mini tag-w" title="Win">W</span>' : "",
-      agg.pole ? '<span class="result-tag mini tag-p" title="Pole">P</span>' : "",
       agg.fl ? '<span class="result-tag mini tag-fl" title="Fastest Lap">FL</span>' : "",
       agg.dnf ? '<span class="result-tag mini tag-dnf" title="Did Not Finish">DNF</span>' : "",
     ].join("");
