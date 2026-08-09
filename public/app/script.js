@@ -73,9 +73,10 @@ function _embedNotifyReady(status) {
 }
 function _embedSelectSession() {
   if (!EMBED_TRACK) { _embedNotifyReady("no-track"); return; }
-  const wanted = String(EMBED_TRACK).toLowerCase();
+  const wanted = normalizeTrackName(EMBED_TRACK);
   const wantedCat = EMBED_CAT ? String(EMBED_CAT).toLowerCase() : null;
   const seasonN = Number(EMBED_SEASON || currentSeason);
+
   const isPracticeView = EMBED_VIEW === "practice";
   // For the practice view we pick a Practice or Sprint session regardless of
   // `cat`, so the "Race → Practice" link surfaces every uploaded practice
@@ -108,8 +109,9 @@ function _embedSelectSession() {
   const trackSessions = allSessions.filter(
     (s) =>
       Number(s.season) === seasonN &&
-      (s.track_name || "").toLowerCase() === wanted,
+      normalizeTrackName(s.track_name) === wanted,
   );
+
   let candidates;
   if (isPracticeView) {
     candidates = trackSessions.filter(isPracticeLikeSession);
@@ -161,7 +163,7 @@ function _embedShowEmptyState() {
 function _embedRenderPracticePicker() {
   const section = document.getElementById("section-practice");
   if (!section) return;
-  const wanted = String(EMBED_TRACK || "").toLowerCase();
+  const wanted = normalizeTrackName(EMBED_TRACK || "");
   const seasonN = Number(EMBED_SEASON || currentSeason);
   const isPracticeLike = (s) => {
     const c = (s.category || "").toLowerCase();
@@ -188,9 +190,10 @@ function _embedRenderPracticePicker() {
   const list = allSessions
     .filter((s) =>
       Number(s.season) === seasonN &&
-      (s.track_name || "").toLowerCase() === wanted &&
+      normalizeTrackName(s.track_name) === wanted &&
       isPracticeLike(s),
     )
+
     .sort((a, b) => orderKey(a).localeCompare(orderKey(b)));
 
   let picker = document.getElementById("embedPracticePicker");
@@ -618,16 +621,19 @@ async function handleDownloadQualiTemplate() {
 
 // Global track normalization for linking sessions
 function normalizeTrackName(name) {
-  const n = (name || "").toLowerCase().replace(/[\s-]/g, "_");
+  const n = (name || "").toLowerCase().trim().replace(/[\s-]/g, "_");
   if (n === "canada" || n === "canadian_grand_prix") return "montreal";
   if (n === "spain" || n === "spanish_grand_prix" || n === "barcelona") return "catalunya";
   if (n === "madrid" || n === "madring") return "madring";
   if (n === "vegas" || n === "lasvegas") return "las_vegas";
-  if (n === "interlagos") return "brazil";
+  if (n === "interlagos" || n === "sao_paulo" || n === "são_paulo") return "brazil";
   if (n === "mexico_city") return "mexico";
-  if (n === "abu") return "abu_dhabi";
+  if (n === "abu" || n === "yas_marina") return "abu_dhabi";
+  if (n === "austin") return "texas";
+  if (n === "qatar") return "losail";
   return n;
 }
+
 
 function getTrackCalendarIndex(trackName) {
   const index = F1_2026_CALENDAR.indexOf(normalizeTrackName(trackName));
