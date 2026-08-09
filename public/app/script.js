@@ -163,7 +163,7 @@ function _embedShowEmptyState() {
 function _embedRenderPracticePicker() {
   const section = document.getElementById("section-practice");
   if (!section) return;
-  const wanted = String(EMBED_TRACK || "").toLowerCase();
+  const wanted = normalizeTrackName(EMBED_TRACK || "");
   const seasonN = Number(EMBED_SEASON || currentSeason);
   const isPracticeLike = (s) => {
     const c = (s.category || "").toLowerCase();
