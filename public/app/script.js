@@ -190,9 +190,10 @@ function _embedRenderPracticePicker() {
   const list = allSessions
     .filter((s) =>
       Number(s.season) === seasonN &&
-      (s.track_name || "").toLowerCase() === wanted &&
+      normalizeTrackName(s.track_name) === wanted &&
       isPracticeLike(s),
     )
+
     .sort((a, b) => orderKey(a).localeCompare(orderKey(b)));
 
   let picker = document.getElementById("embedPracticePicker");
