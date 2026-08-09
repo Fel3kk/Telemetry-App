@@ -73,9 +73,10 @@ function _embedNotifyReady(status) {
 }
 function _embedSelectSession() {
   if (!EMBED_TRACK) { _embedNotifyReady("no-track"); return; }
-  const wanted = String(EMBED_TRACK).toLowerCase();
+  const wanted = normalizeTrackName(EMBED_TRACK);
   const wantedCat = EMBED_CAT ? String(EMBED_CAT).toLowerCase() : null;
   const seasonN = Number(EMBED_SEASON || currentSeason);
+
   const isPracticeView = EMBED_VIEW === "practice";
   // For the practice view we pick a Practice or Sprint session regardless of
   // `cat`, so the "Race → Practice" link surfaces every uploaded practice
