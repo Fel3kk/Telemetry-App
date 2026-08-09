@@ -618,16 +618,19 @@ async function handleDownloadQualiTemplate() {
 
 // Global track normalization for linking sessions
 function normalizeTrackName(name) {
-  const n = (name || "").toLowerCase().replace(/[\s-]/g, "_");
+  const n = (name || "").toLowerCase().trim().replace(/[\s-]/g, "_");
   if (n === "canada" || n === "canadian_grand_prix") return "montreal";
   if (n === "spain" || n === "spanish_grand_prix" || n === "barcelona") return "catalunya";
   if (n === "madrid" || n === "madring") return "madring";
   if (n === "vegas" || n === "lasvegas") return "las_vegas";
-  if (n === "interlagos") return "brazil";
+  if (n === "interlagos" || n === "sao_paulo" || n === "são_paulo") return "brazil";
   if (n === "mexico_city") return "mexico";
-  if (n === "abu") return "abu_dhabi";
+  if (n === "abu" || n === "yas_marina") return "abu_dhabi";
+  if (n === "austin") return "texas";
+  if (n === "qatar") return "losail";
   return n;
 }
+
 
 function getTrackCalendarIndex(trackName) {
   const index = F1_2026_CALENDAR.indexOf(normalizeTrackName(trackName));
