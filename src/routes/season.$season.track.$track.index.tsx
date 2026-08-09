@@ -145,10 +145,63 @@ function TrackPage() {
   const lastSaved = useRef<string | null>(null);
   const saveSequence = useRef(0);
   const saveQueue = useRef<Promise<void>>(Promise.resolve());
+  const notesRef = useRef("");
+  const notesReadyRef = useRef(false);
   const noteTrackKey = trackSlug(track);
+  const trackKeyRef = useRef(noteTrackKey);
+  notesRef.current = notes;
+  notesReadyRef.current = notesReady;
+
+  // Writes the given value for the given track key. Serialized so a slower
+  // older request can never overwrite a newer note after rapid edits.
+  function persistNotes(value: string, dbKey: string, quiet = false) {
+    if (!quiet) setSaveStatus("saving");
+    const sequence = ++saveSequence.current;
+    saveQueue.current = saveQueue.current.catch(() => {}).then(async () => {
+      try {
+        const { data: userData } = await supabase.auth.getUser();
+        const uid = userData?.user?.id;
+        if (!uid) {
+          if (!quiet) setSaveStatus("local"); // anonymous → local only
+          return;
+        }
+        // Per-user lookup then update/insert. Upserting on `track_key`
+        // alone can collide with another user's row under RLS and fail.
+        const { data: existing } = await supabase
+          .from("track_notes")
+          .select("id")
+          .eq("track_key", dbKey)
+          .eq("user_id", uid)
+          .order("updated_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        const payload = {
+          track_key: dbKey,
+          notes: value,
+          updated_at: new Date().toISOString(),
+          user_id: uid,
+        };
+        const { error } = existing?.id
+          ? await supabase.from("track_notes").update(payload).eq("id", existing.id)
+          : await supabase.from("track_notes").insert(payload);
+        if (error) {
+          console.warn("track_notes save failed", error);
+          if (!quiet && sequence === saveSequence.current) setSaveStatus("error");
+          return;
+        }
+        if (dbKey === trackKeyRef.current) lastSaved.current = value;
+        if (!quiet && sequence === saveSequence.current) setSaveStatus("saved");
+      } catch (err) {
+        console.warn("track_notes save error", err);
+        if (!quiet && sequence === saveSequence.current) setSaveStatus("error");
+      }
+    });
+    return saveQueue.current;
+  }
 
   useEffect(() => {
     const localKey = `f1.notes.${seasonN}.${noteTrackKey}`;
+    trackKeyRef.current = noteTrackKey;
     setNotesReady(false);
     setSaveStatus("idle");
     lastSaved.current = null;
@@ -180,12 +233,23 @@ function TrackPage() {
           setNotesReady(true);
           return;
         }
-        if (data?.notes != null) {
-          setNotes(data.notes);
-          lastSaved.current = data.notes;
+        const remote = data?.notes ?? "";
+        if (remote.trim()) {
+          // Remote wins unless the local draft is a strict superset that never
+          // reached the database (e.g. navigation cut a pending save short).
+          const useLocal = local.trim() && local !== remote && local.startsWith(remote);
+          const value = useLocal ? local : remote;
+          setNotes(value);
+          lastSaved.current = remote;
           try {
-            localStorage.setItem(localKey, data.notes);
+            localStorage.setItem(localKey, value);
           } catch (_) {}
+          if (useLocal && uid) persistNotes(value, dbKey, true);
+        } else if (local.trim()) {
+          // Nothing (or an empty row) in the database but we still hold a local
+          // draft → push it up instead of letting the empty row win.
+          lastSaved.current = remote;
+          if (uid) persistNotes(local, dbKey, true);
         } else {
           lastSaved.current = local;
         }
@@ -199,8 +263,26 @@ function TrackPage() {
     })();
     return () => {
       mounted = false;
+      // Flush any unsaved edits for the track we are leaving.
+      if (notesReadyRef.current && notesRef.current !== lastSaved.current) {
+        persistNotes(notesRef.current, noteTrackKey, true);
+      }
     };
   }, [seasonN, noteTrackKey]);
+
+  // Flush on tab close / refresh too.
+  useEffect(() => {
+    const onHide = () => {
+      if (notesReadyRef.current && notesRef.current !== lastSaved.current) {
+        persistNotes(notesRef.current, trackKeyRef.current, true);
+      }
+    };
+    window.addEventListener("pagehide", onHide);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") onHide();
+    });
+    return () => window.removeEventListener("pagehide", onHide);
+  }, []);
 
   useEffect(() => {
     if (!notesReady) return;
@@ -213,53 +295,11 @@ function TrackPage() {
     } catch (_) {}
     const id = setTimeout(() => {
       if (notes === lastSaved.current) return;
-      setSaveStatus("saving");
-      const sequence = ++saveSequence.current;
-
-      // Serialize writes so a slower older request can never overwrite a
-      // newer note after rapid edits.
-      saveQueue.current = saveQueue.current.catch(() => {}).then(async () => {
-        try {
-          const client = supabase;
-          if (!client) return setSaveStatus("local");
-          const { data: userData } = await client.auth.getUser();
-          const uid = userData?.user?.id;
-          if (!uid) return setSaveStatus("local"); // anonymous → local only
-          const dbKey = noteTrackKey;
-          // Per-user lookup then update/insert. Upserting on `track_key`
-          // alone can collide with another user's row under RLS and fail.
-          const { data: existing } = await client
-            .from("track_notes")
-            .select("id")
-            .eq("track_key", dbKey)
-            .eq("user_id", uid)
-            .order("updated_at", { ascending: false })
-            .limit(1)
-            .maybeSingle();
-          const payload = {
-            track_key: dbKey,
-            notes,
-            updated_at: new Date().toISOString(),
-            user_id: uid,
-          };
-          const { error } = existing?.id
-            ? await client.from("track_notes").update(payload).eq("id", existing.id)
-            : await client.from("track_notes").insert(payload);
-          if (error) {
-            console.warn("track_notes save failed", error);
-            if (sequence === saveSequence.current) setSaveStatus("error");
-          } else {
-            lastSaved.current = notes;
-            if (sequence === saveSequence.current) setSaveStatus("saved");
-          }
-        } catch (err) {
-          console.warn("track_notes save error", err);
-          if (sequence === saveSequence.current) setSaveStatus("error");
-        }
-      });
+      persistNotes(notes, noteTrackKey);
     }, 700);
     return () => clearTimeout(id);
   }, [notes, notesReady, seasonN, noteTrackKey]);
+
 
   const saveLabel: Record<string, string> = {
     idle: "",
