@@ -109,8 +109,9 @@ function _embedSelectSession() {
   const trackSessions = allSessions.filter(
     (s) =>
       Number(s.season) === seasonN &&
-      (s.track_name || "").toLowerCase() === wanted,
+      normalizeTrackName(s.track_name) === wanted,
   );
+
   let candidates;
   if (isPracticeView) {
     candidates = trackSessions.filter(isPracticeLikeSession);
