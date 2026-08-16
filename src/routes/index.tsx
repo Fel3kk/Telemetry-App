@@ -14,6 +14,7 @@ import {
   trackSlug,
   titleCaseTrack,
   badgesFor,
+  racePosition,
   appEmbedUrl,
   type Session,
 } from "@/lib/f1-shell";
@@ -73,23 +74,26 @@ function MainPage() {
     <>
       <ShellHeader crumbs={[{ label: `Season ${season}` }]} />
       <ShellPage>
-        <div className="mb-4 flex flex-wrap items-center gap-2">
+        <div className="mb-4 flex flex-col items-center gap-2">
           <span className="text-xs uppercase tracking-widest text-white/50">Season</span>
-          {SEASONS.map((n) => (
-            <button
-              key={n}
-              onClick={() => pick(n)}
-              className={
-                "rounded-md border px-3 py-1.5 text-sm font-semibold transition " +
-                (season === n
-                  ? "border-red-500 bg-red-500 text-white"
-                  : "border-white/15 text-white/70 hover:border-white/40")
-              }
-            >
-              S{n}
-            </button>
-          ))}
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            {SEASONS.map((n) => (
+              <button
+                key={n}
+                onClick={() => pick(n)}
+                className={
+                  "rounded-md border px-3 py-1.5 text-sm font-semibold transition " +
+                  (season === n
+                    ? "border-red-500 bg-red-500 text-white"
+                    : "border-white/15 text-white/70 hover:border-white/40")
+                }
+              >
+                S{n}
+              </button>
+            ))}
+          </div>
         </div>
+
 
         <UploadPanel season={season} />
 
@@ -150,8 +154,8 @@ function StatsBar({ stats }: { stats: ReturnType<typeof seasonStats> }) {
     { label: "Sprint Wins", value: stats.sprintWins, icon: "🏁" },
     { label: "GP Poles", value: stats.gpPoles, icon: "⏱️" },
     { label: "Sprint Poles", value: stats.sprintPoles, icon: "⚡" },
-    { label: "Podiums", value: stats.podiums, icon: "🥂" },
     { label: "Fastest Laps", value: stats.fastestLaps, icon: "💜" },
+    { label: "DNFs", value: stats.dnfs, icon: "💥" },
   ];
   return (
     <div className="mb-6 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
@@ -171,6 +175,8 @@ function TrackCard({ season, track, category, sessions }: { season: number; trac
     const b = badgesFor(s);
     Object.entries(b).forEach(([k, v]) => { if (v) badgeAgg[k] = true; });
   });
+  const positions = sessions.map(racePosition).filter((n): n is number => !!n);
+  const bestPos = positions.length ? Math.min(...positions) : null;
   const [imgSrc, setImgSrc] = useState(trackMapUrl(track));
   const [imgOk, setImgOk] = useState(true);
   const triedFallback = useMemo(() => ({ v: false }), [track]);
@@ -202,9 +208,9 @@ function TrackCard({ season, track, category, sessions }: { season: number; trac
         <div className="absolute right-2 top-2 flex flex-wrap gap-1">
           {badgeAgg.gs && <Tag color="#c084fc">GS</Tag>}
           {badgeAgg.win && <Tag color="#ffd700">W</Tag>}
-          {badgeAgg.pole && <Tag color="#5ad1ff">P</Tag>}
           {badgeAgg.fl && <Tag color="#a855f7">FL</Tag>}
-          {!badgeAgg.win && badgeAgg.podium && <Tag color="#cd7f32">P3</Tag>}
+          {!badgeAgg.win && badgeAgg.podium && bestPos && <Tag color="#cd7f32">P{bestPos}</Tag>}
+           {badgeAgg.dnf && <Tag color="#ef4444">DNF</Tag>}
         </div>
       </div>
       <div className="flex flex-1 flex-col gap-2 p-3">

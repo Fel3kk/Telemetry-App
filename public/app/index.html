@@ -75,8 +75,14 @@
         <button class="section-tab" data-target="section-records">
           📚 Records
         </button>
+        <button class="section-tab" data-target="section-progress">
+          📈 Season Progress
+        </button>
         <button class="section-tab" data-target="section-quali-results">
           ⏱️ Qualifying
+        </button>
+        <button class="section-tab" data-target="section-grid">
+          🚦 Starting Grid
         </button>
         <button class="section-tab" data-target="section-assignments">
           🏎️ Teams
@@ -121,6 +127,32 @@
           </div>
         </div>
 
+        <div class="collapsible-section" id="section-progress">
+          <div class="section-header">
+            <h2 style="margin: 0; font-size: 1.05rem">📈 Season Progress</h2>
+            <div class="progress-scope-tabs" style="margin-left:14px;display:flex;gap:8px">
+              <button class="download-btn progress-scope active" data-scope="drivers">Drivers</button>
+              <button class="download-btn progress-scope" data-scope="teams">Teams</button>
+            </div>
+          </div>
+          <div class="section-body">
+            <div id="progressEmpty" class="race-story-empty" style="display:none">
+              Upload race or sprint sessions for this season to see the progression.
+            </div>
+            <div id="progressContent">
+              <div id="progressToggles" class="progress-toggles"></div>
+              <div class="chart-container full-width">
+                <div class="chart-title">Points progression</div>
+                <canvas id="progressPointsChart"></canvas>
+              </div>
+              <div class="chart-container full-width">
+                <div class="chart-title">Championship position by round</div>
+                <canvas id="progressPositionChart"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div class="collapsible-section" id="section-quali-results">
           <div class="section-header">
             <h2 style="margin: 0; font-size: 1.05rem">
@@ -135,6 +167,15 @@
             </button>
           </div>
           <div class="section-body" id="quali-results-container"></div>
+        </div>
+
+        <div class="collapsible-section" id="section-grid">
+          <div class="section-header">
+            <h2 style="margin: 0; font-size: 1.05rem">🚦 Starting Grid</h2>
+          </div>
+          <div class="section-body">
+            <div id="startingGridContainer"></div>
+          </div>
         </div>
 
         <div class="collapsible-section" id="section-assignments">

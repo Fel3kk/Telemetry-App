@@ -77,10 +77,13 @@ export async function currentAccessToken(): Promise<string | null> {
 }
 
 export async function fetchSessions(season?: number): Promise<Session[]> {
+  const { getActiveCareer } = await import("./career");
+  const career = getActiveCareer();
   const url = new URL(`${SUPABASE_URL}/rest/v1/telemetry_sessions`);
-  url.searchParams.set("select", "id,season,driver_name,track_name,category,session_type,finishing_pos,starting_pos,created_at,session_date,race_story");
+  url.searchParams.set("select", "id,season,driver_name,track_name,category,session_type,finishing_pos,starting_pos,created_at,session_date,race_story,career_slot");
   url.searchParams.set("order", "session_date.desc");
   if (season != null) url.searchParams.set("season", `eq.${season}`);
+  if (career) url.searchParams.set("career_slot", `eq.${career}`);
   const token = await currentAccessToken();
   const res = await fetch(url.toString(), {
     headers: {
@@ -94,6 +97,26 @@ export async function fetchSessions(season?: number): Promise<Session[]> {
   if (season == null && token) saveCachedSessions(mapped);
   return mapped;
 }
+
+// Count sessions per career slot (used by the career chooser page).
+export async function fetchCareerCounts(): Promise<Record<string, number>> {
+  const token = await currentAccessToken();
+  if (!token) return {};
+  const url = new URL(`${SUPABASE_URL}/rest/v1/telemetry_sessions`);
+  url.searchParams.set("select", "career_slot");
+  const res = await fetch(url.toString(), {
+    headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) return {};
+  const rows: { career_slot: string | null }[] = await res.json();
+  const out: Record<string, number> = {};
+  for (const r of rows) {
+    const key = r.career_slot || "unassigned";
+    out[key] = (out[key] ?? 0) + 1;
+  }
+  return out;
+}
+
 
 export function titleCaseTrack(name: string) {
   return (name || "")
@@ -172,34 +195,91 @@ export function trackFlag(name: string) {
   return TRACK_FLAGS[trackSlug(name)] || "🏁";
 }
 
-export type SessionBadges = { win?: boolean; pole?: boolean; fl?: boolean; podium?: boolean; gs?: boolean };
+export type SessionBadges = { win?: boolean; pole?: boolean; fl?: boolean; podium?: boolean; gs?: boolean; dnf?: boolean };
+
+// True only for sessions whose finishing position is an actual race result.
+// The uploader guesses `category` from the filename, so a Sprint Qualifying
+// file named "..._sprint.json" can land as category "Sprint" while carrying
+// qualifying positions. `session_type` comes from the game itself, so it wins.
+export function isRaceResultSession(s: Session): "Race" | "Sprint" | null {
+  const cat = (s.category || "").toLowerCase();
+  const st = (s.session_type || "").toLowerCase();
+  if (/quali|shootout|practice|time.?trial|^p[123]$|^q[123]$|^fp[123]$/.test(st)) return null;
+  if (cat.includes("quali") || cat.includes("shootout") || cat === "practice" || cat === "time trial")
+    return null;
+  const isSprint = cat === "sprint" || st.includes("sprint");
+  if (cat === "race" || st.includes("race")) return isSprint ? "Sprint" : "Race";
+  if (isSprint) return "Sprint";
+  return null;
+}
+
 export function badgesFor(s: Session): SessionBadges {
   const finish = Number(s.finishing_position);
   const start = Number(s.starting_position);
+  // Weekend tags come from the actual Race/Sprint result. Qualifying files
+  // can contain provisional positions that do not reflect grid penalties.
+  if (!isRaceResultSession(s)) return {};
+  const playerName = String(s.race_story?.player_name || s.driver_name || "").toUpperCase();
+  const playerResult = Array.isArray(s.race_story?.classification)
+    ? s.race_story.classification.find(
+        (entry: any) => String(entry?.name || "").toUpperCase() === playerName,
+      )
+    : null;
+  const status = String(playerResult?.status || "").toUpperCase();
+  const dnf = Boolean(
+    playerResult &&
+      (playerResult.is_dnf === true || (status.length > 0 && !/FINISHED|ACTIVE/.test(status))),
+  );
+  const classifiedFinish = Number(playerResult?.position || finish);
+  const gridEntry = Array.isArray(s.race_story?.starting_grid)
+    ? s.race_story.starting_grid.find(
+        (entry: any) => String(entry?.name || "").toUpperCase() === playerName,
+      )
+    : null;
+  const classifiedStart = Number(gridEntry?.position || start);
   return {
-    win: finish === 1,
-    pole: start === 1,
-    podium: finish >= 1 && finish <= 3,
-    fl: !!(s.race_story?.player_fastest_lap ?? false),
-    gs: !!(s.race_story?.grand_slam ?? false),
+    win: !dnf && classifiedFinish === 1,
+    pole: classifiedStart === 1,
+    podium: !dnf && classifiedFinish >= 1 && classifiedFinish <= 3,
+    fl: !!(
+      s.race_story?.player_fastest_lap ??
+      (s.race_story?.fastest_lap &&
+        String(s.race_story.fastest_lap.name || "").toUpperCase() === playerName)
+    ),
+    gs: !dnf && !!(s.race_story?.grand_slam ?? false),
+    dnf,
   };
 }
 
+// Finishing position from the classification when available (grid penalties /
+// post-race changes), falling back to the stored value.
+export function racePosition(s: Session): number | null {
+  if (!isRaceResultSession(s)) return null;
+  const b = badgesFor(s);
+  if (b.dnf) return null;
+  const playerName = String(s.race_story?.player_name || s.driver_name || "").toUpperCase();
+  const entry = Array.isArray(s.race_story?.classification)
+    ? s.race_story.classification.find(
+        (e: any) => String(e?.name || "").toUpperCase() === playerName,
+      )
+    : null;
+  const pos = Number(entry?.position || s.finishing_position);
+  return Number.isFinite(pos) && pos > 0 ? pos : null;
+}
+
 export function seasonStats(sessions: Session[]) {
-  const races = sessions.filter((s) => s.category === "Race");
-  const sprints = sessions.filter((s) => s.category === "Sprint");
+  const races = sessions.filter((s) => isRaceResultSession(s) === "Race");
+  const sprints = sessions.filter((s) => isRaceResultSession(s) === "Sprint");
   return {
-    raceWins: races.filter((s) => Number(s.finishing_position) === 1).length,
-    sprintWins: sprints.filter((s) => Number(s.finishing_position) === 1).length,
-    gpPoles: races.filter((s) => Number(s.starting_position) === 1).length,
-    sprintPoles: sprints.filter((s) => Number(s.starting_position) === 1).length,
-    podiums: races.filter((s) => {
-      const p = Number(s.finishing_position);
-      return p >= 1 && p <= 3;
-    }).length,
+    raceWins: races.filter((s) => badgesFor(s).win).length,
+    sprintWins: sprints.filter((s) => badgesFor(s).win).length,
+    gpPoles: races.filter((s) => badgesFor(s).pole).length,
+    sprintPoles: sprints.filter((s) => badgesFor(s).pole).length,
     fastestLaps: sessions.filter((s) => badgesFor(s).fl).length,
+    dnfs: sessions.filter((s) => badgesFor(s).dnf).length,
   };
 }
+
 
 // Group by track + category. Practice sessions fold into the Race weekend
 // (and are also mirrored into any Sprint bucket for that track).

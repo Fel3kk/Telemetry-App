@@ -10,7 +10,9 @@ export const Route = createFileRoute("/season/$season/track/$track/$view")({
 const LABELS: Record<string, string> = {
   standings: "Standings",
   records: "All-Time Records",
+  progress: "Season Progress",
   "quali-results": "Qualifying",
+  grid: "Starting Grid",
   assignments: "Teams",
   "race-story": "Race Story",
   compare: "Compare Lap Times",

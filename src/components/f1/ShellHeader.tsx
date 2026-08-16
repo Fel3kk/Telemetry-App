@@ -14,7 +14,7 @@ export function ShellHeader({ crumbs }: { crumbs: { label: string; to?: any; par
   return (
     <header className="sticky top-0 z-40 border-b border-white/10 bg-[#0a0a0f]/95 backdrop-blur">
       <div className="mx-auto flex max-w-[1400px] items-center gap-3 px-4 py-3">
-        <Link to="/" className="flex items-center gap-2 text-lg font-black tracking-tight text-white hover:text-red-400">
+        <Link to="/careers" className="flex items-center gap-2 text-lg font-black tracking-tight text-white hover:text-red-400">
           <span>🏎️</span>
           <span>F1 Telemetry</span>
         </Link>
@@ -33,6 +33,7 @@ export function ShellHeader({ crumbs }: { crumbs: { label: string; to?: any; par
           ))}
         </nav>
         <div className="ml-auto flex items-center gap-2">
+          <CareerChip />
           <Link
             to="/"
             className="rounded-md border border-white/20 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/10"
@@ -45,6 +46,23 @@ export function ShellHeader({ crumbs }: { crumbs: { label: string; to?: any; par
     </header>
   );
 }
+
+function CareerChip() {
+  const [label, setLabel] = useState("");
+  useEffect(() => {
+    import("@/lib/career").then(({ activeCareerLabel }) => setLabel(activeCareerLabel()));
+  }, []);
+  return (
+    <Link
+      to="/careers"
+      title="Switch career slot"
+      className="rounded-md border border-red-500/40 bg-red-500/10 px-3 py-1.5 text-xs font-bold text-red-200 hover:bg-red-500/20"
+    >
+      {label || "Career"}
+    </Link>
+  );
+}
+
 
 function UserMenu() {
   const navigate = useNavigate();

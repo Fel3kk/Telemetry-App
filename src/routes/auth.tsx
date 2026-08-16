@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { supabase, usernameToEmail, claimOrphanRows } from "@/lib/supabase";
+import { supabase, usernameToEmail } from "@/lib/supabase";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({
@@ -26,7 +26,7 @@ function AuthPage() {
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
-      if (data.session) navigate({ to: "/" });
+      if (data.session) navigate({ to: "/careers" });
     });
   }, [navigate]);
 
@@ -81,9 +81,7 @@ function AuthPage() {
           throw error;
         }
       }
-      // Attach any orphan legacy rows to this account (only affects the first user).
-      await claimOrphanRows();
-      navigate({ to: "/" });
+      navigate({ to: "/careers" });
     } catch (e: any) {
       setErr(e?.message || "Sign-in failed");
     } finally {

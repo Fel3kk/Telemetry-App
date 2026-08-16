@@ -148,5 +148,14 @@ function AuthGate({ children }: { children: ReactNode }) {
     if (typeof window !== "undefined") window.location.replace("/auth");
     return null;
   }
+  if (authed && path !== "/auth" && path !== "/careers") {
+    let career: string | null = null;
+    try { career = window.localStorage.getItem("f1.career"); } catch {}
+    if (!career) {
+      window.location.replace("/careers");
+      return null;
+    }
+  }
   return <>{children}</>;
+
 }

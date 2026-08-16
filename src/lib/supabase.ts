@@ -23,16 +23,9 @@ export function displayNameFromSession(s: Session | null): string {
   return s.user.email.replace(/@f1\.local$/, "");
 }
 
-// One-time claim: after login, attach every orphan row to this user.
-export async function claimOrphanRows() {
-  const { data: userData } = await supabase.auth.getUser();
-  const uid = userData?.user?.id;
-  if (!uid) return;
-  for (const table of ["telemetry_sessions", "driver_teams", "track_notes"] as const) {
-    try {
-      await supabase.from(table).update({ user_id: uid }).is("user_id", null);
-    } catch (e) {
-      console.warn("claim orphans failed on", table, e);
-    }
-  }
-}
+// NOTE: the previous "claim orphan rows" helper was removed. It relied on an
+// RLS policy letting any signed-in user take ownership of rows with a NULL
+// user_id, which allowed one account to steal another's legacy data.
+// Legacy rows must be assigned to their owner with a one-off SQL UPDATE run
+// by the project owner (see SETUP_AUTH.sql).
+

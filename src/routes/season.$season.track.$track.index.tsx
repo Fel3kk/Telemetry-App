@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   fetchSessions,
   loadCachedSessions,
@@ -9,6 +9,7 @@ import {
   trackMapFallbackUrl,
   titleCaseTrack,
   badgesFor,
+  racePosition,
   type Session,
 } from "@/lib/f1-shell";
 import { supabase } from "@/lib/supabase";
@@ -33,7 +34,14 @@ const OPTIONS: Opt[] = [
     icon: "📚",
     desc: "Career points, wins, podiums, DOTD",
   },
+  {
+    view: "progress",
+    label: "Season Progress",
+    icon: "📈",
+    desc: "Points & position by round, drivers and teams",
+  },
   { view: "quali-results", label: "Qualifying", icon: "⏱️", desc: "Q1–Q3 / shootout times" },
+  { view: "grid", label: "Starting Grid", icon: "🚦", desc: "Pole to the back row, weekend lineup" },
   { view: "assignments", label: "Teams", icon: "🏎️", desc: "Driver / constructor pairings" },
   {
     view: "race-story",
@@ -81,9 +89,10 @@ function TrackPage() {
   useEffect(() => {
     const cached = loadCachedSessions();
     if (cached) setSessions(cached);
-    fetchSessions(seasonN)
+    fetchSessions()
       .then(setSessions)
       .catch(() => {});
+
   }, [seasonN]);
 
   // Load persisted ordering
@@ -119,6 +128,42 @@ function TrackPage() {
     [sessions, track, seasonN, cat],
   );
   const canonicalName = trackSessions[0]?.track_name ?? track;
+  // Seasons (other than this one) that contain a track with the same name.
+  const sameTrackSeasons = useMemo(() => {
+    const set = new Set<number>();
+    sessions.forEach((s) => {
+      if (trackSlug(s.track_name) === trackSlug(track)) set.add(Number(s.season));
+    });
+    return Array.from(set).sort((a, b) => a - b);
+  }, [sessions, track]);
+  const prevSeason = useMemo(
+    () => [...sameTrackSeasons].reverse().find((n) => n < seasonN),
+    [sameTrackSeasons, seasonN],
+  );
+  const nextSeason = useMemo(
+    () => sameTrackSeasons.find((n) => n > seasonN),
+    [sameTrackSeasons, seasonN],
+  );
+
+  // Rounds of this season, ordered by when each weekend was run.
+  const seasonRounds = useMemo(() => {
+    const first = new Map<string, { slug: string; name: string; t: number }>();
+    sessions
+      .filter((x) => Number(x.season) === seasonN)
+      .forEach((x) => {
+        const slug = trackSlug(x.track_name);
+        if (!slug) return;
+        const t = new Date(x.created_at || 0).getTime() || 0;
+        const cur = first.get(slug);
+        if (!cur || t < cur.t) first.set(slug, { slug, name: x.track_name, t });
+      });
+    return Array.from(first.values()).sort((a, b) => a.t - b.t);
+  }, [sessions, seasonN]);
+  const roundIdx = seasonRounds.findIndex((r) => r.slug === trackSlug(track));
+  const prevRound = roundIdx > 0 ? seasonRounds[roundIdx - 1] : undefined;
+  const nextRound =
+    roundIdx >= 0 && roundIdx < seasonRounds.length - 1 ? seasonRounds[roundIdx + 1] : undefined;
+
   const displayName = titleCaseTrack(canonicalName);
   const cats = Array.from(new Set(trackSessions.map((s) => s.category).filter(Boolean)));
   const race = trackSessions.find((s) => s.category === "Race");
@@ -126,6 +171,10 @@ function TrackPage() {
     ? `${race.session_info.track_name ?? canonicalName} · ${race.session_info.total_laps ?? "?"} laps · ${race.session_info.weather ?? ""}`
     : `Session data for ${canonicalName}`;
 
+  const bestRacePos = (() => {
+    const ps = trackSessions.map(racePosition).filter((n): n is number => !!n);
+    return ps.length ? Math.min(...ps) : null;
+  })();
   const badgeAgg: Record<string, boolean> = {};
   trackSessions.forEach((s) => {
     const b = badgesFor(s);
@@ -134,73 +183,196 @@ function TrackPage() {
     });
   });
 
+  // Guards so an empty initial state can never overwrite stored notes:
+  // saving only starts once the DB read for this track has settled, and we
+  // never re-write a value identical to what we last loaded/saved.
+  const [notesReady, setNotesReady] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<
+    "idle" | "editing" | "saving" | "saved" | "local" | "error"
+  >("idle");
+  const lastSaved = useRef<string | null>(null);
+  const saveSequence = useRef(0);
+  const saveQueue = useRef<Promise<void>>(Promise.resolve());
+  const notesRef = useRef("");
+  const notesReadyRef = useRef(false);
+  const noteTrackKey = trackSlug(track);
+  const trackKeyRef = useRef(noteTrackKey);
+  notesRef.current = notes;
+  notesReadyRef.current = notesReady;
+
+  // Writes the given value for the given track key. Serialized so a slower
+  // older request can never overwrite a newer note after rapid edits.
+  function persistNotes(value: string, dbKey: string, quiet = false) {
+    if (!quiet) setSaveStatus("saving");
+    const sequence = ++saveSequence.current;
+    saveQueue.current = saveQueue.current.catch(() => {}).then(async () => {
+      try {
+        const { data: userData } = await supabase.auth.getUser();
+        const uid = userData?.user?.id;
+        if (!uid) {
+          if (!quiet) setSaveStatus("local"); // anonymous → local only
+          return;
+        }
+        // Per-user lookup then update/insert. RLS already scopes reads to the
+        // signed-in user, but the table can still hold a legacy row with the
+        // same `track_key` owned by nobody/someone else — inserting then hits
+        // a duplicate-key error, which is what made saves fail ~50% of tracks.
+        const { data: existing } = await supabase
+          .from("track_notes")
+          .select("id")
+          .eq("track_key", dbKey)
+          .eq("user_id", uid)
+          .order("updated_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        const payload = {
+          track_key: dbKey,
+          notes: value,
+          updated_at: new Date().toISOString(),
+          user_id: uid,
+        };
+        let error = existing?.id
+          ? (await supabase.from("track_notes").update(payload).eq("id", existing.id)).error
+          : (await supabase.from("track_notes").insert(payload)).error;
+        if (error && !existing?.id) {
+          // Duplicate key on track_key → a row already exists; take it over.
+          const retry = await supabase
+            .from("track_notes")
+            .update(payload)
+            .eq("track_key", dbKey)
+            .select("id");
+          if (!retry.error && retry.data && retry.data.length) error = null;
+        }
+        if (error) {
+          console.warn("track_notes save failed", error);
+          if (!quiet && sequence === saveSequence.current) setSaveStatus("error");
+          return;
+        }
+        if (dbKey === trackKeyRef.current) lastSaved.current = value;
+        if (!quiet && sequence === saveSequence.current) setSaveStatus("saved");
+
+      } catch (err) {
+        console.warn("track_notes save error", err);
+        if (!quiet && sequence === saveSequence.current) setSaveStatus("error");
+      }
+    });
+    return saveQueue.current;
+  }
+
   useEffect(() => {
-    const localKey = `f1.notes.${seasonN}.${trackSlug(track)}`;
+    const localKey = `f1.notes.${seasonN}.${noteTrackKey}`;
+    trackKeyRef.current = noteTrackKey;
+    setNotesReady(false);
+    setSaveStatus("idle");
+    lastSaved.current = null;
     // Load local cache immediately
-    setNotes(localStorage.getItem(localKey) || "");
+    const local = localStorage.getItem(localKey) || "";
+    setNotes(local);
 
     // Try to load DB-backed notes for this track (per-track, not per-season)
     let mounted = true;
     (async () => {
       try {
-        const dbKey = trackSlug(canonicalName || track);
-        const { data, error } = await supabase
+        const dbKey = noteTrackKey;
+        const { data: userData } = await supabase.auth.getUser();
+        const uid = userData?.user?.id;
+        let query = supabase
           .from("track_notes")
           .select("notes")
           .eq("track_key", dbKey)
-          .maybeSingle();
+          .order("updated_at", { ascending: false })
+          .limit(1);
+        if (uid) query = query.eq("user_id", uid);
+        const { data, error } = await query.maybeSingle();
+        if (!mounted) return;
         if (error) {
-          // ignore DB read errors — keep local value
+          // keep the local value and treat it as the baseline so we never
+          // overwrite the stored note with an empty editor state
           console.warn("load track_notes failed", error);
+          lastSaved.current = local;
+          setNotesReady(true);
           return;
         }
-        if (mounted && data?.notes != null) {
-          setNotes(data.notes);
+        const remote = data?.notes ?? "";
+        if (remote.trim()) {
+          // Remote wins unless the local draft is a strict superset that never
+          // reached the database (e.g. navigation cut a pending save short).
+          const useLocal = local.trim() && local !== remote && local.startsWith(remote);
+          const value = useLocal ? local : remote;
+          setNotes(value);
+          lastSaved.current = remote;
           try {
-            localStorage.setItem(localKey, data.notes);
+            localStorage.setItem(localKey, value);
           } catch (_) {}
+          if (useLocal && uid) persistNotes(value, dbKey, true);
+        } else if (local.trim()) {
+          // Nothing (or an empty row) in the database but we still hold a local
+          // draft → push it up instead of letting the empty row win.
+          lastSaved.current = remote;
+          if (uid) persistNotes(local, dbKey, true);
+        } else {
+          lastSaved.current = local;
         }
+        setNotesReady(true);
       } catch (err) {
         console.warn("track_notes load error", err);
+        if (!mounted) return;
+        lastSaved.current = local;
+        setNotesReady(true);
       }
     })();
     return () => {
       mounted = false;
+      // Flush any unsaved edits for the track we are leaving.
+      if (notesReadyRef.current && notesRef.current !== lastSaved.current) {
+        persistNotes(notesRef.current, noteTrackKey, true);
+      }
     };
-  }, [seasonN, track, canonicalName]);
+  }, [seasonN, noteTrackKey]);
+
+  // Flush on tab close / refresh too.
+  useEffect(() => {
+    const onHide = () => {
+      if (notesReadyRef.current && notesRef.current !== lastSaved.current) {
+        persistNotes(notesRef.current, trackKeyRef.current, true);
+      }
+    };
+    window.addEventListener("pagehide", onHide);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") onHide();
+    });
+    return () => window.removeEventListener("pagehide", onHide);
+  }, []);
 
   useEffect(() => {
-    const localKey = `f1.notes.${seasonN}.${trackSlug(track)}`;
+    if (!notesReady) return;
+    if (notes !== lastSaved.current) setSaveStatus("editing");
+    const localKey = `f1.notes.${seasonN}.${noteTrackKey}`;
+    // Local persistence is synchronous so a quick navigation cannot discard
+    // the latest keystrokes while the database debounce is still pending.
+    try {
+      localStorage.setItem(localKey, notes);
+    } catch (_) {}
     const id = setTimeout(() => {
-      try {
-        localStorage.setItem(localKey, notes);
-      } catch (_) {}
-
-      // Also try to persist to DB (if signed-in)
-      (async () => {
-        try {
-          const client = supabase;
-          if (!client) return;
-          const { data: userData } = await client.auth.getUser();
-          const uid = userData?.user?.id;
-          if (!uid) return; // don't attempt DB write when anonymous
-          const dbKey = trackSlug(canonicalName || track);
-          const { error } = await client
-            .from("track_notes")
-            .upsert(
-              { track_key: dbKey, notes, updated_at: new Date().toISOString(), user_id: uid },
-              { onConflict: "track_key" },
-            );
-          if (error) console.warn("track_notes save failed", error);
-        } catch (err) {
-          console.warn("track_notes save error", err);
-        }
-      })();
-    }, 400);
+      if (notes === lastSaved.current) return;
+      persistNotes(notes, noteTrackKey);
+    }, 700);
     return () => clearTimeout(id);
-  }, [notes, seasonN, track, canonicalName]);
+  }, [notes, notesReady, seasonN, noteTrackKey]);
 
-  const notesTemplate = `SOFTS:\n\nMEDIUMS:\n\nHARDS:\n\nBATTERY MANAGEMENT:\n\nFUEL:\n\nSETUP:\n`;
+
+  const saveLabel: Record<string, string> = {
+    idle: "",
+    editing: "Editing…",
+    saving: "Saving…",
+    saved: "Saved ✓",
+    local: "Saved on this device (sign in to sync)",
+    error: "Save failed — retry by editing again",
+  };
+
+
+
+  const notesTemplate = `SOFTS:\n\nMEDIUMS:\n\nHARDS:\n\nBATTERY MANAGEMENT:\n`;
 
   const [imgOk, setImgOk] = useState(true);
   const [imgSrc, setImgSrc] = useState<string>("");
@@ -244,6 +416,62 @@ function TrackPage() {
                 {cat && <span className="ml-3 text-lg font-bold text-white/60">{cat}</span>}
               </h1>
             </div>
+            {(prevSeason || nextSeason) && (
+              <div className="mb-3 flex flex-wrap items-center gap-2" suppressHydrationWarning>
+                <span className="text-[11px] uppercase tracking-widest text-white/40">
+                  Same track
+                </span>
+                {prevSeason && (
+                  <Link
+                    to="/season/$season/track/$track"
+                    params={{ season: String(prevSeason), track: trackSlug(track) }}
+                    search={{ cat }}
+                    className="rounded-md border border-white/15 bg-white/[0.04] px-3 py-1.5 text-xs font-bold text-white hover:border-red-500/60"
+                  >
+                    ← Season {prevSeason}
+                  </Link>
+                )}
+                {nextSeason && (
+                  <Link
+                    to="/season/$season/track/$track"
+                    params={{ season: String(nextSeason), track: trackSlug(track) }}
+                    search={{ cat }}
+                    className="rounded-md border border-white/15 bg-white/[0.04] px-3 py-1.5 text-xs font-bold text-white hover:border-red-500/60"
+                  >
+                    Season {nextSeason} →
+                  </Link>
+                )}
+              </div>
+            )}
+
+            {(prevRound || nextRound) && (
+              <div className="mb-3 flex flex-wrap items-center gap-2" suppressHydrationWarning>
+                <span className="text-[11px] uppercase tracking-widest text-white/40">
+                  Round {roundIdx + 1} / {seasonRounds.length}
+                </span>
+                {prevRound && (
+                  <Link
+                    to="/season/$season/track/$track"
+                    params={{ season: String(seasonN), track: prevRound.slug }}
+                    search={{ cat }}
+                    className="rounded-md border border-white/15 bg-white/[0.04] px-3 py-1.5 text-xs font-bold text-white hover:border-red-500/60"
+                  >
+                    ← {titleCaseTrack(prevRound.name)}
+                  </Link>
+                )}
+                {nextRound && (
+                  <Link
+                    to="/season/$season/track/$track"
+                    params={{ season: String(seasonN), track: nextRound.slug }}
+                    search={{ cat }}
+                    className="rounded-md border border-white/15 bg-white/[0.04] px-3 py-1.5 text-xs font-bold text-white hover:border-red-500/60"
+                  >
+                    {titleCaseTrack(nextRound.name)} →
+                  </Link>
+                )}
+              </div>
+            )}
+
             <div className="mb-3 flex flex-wrap gap-2" suppressHydrationWarning>
               {cats.map((c) => (
                 <span
@@ -255,12 +483,30 @@ function TrackPage() {
               ))}
               {badgeAgg.gs && <Tag color="#c084fc">Grand Slam</Tag>}
               {badgeAgg.win && <Tag color="#ffd700">Win</Tag>}
+              {!badgeAgg.win && badgeAgg.podium && bestRacePos && (
+                <Tag color="#cd7f32">P{bestRacePos}</Tag>
+              )}
               {badgeAgg.pole && <Tag color="#5ad1ff">Pole</Tag>}
               {badgeAgg.fl && <Tag color="#a855f7">Fastest Lap</Tag>}
             </div>
             <p className="mb-4 text-sm text-white/70">{infoSummary}</p>
-            <div className="mb-1 flex items-center justify-between">
-              <label className="block text-xs uppercase tracking-widest text-white/50">Notes</label>
+            <div className="mb-1 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <label className="block text-xs uppercase tracking-widest text-white/50">Notes</label>
+                <span
+                  className={
+                    "text-[11px] font-semibold " +
+                    (saveStatus === "saved"
+                      ? "text-emerald-400"
+                      : saveStatus === "error"
+                        ? "text-red-400"
+                        : "text-white/45")
+                  }
+                >
+                  {saveLabel[saveStatus]}
+                </span>
+              </div>
+
               {!notes && (
                 <button
                   type="button"
@@ -275,7 +521,7 @@ function TrackPage() {
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder={notesTemplate}
-              className="min-h-[180px] w-full whitespace-pre-wrap rounded-md border border-white/10 bg-white/[0.03] p-3 font-mono text-sm leading-relaxed text-white outline-none focus:border-red-500/60"
+              className="min-h-[340px] w-full resize-y whitespace-pre-wrap rounded-md border border-white/10 bg-white/[0.03] p-3 font-mono text-sm leading-relaxed text-white outline-none focus:border-red-500/60"
             />
           </div>
           <div className="overflow-hidden rounded-lg border border-white/10 bg-black/40">
