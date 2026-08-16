@@ -6098,7 +6098,6 @@ function renderStartingGrid() {
       <div class="sg-startline">START / FINISH</div>
     </div>`;
 }
-<<<<<<< HEAD
 
 // ---------------------------------------------------------------
 // Season Progress: points + championship position across rounds
@@ -6351,5 +6350,3 @@ function renderSeasonProgress() {
   mk("progressPointsChart", "points");
   mk("progressPositionChart", "position");
 }
-=======
->>>>>>> b8e9883d8b4b4401fa52b005f3d735ef8983ef98

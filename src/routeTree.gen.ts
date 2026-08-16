@@ -11,10 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthRouteImport } from './routes/auth'
-<<<<<<< HEAD
 import { Route as CareersRouteImport } from './routes/careers'
-=======
->>>>>>> b8e9883d8b4b4401fa52b005f3d735ef8983ef98
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as SeasonSeasonTeammateRouteImport } from './routes/season.$season.teammate'
 import { Route as SeasonSeasonTrackTrackRouteImport } from './routes/season.$season.track.$track'
@@ -31,14 +28,11 @@ const AuthRoute = AuthRouteImport.update({
   path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
-<<<<<<< HEAD
 const CareersRoute = CareersRouteImport.update({
   id: '/careers',
   path: '/careers',
   getParentRoute: () => rootRouteImport,
 } as any)
-=======
->>>>>>> b8e9883d8b4b4401fa52b005f3d735ef8983ef98
 const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
   id: '/sitemap.xml',
   path: '/sitemap.xml',
@@ -154,7 +148,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
-<<<<<<< HEAD
     '/careers': {
       id: '/careers'
       path: '/careers'
@@ -162,8 +155,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CareersRouteImport
       parentRoute: typeof rootRouteImport
     }
-=======
->>>>>>> b8e9883d8b4b4401fa52b005f3d735ef8983ef98
     '/sitemap.xml': {
       id: '/sitemap.xml'
       path: '/sitemap.xml'

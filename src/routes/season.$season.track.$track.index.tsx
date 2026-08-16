@@ -213,15 +213,10 @@ function TrackPage() {
           if (!quiet) setSaveStatus("local"); // anonymous → local only
           return;
         }
-<<<<<<< HEAD
         // Per-user lookup then update/insert. RLS already scopes reads to the
         // signed-in user, but the table can still hold a legacy row with the
         // same `track_key` owned by nobody/someone else — inserting then hits
         // a duplicate-key error, which is what made saves fail ~50% of tracks.
-=======
-        // Per-user lookup then update/insert. Upserting on `track_key`
-        // alone can collide with another user's row under RLS and fail.
->>>>>>> b8e9883d8b4b4401fa52b005f3d735ef8983ef98
         const { data: existing } = await supabase
           .from("track_notes")
           .select("id")
@@ -236,7 +231,6 @@ function TrackPage() {
           updated_at: new Date().toISOString(),
           user_id: uid,
         };
-<<<<<<< HEAD
         let error = existing?.id
           ? (await supabase.from("track_notes").update(payload).eq("id", existing.id)).error
           : (await supabase.from("track_notes").insert(payload)).error;
@@ -249,11 +243,6 @@ function TrackPage() {
             .select("id");
           if (!retry.error && retry.data && retry.data.length) error = null;
         }
-=======
-        const { error } = existing?.id
-          ? await supabase.from("track_notes").update(payload).eq("id", existing.id)
-          : await supabase.from("track_notes").insert(payload);
->>>>>>> b8e9883d8b4b4401fa52b005f3d735ef8983ef98
         if (error) {
           console.warn("track_notes save failed", error);
           if (!quiet && sequence === saveSequence.current) setSaveStatus("error");
@@ -261,10 +250,7 @@ function TrackPage() {
         }
         if (dbKey === trackKeyRef.current) lastSaved.current = value;
         if (!quiet && sequence === saveSequence.current) setSaveStatus("saved");
-<<<<<<< HEAD
 
-=======
->>>>>>> b8e9883d8b4b4401fa52b005f3d735ef8983ef98
       } catch (err) {
         console.warn("track_notes save error", err);
         if (!quiet && sequence === saveSequence.current) setSaveStatus("error");

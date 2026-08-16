@@ -196,7 +196,6 @@ export function trackFlag(name: string) {
 }
 
 export type SessionBadges = { win?: boolean; pole?: boolean; fl?: boolean; podium?: boolean; gs?: boolean; dnf?: boolean };
-<<<<<<< HEAD
 
 // True only for sessions whose finishing position is an actual race result.
 // The uploader guesses `category` from the filename, so a Sprint Qualifying
@@ -214,20 +213,12 @@ export function isRaceResultSession(s: Session): "Race" | "Sprint" | null {
   return null;
 }
 
-=======
->>>>>>> b8e9883d8b4b4401fa52b005f3d735ef8983ef98
 export function badgesFor(s: Session): SessionBadges {
-  const cat = (s.category || "").toLowerCase();
-  const isRaceLike = cat === "race" || cat === "sprint";
   const finish = Number(s.finishing_position);
   const start = Number(s.starting_position);
   // Weekend tags come from the actual Race/Sprint result. Qualifying files
   // can contain provisional positions that do not reflect grid penalties.
-<<<<<<< HEAD
   if (!isRaceResultSession(s)) return {};
-=======
-  if (!isRaceLike) return {};
->>>>>>> b8e9883d8b4b4401fa52b005f3d735ef8983ef98
   const playerName = String(s.race_story?.player_name || s.driver_name || "").toUpperCase();
   const playerResult = Array.isArray(s.race_story?.classification)
     ? s.race_story.classification.find(
@@ -250,15 +241,11 @@ export function badgesFor(s: Session): SessionBadges {
     win: !dnf && classifiedFinish === 1,
     pole: classifiedStart === 1,
     podium: !dnf && classifiedFinish >= 1 && classifiedFinish <= 3,
-<<<<<<< HEAD
     fl: !!(
       s.race_story?.player_fastest_lap ??
       (s.race_story?.fastest_lap &&
         String(s.race_story.fastest_lap.name || "").toUpperCase() === playerName)
     ),
-=======
-    fl: !!(s.race_story?.player_fastest_lap ?? false),
->>>>>>> b8e9883d8b4b4401fa52b005f3d735ef8983ef98
     gs: !dnf && !!(s.race_story?.grand_slam ?? false),
     dnf,
   };

@@ -209,11 +209,7 @@ function TrackCard({ season, track, category, sessions }: { season: number; trac
           {badgeAgg.gs && <Tag color="#c084fc">GS</Tag>}
           {badgeAgg.win && <Tag color="#ffd700">W</Tag>}
           {badgeAgg.fl && <Tag color="#a855f7">FL</Tag>}
-<<<<<<< HEAD
           {!badgeAgg.win && badgeAgg.podium && bestPos && <Tag color="#cd7f32">P{bestPos}</Tag>}
-=======
-          {!badgeAgg.win && badgeAgg.podium && <Tag color="#cd7f32">P3</Tag>}
->>>>>>> b8e9883d8b4b4401fa52b005f3d735ef8983ef98
            {badgeAgg.dnf && <Tag color="#ef4444">DNF</Tag>}
         </div>
       </div>
