@@ -81,7 +81,11 @@ function AuthPage() {
           throw error;
         }
       }
+<<<<<<< HEAD
       navigate({ to: "/careers" });
+=======
+      navigate({ to: "/" });
+>>>>>>> b8e9883d8b4b4401fa52b005f3d735ef8983ef98
     } catch (e: any) {
       setErr(e?.message || "Sign-in failed");
     } finally {
