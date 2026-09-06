@@ -557,11 +557,15 @@ function TrackPage() {
         </section>
 
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-bold uppercase tracking-widest text-white/60">Sections</h2>
+          <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-white/70">
+            <span className="h-3.5 w-[3px] rounded-full bg-red-500" />
+            Sections
+          </h2>
           <span className="hidden text-[11px] text-white/40 sm:inline">Drag cards to reorder</span>
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {orderedOptions.map((o) => {
+            const accent = ACCENTS[o.view] ?? "#ef3340";
             const linkProps =
               o.view === "teammate"
                 ? {
@@ -598,19 +602,33 @@ function TrackPage() {
               >
                 <Link
                   {...(linkProps as any)}
-                  className="group flex h-full w-full items-start gap-3 rounded-lg border border-white/10 bg-white/[0.03] p-4 transition hover:-translate-y-0.5 hover:border-red-500/60 cursor-grab active:cursor-grabbing"
+                  style={{ ["--accent" as any]: accent }}
+                  className="group relative flex h-full w-full items-start gap-3 overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br from-white/[0.06] to-white/[0.02] p-4 pl-5 shadow-[0_2px_10px_rgba(0,0,0,0.35)] transition duration-200 hover:-translate-y-1 hover:border-[color:var(--accent)] hover:shadow-[0_10px_28px_-10px_var(--accent)] cursor-grab active:cursor-grabbing"
                 >
-                  <span className="text-2xl">{o.icon}</span>
-                  <div className="flex-1">
-                    <div className="text-base font-bold">{o.label}</div>
-                    <div className="mt-0.5 text-xs text-white/60">{o.desc}</div>
+                  <span
+                    className="absolute inset-y-0 left-0 w-[3px] opacity-60 transition group-hover:opacity-100"
+                    style={{ background: accent }}
+                  />
+                  <span
+                    className="grid h-10 w-10 shrink-0 place-items-center rounded-lg text-xl transition group-hover:scale-110"
+                    style={{
+                      background: `color-mix(in oklab, ${accent} 18%, transparent)`,
+                      boxShadow: `inset 0 0 0 1px color-mix(in oklab, ${accent} 35%, transparent)`,
+                    }}
+                  >
+                    {o.icon}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[15px] font-bold tracking-tight text-white">{o.label}</div>
+                    <div className="mt-1 text-xs leading-snug text-white/55">{o.desc}</div>
                   </div>
-                  <span className="select-none text-white/20 group-hover:text-white/40">⋮⋮</span>
+                  <span className="select-none text-white/15 transition group-hover:text-white/40">⋮⋮</span>
                 </Link>
               </div>
             );
           })}
         </div>
+
       </ShellPage>
     </>
   );
