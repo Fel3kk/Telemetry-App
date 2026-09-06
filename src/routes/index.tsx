@@ -113,7 +113,7 @@ function MainPage() {
           </div>
         )}
 
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {trackGroups.map((g) => (
             <TrackCard
               key={`${trackSlug(g.track)}::${g.category}`}
@@ -131,6 +131,20 @@ function MainPage() {
 
 function UploadPanel({ season }: { season: number }) {
   const src = appEmbedUrl({ season, track: "", view: "upload" });
+  const [height, setHeight] = useState(112);
+
+  useEffect(() => {
+    const onMsg = (ev: MessageEvent) => {
+      const d = ev?.data;
+      if (d?.type === "f1-embed-height" && d.view === "upload") {
+        const h = Number(d.height);
+        if (Number.isFinite(h)) setHeight(Math.min(Math.max(h + 4, 96), 260));
+      }
+    };
+    window.addEventListener("message", onMsg);
+    return () => window.removeEventListener("message", onMsg);
+  }, []);
+
   return (
     <div className="mb-6 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2">
       <div className="mb-1 flex items-center justify-between">
@@ -141,8 +155,8 @@ function UploadPanel({ season }: { season: number }) {
         title="Upload sessions"
         src={src}
         loading="lazy"
-        className="w-full rounded border-0 bg-transparent"
-        style={{ height: 120 }}
+        className="w-full rounded border-0 bg-transparent transition-[height] duration-200"
+        style={{ height }}
       />
     </div>
   );
@@ -162,7 +176,7 @@ function StatsBar({ stats }: { stats: ReturnType<typeof seasonStats> }) {
       {items.map((it) => (
         <div key={it.label} className="rounded-md border border-white/10 bg-white/[0.03] px-3 py-3">
           <div className="text-[10px] uppercase tracking-widest text-white/50">{it.label}</div>
-          <div className="mt-1 text-xl font-black">{it.icon} {it.value}</div>
+          <div className="mt-1 text-lg font-black sm:text-xl">{it.icon} {it.value}</div>
         </div>
       ))}
     </div>
@@ -189,7 +203,7 @@ function TrackCard({ season, track, category, sessions }: { season: number; trac
       search={{ cat: category }}
       className="group flex flex-col overflow-hidden rounded-lg border border-white/10 bg-white/[0.03] transition hover:-translate-y-0.5 hover:border-red-500/60"
     >
-      <div className="relative aspect-[16/9] bg-black/40">
+      <div className="relative hidden aspect-[16/9] bg-black/40 sm:block">
         {imgOk ? (
           <img
             src={imgSrc}

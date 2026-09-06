@@ -17,6 +17,7 @@ import { Route as SeasonSeasonTeammateRouteImport } from './routes/season.$seaso
 import { Route as SeasonSeasonTrackTrackRouteImport } from './routes/season.$season.track.$track'
 import { Route as SeasonSeasonTrackTrackIndexRouteImport } from './routes/season.$season.track.$track.index'
 import { Route as SeasonSeasonTrackTrackViewRouteImport } from './routes/season.$season.track.$track.$view'
+import { Route as SeasonSeasonTrackTrackStrategiesRouteImport } from './routes/season.$season.track.$track.strategies'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -60,6 +61,12 @@ const SeasonSeasonTrackTrackViewRoute =
     path: '/$view',
     getParentRoute: () => SeasonSeasonTrackTrackRoute,
   } as any)
+const SeasonSeasonTrackTrackStrategiesRoute =
+  SeasonSeasonTrackTrackStrategiesRouteImport.update({
+    id: '/strategies',
+    path: '/strategies',
+    getParentRoute: () => SeasonSeasonTrackTrackRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -69,6 +76,7 @@ export interface FileRoutesByFullPath {
   '/season/$season/teammate': typeof SeasonSeasonTeammateRoute
   '/season/$season/track/$track': typeof SeasonSeasonTrackTrackRouteWithChildren
   '/season/$season/track/$track/$view': typeof SeasonSeasonTrackTrackViewRoute
+  '/season/$season/track/$track/strategies': typeof SeasonSeasonTrackTrackStrategiesRoute
   '/season/$season/track/$track/': typeof SeasonSeasonTrackTrackIndexRoute
 }
 export interface FileRoutesByTo {
@@ -78,6 +86,7 @@ export interface FileRoutesByTo {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/season/$season/teammate': typeof SeasonSeasonTeammateRoute
   '/season/$season/track/$track/$view': typeof SeasonSeasonTrackTrackViewRoute
+  '/season/$season/track/$track/strategies': typeof SeasonSeasonTrackTrackStrategiesRoute
   '/season/$season/track/$track': typeof SeasonSeasonTrackTrackIndexRoute
 }
 export interface FileRoutesById {
@@ -89,6 +98,7 @@ export interface FileRoutesById {
   '/season/$season/teammate': typeof SeasonSeasonTeammateRoute
   '/season/$season/track/$track': typeof SeasonSeasonTrackTrackRouteWithChildren
   '/season/$season/track/$track/$view': typeof SeasonSeasonTrackTrackViewRoute
+  '/season/$season/track/$track/strategies': typeof SeasonSeasonTrackTrackStrategiesRoute
   '/season/$season/track/$track/': typeof SeasonSeasonTrackTrackIndexRoute
 }
 export interface FileRouteTypes {
@@ -101,6 +111,7 @@ export interface FileRouteTypes {
     | '/season/$season/teammate'
     | '/season/$season/track/$track'
     | '/season/$season/track/$track/$view'
+    | '/season/$season/track/$track/strategies'
     | '/season/$season/track/$track/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -110,6 +121,7 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/season/$season/teammate'
     | '/season/$season/track/$track/$view'
+    | '/season/$season/track/$track/strategies'
     | '/season/$season/track/$track'
   id:
     | '__root__'
@@ -120,6 +132,7 @@ export interface FileRouteTypes {
     | '/season/$season/teammate'
     | '/season/$season/track/$track'
     | '/season/$season/track/$track/$view'
+    | '/season/$season/track/$track/strategies'
     | '/season/$season/track/$track/'
   fileRoutesById: FileRoutesById
 }
@@ -190,17 +203,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SeasonSeasonTrackTrackViewRouteImport
       parentRoute: typeof SeasonSeasonTrackTrackRoute
     }
+    '/season/$season/track/$track/strategies': {
+      id: '/season/$season/track/$track/strategies'
+      path: '/strategies'
+      fullPath: '/season/$season/track/$track/strategies'
+      preLoaderRoute: typeof SeasonSeasonTrackTrackStrategiesRouteImport
+      parentRoute: typeof SeasonSeasonTrackTrackRoute
+    }
   }
 }
 
 interface SeasonSeasonTrackTrackRouteChildren {
   SeasonSeasonTrackTrackViewRoute: typeof SeasonSeasonTrackTrackViewRoute
+  SeasonSeasonTrackTrackStrategiesRoute: typeof SeasonSeasonTrackTrackStrategiesRoute
   SeasonSeasonTrackTrackIndexRoute: typeof SeasonSeasonTrackTrackIndexRoute
 }
 
 const SeasonSeasonTrackTrackRouteChildren: SeasonSeasonTrackTrackRouteChildren =
   {
     SeasonSeasonTrackTrackViewRoute: SeasonSeasonTrackTrackViewRoute,
+    SeasonSeasonTrackTrackStrategiesRoute:
+      SeasonSeasonTrackTrackStrategiesRoute,
     SeasonSeasonTrackTrackIndexRoute: SeasonSeasonTrackTrackIndexRoute,
   }
 

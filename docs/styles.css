@@ -2592,6 +2592,20 @@ body.embed-upload .sidebar-block > summary { display: none; }
 body.embed-upload .sidebar-block-body { padding: 0; }
 body.embed-upload .main-pane { display: none; }
 body.embed-upload .sidebar-toggle { display: none !important; }
+/* Never scroll inside the upload iframe — keep it fixed height */
+body.embed-upload .sidebar,
+body.embed-upload .sidebar-block,
+body.embed-upload .sidebar-block-body { overflow: hidden !important; max-height: 100vh; scrollbar-width: none; }
+body.embed-upload .sidebar::-webkit-scrollbar { display: none; }
+/* Natural height so the host iframe can size itself to content */
+html.embed-upload, body.embed-upload,
+body.embed-upload .app-shell,
+body.embed-upload .sidebar { height: auto !important; min-height: 0 !important; }
+/* Compact the Processing indicator so it fits the small embed */
+body.embed-upload .loading { display: none; padding: 4px 0 2px; font-size: 0.78em; }
+body.embed-upload .loading.active { display: flex !important; align-items: center; justify-content: center; gap: 10px; }
+body.embed-upload .spinner { width: 22px; height: 22px; border-width: 2px; margin: 0; box-shadow: 0 0 12px rgba(225,6,0,0.25); }
+body.embed-upload .loading p { margin: 0; }
 
 /* Upload embed: nicer, less shouty */
 body.embed-upload {
@@ -2815,4 +2829,169 @@ body.embed-upload .download-btn.small:hover {
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.06em;
+}
+
+/* ---- Tyre strategies (Race Story) ---- */
+.stint-strip-row { display: flex; width: 100%; }
+.strategy-actions { margin-top: 10px; }
+.strategy-add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  background: rgba(239, 51, 64, 0.12);
+  border: 1px solid rgba(239, 51, 64, 0.5);
+  color: #fff;
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: 0.15s;
+}
+.strategy-add-btn:hover { background: rgba(239, 51, 64, 0.28); box-shadow: 0 0 12px rgba(239,51,64,0.3); }
+.strategy-list { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.strategy-row {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 6px; padding: 6px 8px;
+}
+.strategy-segs { display: flex; gap: 4px; flex-wrap: wrap; }
+.strategy-seg { font-size: 11px; font-weight: 800; border-radius: 4px; padding: 2px 6px; }
+.strategy-name { font-size: 12px; color: rgba(255,255,255,0.75); font-weight: 600; margin-left: auto; }
+.strategy-mini {
+  background: transparent; border: 1px solid rgba(255,255,255,0.12);
+  color: rgba(255,255,255,0.7); border-radius: 5px; cursor: pointer;
+  font-size: 12px; padding: 2px 7px;
+}
+.strategy-mini:hover { border-color: rgba(239,51,64,0.6); color: #fff; }
+
+
+/* ============================================================
+   Mobile refinements — compact controls without horizontal page overflow
+   ============================================================ */
+@media (max-width: 640px) {
+  body { padding: 8px; }
+  .app-shell {
+    width: 100%;
+    border-radius: 10px;
+    overflow: visible;
+  }
+
+  .compact-header {
+    min-width: 0;
+    padding: 14px 56px 12px 56px !important;
+  }
+  .compact-header h1,
+  .compact-header p {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Keep the many analyzer sections in one touch-scrollable row. */
+  .sticky-tabs {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 6px;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: thin;
+    scrollbar-color: var(--f1-red) transparent;
+  }
+  .sticky-tabs .section-tab {
+    flex: 0 0 auto;
+    min-width: max-content;
+    padding: 8px 11px;
+    font-size: 0.68em;
+    white-space: nowrap;
+  }
+
+  .collapsible-content { min-width: 0; padding: 0 6px 14px; }
+  .collapsible-section { min-width: 0; border-radius: 10px; }
+  .collapsible-section .section-header {
+    min-width: 0;
+    flex-wrap: wrap;
+    align-items: center;
+    padding: 14px 12px 10px;
+  }
+  .collapsible-section .section-header h2 {
+    min-width: 0;
+    font-size: 0.9rem;
+    letter-spacing: 0.1em;
+  }
+  .collapsible-section .section-body { min-width: 0; padding: 0 12px 16px; }
+
+  #standings-container {
+    margin: 12px 0 16px;
+    padding: 10px;
+    overflow-x: auto;
+  }
+  .table-responsive,
+  .table-container { max-width: 100%; overflow-x: auto; }
+  table { min-width: 560px; }
+  thead th { padding: 10px 11px; font-size: 0.66em; }
+  td { padding: 9px 11px; font-size: 0.8em; }
+
+  .charts-grid { min-width: 0; gap: 10px; margin-bottom: 18px; }
+  .chart-container,
+  .chart-container.full-width {
+    min-width: 0 !important;
+    height: 280px !important;
+    min-height: 0 !important;
+    padding: 12px;
+    border-radius: 9px;
+  }
+  .chart-title { margin-bottom: 9px; font-size: 0.78em; letter-spacing: 0.09em; }
+  #section-progress .chart-container { height: 300px !important; }
+
+  .section-header .progress-scope-tabs {
+    width: 100%;
+    margin-left: 0 !important;
+    gap: 6px !important;
+  }
+  .progress-scope-tabs .progress-scope {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 8px 10px;
+  }
+  .progress-toggles { gap: 6px; margin-bottom: 10px; }
+  .progress-chip { max-width: 100%; padding: 6px 9px; font-size: 0.72rem; }
+
+  .compare-controls { align-items: stretch !important; padding: 10px 12px !important; }
+  #compareDriverSelect { width: 100%; min-width: 0; }
+  #compareSummary { overflow-wrap: anywhere; }
+
+  .stint-strip-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+    min-width: 0;
+  }
+  .strategy-add-btn {
+    width: 100%;
+    justify-content: center;
+    padding: 8px 10px;
+    font-size: 11px;
+  }
+  .strategy-row { align-items: stretch; }
+  .strategy-name { width: 100%; margin-left: 0; }
+  .strategy-segs { min-width: 0; }
+
+  .fuel-calc-container { padding: 10px; }
+  .fuel-calc-item { min-width: 0; flex-basis: 100%; }
+}
+
+@media (max-width: 380px) {
+  body { padding: 4px; }
+  .compact-header { padding-left: 54px !important; padding-right: 50px !important; }
+  .sidebar-expand { left: 8px; }
+  .season-stats-host { padding-left: 8px; padding-right: 8px; }
+  .season-stats-host #seasonSummaryCards { gap: 6px; }
+  .season-stats-host #seasonSummaryCards .stat-card { padding: 8px 9px; }
+  .season-stats-host #seasonSummaryCards .stat-value { font-size: 0.86rem; }
 }

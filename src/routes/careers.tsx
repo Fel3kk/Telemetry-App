@@ -88,7 +88,7 @@ function CareersPage() {
   return (
     <ShellPage>
       <div className="mx-auto max-w-4xl py-6">
-        <h1 className="text-3xl font-black">Choose a career</h1>
+        <h1 className="text-2xl font-black sm:text-3xl">Choose a career</h1>
         <p className="mt-2 text-sm text-white/60">
           {name ? `Signed in as ${name}. ` : ""}Every upload is saved into the slot you pick here.
           Switch slots any time from the header.
@@ -113,7 +113,7 @@ function CareersPage() {
                           e.preventDefault();
                           saveName(s, draft);
                         }}
-                        className="flex items-center gap-2 rounded-lg border border-red-500/60 bg-white/[0.04] p-4"
+                        className="flex flex-wrap items-center gap-2 rounded-lg border border-red-500/60 bg-white/[0.04] p-3 sm:p-4"
                       >
                         <input
                           autoFocus
@@ -144,7 +144,7 @@ function CareersPage() {
                       key={s.id}
                       onClick={() => choose(s)}
                       className={
-                        "flex items-center gap-3 rounded-lg border p-4 text-left transition hover:-translate-y-0.5 " +
+                        "flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border p-3 text-left transition hover:-translate-y-0.5 sm:p-4 " +
                         (isActive
                           ? "border-red-500 bg-red-500/10"
                           : "border-white/10 bg-white/[0.03] hover:border-red-500/60")
@@ -154,7 +154,7 @@ function CareersPage() {
                         Slot {s.index}
                       </span>
                       <span className="flex min-w-0 flex-col">
-                        <span className="truncate text-lg font-bold">
+                        <span className="truncate text-base font-bold sm:text-lg">
                           {names[s.id] || `${g.type === "driver" ? "Driver" : "My Team"} ${s.index}`}
                         </span>
                         <span className="text-xs text-white/55">

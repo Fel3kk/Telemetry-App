@@ -53,6 +53,19 @@ if (EMBED_VIEW) {
   document.addEventListener("DOMContentLoaded", () => document.body.classList.add(cls));
 }
 
+// Report content height to the host page so the upload iframe
+// can grow only while busy (processing / errors).
+if (EMBED_VIEW === "upload" && window.parent !== window) {
+  const postHeight = () => {
+    const h = Math.ceil(document.body.scrollHeight);
+    window.parent.postMessage({ type: "f1-embed-height", view: "upload", height: h }, "*");
+  };
+  window.addEventListener("load", () => {
+    postHeight();
+    try { new ResizeObserver(postHeight).observe(document.body); } catch {}
+  });
+}
+
 function _embedApplyView() {
   if (!EMBED_VIEW) return;
   const targetId = "section-" + EMBED_VIEW;
@@ -760,7 +773,9 @@ async function handleFileUpload(e) {
 }
 
 function showLoading(show) {
-  document.getElementById("loading").style.display = show ? "block" : "none";
+  const el = document.getElementById("loading");
+  el.style.display = show ? "block" : "none";
+  el.classList.toggle("active", !!show);
 }
 
 function showError(message) {
@@ -5367,6 +5382,97 @@ function renderOvertakesChart(rs) {
   }
 }
 
+const STRAT_SLUG_ALIASES = {
+  las_vegas: "vegas",
+  lasvegas: "vegas",
+  yas_marina: "abu_dhabi",
+  abu: "abu_dhabi",
+  mexico_city: "mexico",
+  interlagos: "brazil",
+  sao_paulo: "brazil",
+  qatar: "losail",
+  austin: "texas",
+};
+function strategyTrackKey(name) {
+  const base = (name || "").toLowerCase().trim().replace(/\s+/g, "_");
+  return STRAT_SLUG_ALIASES[base] || base;
+}
+const STRAT_SHORT = { Soft: "S", Medium: "M", Hard: "H", Intermediate: "I", Wet: "W" };
+
+function currentStintsAsStrategy() {
+  return (currentData?.stints || []).map((s) => ({
+    compound: s["tyre-set-data"]?.["visual-tyre-compound"] || "Medium",
+    start_lap: Number(s["start-lap"]) || 1,
+    end_lap: Number(s["end-lap"]) || 1,
+  }));
+}
+
+async function loadTrackStrategies() {
+  const db = getSupabaseClient({ silent: true });
+  if (!db || !currentData) return [];
+  const { data, error } = await db
+    .from("tyre_strategies")
+    .select("*")
+    .eq("track_key", strategyTrackKey(currentData.track_name))
+    .order("created_at", { ascending: true });
+  if (error) {
+    console.warn("Could not load tyre strategies", error.message);
+    return [];
+  }
+  return data || [];
+}
+
+async function saveCurrentStintsAsStrategy() {
+  const db = getSupabaseClient();
+  if (!db) return alert("Database connection is still loading.");
+  const stints = currentStintsAsStrategy();
+  if (!stints.length) return;
+  const seq = stints.map((s) => STRAT_SHORT[s.compound] || "?").join("-");
+  const suggested = `${seq} (${currentData.category || "Race"})`;
+  const name = prompt("Name this tyre strategy:", suggested);
+  if (name === null) return;
+  let uid = null;
+  try {
+    const { data } = await db.auth.getUser();
+    uid = data?.user?.id || null;
+  } catch (e) { /* ignore */ }
+  if (!uid) return alert("Sign in to save strategies.");
+  const { error } = await db.from("tyre_strategies").insert({
+    user_id: uid,
+    career_slot: null,
+    track_key: strategyTrackKey(currentData.track_name),
+    season: null,
+    name: (name || "").trim() || suggested,
+    notes: "",
+    source: "race",
+    stints,
+  });
+  if (error) return alert("Could not save strategy: " + error.message);
+  renderStintStrip();
+}
+
+async function deleteTrackStrategy(id) {
+  const db = getSupabaseClient();
+  if (!db) return;
+  if (!confirm("Delete this strategy?")) return;
+  const { error } = await db.from("tyre_strategies").delete().eq("id", id);
+  if (error) return alert("Could not delete: " + error.message);
+  renderStintStrip();
+}
+
+async function renameTrackStrategy(id, current) {
+  const db = getSupabaseClient();
+  if (!db) return;
+  const name = prompt("Rename strategy:", current || "");
+  if (!name) return;
+  const { error } = await db
+    .from("tyre_strategies")
+    .update({ name: name.trim(), updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) return alert("Could not rename: " + error.message);
+  renderStintStrip();
+}
+
 function renderStintStrip() {
   const el = document.getElementById("stintStrip");
   if (!el) return;
@@ -5376,7 +5482,7 @@ function renderStintStrip() {
     return;
   }
   const totalLaps = stints[stints.length - 1]["end-lap"] || 1;
-  el.innerHTML = stints
+  const strip = stints
     .map((s, i) => {
       const compound =
         s["tyre-set-data"]?.["visual-tyre-compound"] || "Medium";
@@ -5388,6 +5494,38 @@ function renderStintStrip() {
       </div>`;
     })
     .join("");
+
+  el.innerHTML =
+    `<div class="stint-strip-row">${strip}</div>` +
+    `<div class="strategy-actions">
+       <button type="button" class="strategy-add-btn" onclick="saveCurrentStintsAsStrategy()">+ Add as tyre strategy</button>
+     </div>
+     <div class="strategy-list" id="strategyList"></div>`;
+
+  loadTrackStrategies().then((rows) => {
+    const list = document.getElementById("strategyList");
+    if (!list) return;
+    if (!rows.length) {
+      list.innerHTML = "";
+      return;
+    }
+    list.innerHTML = rows
+      .map((r) => {
+        const parts = (r.stints || [])
+          .map(
+            (s) =>
+              `<span class="strategy-seg" style="background:${COMPOUND_FILL[s.compound] || "#888"};color:${s.compound === "Hard" || s.compound === "Medium" ? "#111" : "#fff"}">${STRAT_SHORT[s.compound] || "?"} ${s.start_lap}–${s.end_lap}</span>`,
+          )
+          .join("");
+        return `<div class="strategy-row">
+          <div class="strategy-segs">${parts}</div>
+          <span class="strategy-name">${r.name || ""}</span>
+          <button type="button" class="strategy-mini" title="Rename" onclick="renameTrackStrategy('${r.id}', ${JSON.stringify(r.name || "").replace(/"/g, "&quot;")})">✏️</button>
+          <button type="button" class="strategy-mini" title="Delete" onclick="deleteTrackStrategy('${r.id}')">×</button>
+        </div>`;
+      })
+      .join("");
+  });
 }
 
 function renderTopSpeedList(rs) {

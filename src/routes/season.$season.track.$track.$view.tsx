@@ -56,13 +56,13 @@ function ViewPage() {
         ]}
       />
       <ShellPage>
-        <div className="mb-3 flex items-center justify-between">
-          <h1 className="text-2xl font-black">{label}</h1>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h1 className="min-w-0 truncate text-xl font-black sm:text-2xl">{label}</h1>
           <Link
             to="/season/$season/track/$track"
             params={{ season, track }}
             search={{ cat }}
-            className="rounded-md border border-white/15 px-3 py-1.5 text-xs font-semibold hover:bg-white/5"
+            className="shrink-0 rounded-md border border-white/15 px-3 py-1.5 text-[11px] font-semibold hover:bg-white/5 sm:text-xs"
           >
             ← Back to {trackDisplay}
           </Link>
@@ -81,7 +81,7 @@ function ViewPage() {
             key={src}
             title={label}
             src={src}
-            className="min-h-[85vh] w-full"
+            className="min-h-[70vh] w-full sm:min-h-[85vh]"
           />
         </div>
       </ShellPage>
