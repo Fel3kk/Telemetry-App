@@ -459,12 +459,12 @@ body.light-theme::before { display: none; }
   border-radius: var(--radius);
   padding: 22px;
   position: relative;
-  height: 400px;
+  height: 440px;
   box-shadow: var(--shadow-md);
   transition: border-color 0.2s, box-shadow 0.2s;
 }
 .chart-container:hover { border-color: var(--border-strong); }
-.chart-container.full-width { grid-column: 1 / -1; height: 500px; }
+.chart-container.full-width { grid-column: 1 / -1; height: 560px; }
 .chart-title {
   font-weight: 700; font-size: 0.95em;
   text-transform: uppercase; letter-spacing: 0.14em;
