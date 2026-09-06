@@ -1,8 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   fetchSessions,
   loadCachedSessions,
+  cacheIsFresh,
   trackSlug,
   trackFlag,
   trackMapUrl,
@@ -73,6 +74,22 @@ const OPTIONS: Opt[] = [
 ];
 
 
+const ACCENTS: Record<string, string> = {
+  standings: "#ffd15c",
+  records: "#cf9bff",
+  progress: "#5cb0ff",
+  "quali-results": "#4bf09a",
+  grid: "#ff4646",
+  assignments: "#ff9c4f",
+  "race-story": "#a78bfa",
+  compare: "#5ad1ff",
+  graphs: "#4bf09a",
+  data: "#c3c3d0",
+  practice: "#ffd15c",
+  strategies: "#ff9c4f",
+  teammate: "#ff4646",
+};
+
 function matchesCat(s: Session, bucket: string | undefined) {
   const c = s.category || "Race";
   // Practice always surfaces alongside the race weekend regardless of cat filter.
@@ -93,13 +110,15 @@ function TrackPage() {
   const [dragging, setDragging] = useState<string | null>(null);
 
   // Load cached sessions after mount to avoid SSR hydration mismatch.
-  useEffect(() => {
+  // Paint navigation (season/round arrows) from cache before the first frame,
+  // then refresh from the network only when the cache is stale.
+  useLayoutEffect(() => {
     const cached = loadCachedSessions();
     if (cached) setSessions(cached);
+    if (cached && cacheIsFresh()) return;
     fetchSessions()
       .then(setSessions)
       .catch(() => {});
-
   }, [seasonN]);
 
   // Load persisted ordering
