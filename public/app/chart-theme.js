@@ -11,8 +11,8 @@
   const css = getComputedStyle(document.documentElement);
   const text = "#f4f4f8";
   const textDim = "#c3c3d0";
-  const grid = "rgba(255,255,255,0.10)";
-  const gridStrong = "rgba(255,255,255,0.22)";
+  const grid = "rgba(255,255,255,0.16)";
+  const gridStrong = "rgba(255,255,255,0.32)";
 
   Chart.defaults.font.family =
     '"Titillium Web", "Segoe UI", system-ui, sans-serif';

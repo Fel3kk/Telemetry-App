@@ -3437,7 +3437,7 @@ function createChart(
         },
     grid: {
       color: isMobile
-        ? "rgba(255, 255, 255, 0.05)"
+        ? "rgba(255, 255, 255, 0.12)"
         : "rgba(255, 255, 255, 0.1)",
       ...(yAxisOverride.grid && typeof yAxisOverride.grid === "object"
         ? yAxisOverride.grid
@@ -5901,7 +5901,7 @@ function renderPaceDeltaChart() {
             color: (ctx) =>
               ctx.tick.value === 0
                 ? "rgba(255,255,255,0.5)"
-                : "rgba(255,255,255,0.08)",
+                : "rgba(255,255,255,0.16)",
           },
         },
       },
@@ -6454,7 +6454,7 @@ function renderSeasonProgress() {
       x: {
         title: { display: true, text: "Round" },
         ticks: { color: "#bbb", maxRotation: 60, minRotation: 0 },
-        grid: { color: "rgba(255,255,255,0.06)" },
+        grid: { color: "rgba(255,255,255,0.14)" },
       },
     },
   };
@@ -6469,14 +6469,14 @@ function renderSeasonProgress() {
             title: { display: true, text: "Points" },
             beginAtZero: true,
             ticks: { color: "#bbb" },
-            grid: { color: "rgba(255,255,255,0.06)" },
+            grid: { color: "rgba(255,255,255,0.14)" },
           }
         : {
             title: { display: true, text: "Position" },
             reverse: true,
             min: 1,
             ticks: { color: "#bbb", stepSize: 1, precision: 0 },
-            grid: { color: "rgba(255,255,255,0.06)" },
+            grid: { color: "rgba(255,255,255,0.14)" },
           };
     charts[canvasId] = new Chart(el.getContext("2d"), {
       type: "line",
