@@ -582,7 +582,7 @@ function TrackPage() {
           </h2>
           <span className="hidden text-[11px] text-white/40 sm:inline">Drag cards to reorder</span>
         </div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="flex flex-wrap justify-center gap-3">
           {orderedOptions.map((o) => {
             const accent = ACCENTS[o.view] ?? "#ef3340";
             const linkProps =
@@ -617,7 +617,7 @@ function TrackPage() {
                   e.preventDefault();
                   if (dragging) reorder(dragging, o.view);
                 }}
-                className={"flex transition " + (dragging === o.view ? "opacity-40" : "")}
+                className={"flex w-full transition sm:w-[calc(50%-6px)] lg:w-[calc(33.333%-8px)] xl:w-[calc(25%-9px)] " + (dragging === o.view ? "opacity-40" : "")}
               >
                 <Link
                   {...(linkProps as any)}
