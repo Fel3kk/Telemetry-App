@@ -324,6 +324,21 @@ const trackToFlag = {
   "abu dhabi": "🇦🇪",
 };
 
+// Approximate full race lap counts per track (100 % race distance) for fuel presets.
+const TRACK_RACE_LAPS = {
+  melbourne: 58, shanghai: 56, suzuka: 53, sakhir: 57, jeddah: 50, miami: 57,
+  montreal: 70, monaco: 78, catalunya: 66, austria: 71, austria_reverse: 71,
+  silverstone: 52, spa: 44, hungaroring: 70, zandvoort: 72, monza: 53,
+  madring: 60, baku: 51, singapore: 62, texas: 56, austin: 56, mexico: 71,
+  mexico_city: 71, interlagos: 71, brazil: 71, las_vegas: 50, vegas: 50,
+  losail: 57, qatar: 57, abu_dhabi: 58, yas_marina: 58, abu: 58, imola: 63,
+  portimao: 66,
+};
+function getTrackRaceLength(trackName) {
+  const key = normalizeTrackName(trackName);
+  return TRACK_RACE_LAPS[key] || null;
+}
+
 // Initialize Supabase lazily so GitHub Pages stays interactive even if the CDN is slow/blocked.
 const SUPABASE_URL = "https://kbjjtiajugxvhoboqxwb.supabase.co";
 const SUPABASE_ANON_KEY =
