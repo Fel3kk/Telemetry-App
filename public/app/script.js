@@ -2171,6 +2171,13 @@ function renderPracticeTable() {
 }
 
 function renderFuelCalculatorUI(container) {
+  const fullLaps = currentData ? getTrackRaceLength(currentData.track_name) : null;
+  const pct25 = fullLaps ? Math.round(fullLaps * 0.25) : "";
+  const pct50 = fullLaps ? Math.round(fullLaps * 0.5) : "";
+  const presetInfo = fullLaps
+    ? `Race length presets for ${escapeHtml(currentData.track_name)} (≈${fullLaps} laps).`
+    : "Race length presets unavailable for this track.";
+
   container.innerHTML = `
     <div class="fuel-calc-item">
       <label>Avg Usage (Selected)</label>
@@ -2179,6 +2186,12 @@ function renderFuelCalculatorUI(container) {
     <div class="fuel-calc-item">
       <label>Target Laps</label>
       <input type="number" id="targetLapsInput" value="10" min="1" step="1">
+      <div class="fuel-calc-presets" data-has-laps="${fullLaps ? "1" : "0"}">
+        <button type="button" class="fuel-preset-btn" data-pct="25" data-laps="${pct25}">25 %</button>
+        <button type="button" class="fuel-preset-btn" data-pct="50" data-laps="${pct50}">50 %</button>
+        <button type="button" class="fuel-preset-btn fuel-preset-full" data-pct="100" data-laps="${fullLaps ?? ""}">Full</button>
+      </div>
+      <div class="fuel-preset-info">${presetInfo}</div>
     </div>
     <div class="fuel-calc-item">
       <label>Fuel Needed</label>
@@ -2190,6 +2203,15 @@ function renderFuelCalculatorUI(container) {
   `;
   const input = container.querySelector("#targetLapsInput");
   input.oninput = () => updateFuelCalculator();
+  container.querySelectorAll(".fuel-preset-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const laps = parseInt(btn.dataset.laps, 10);
+      if (Number.isFinite(laps) && laps > 0) {
+        input.value = String(laps);
+        updateFuelCalculator();
+      }
+    });
+  });
 }
 
 function updateFuelCalculator() {
