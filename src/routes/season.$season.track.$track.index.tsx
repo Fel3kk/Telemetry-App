@@ -582,7 +582,7 @@ function TrackPage() {
           </h2>
           <span className="hidden text-[11px] text-white/40 sm:inline">Drag cards to reorder</span>
         </div>
-        <div className="flex flex-wrap justify-center gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           {orderedOptions.map((o) => {
             const accent = ACCENTS[o.view] ?? "#ef3340";
             const linkProps =
@@ -617,19 +617,19 @@ function TrackPage() {
                   e.preventDefault();
                   if (dragging) reorder(dragging, o.view);
                 }}
-                className={"flex w-full transition sm:w-[calc(50%-6px)] lg:w-[calc(33.333%-8px)] xl:w-[calc(25%-9px)] " + (dragging === o.view ? "opacity-40" : "")}
+                className={"flex transition " + (dragging === o.view ? "opacity-40" : "")}
               >
                 <Link
                   {...(linkProps as any)}
                   style={{ ["--accent" as any]: accent }}
-                  className="group relative flex h-full w-full items-start gap-3 overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br from-white/[0.06] to-white/[0.02] p-4 pl-5 shadow-[0_2px_10px_rgba(0,0,0,0.35)] transition duration-200 hover:-translate-y-1 hover:border-[color:var(--accent)] hover:shadow-[0_10px_28px_-10px_var(--accent)] cursor-grab active:cursor-grabbing"
+                  className="group relative flex h-full w-full items-start gap-2 overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br from-white/[0.06] to-white/[0.02] p-3 pl-4 shadow-[0_2px_10px_rgba(0,0,0,0.35)] transition duration-200 hover:-translate-y-1 hover:border-[color:var(--accent)] hover:shadow-[0_10px_28px_-10px_var(--accent)] cursor-grab active:cursor-grabbing"
                 >
                   <span
                     className="absolute inset-y-0 left-0 w-[3px] opacity-60 transition group-hover:opacity-100"
                     style={{ background: accent }}
                   />
                   <span
-                    className="grid h-10 w-10 shrink-0 place-items-center rounded-lg text-xl transition group-hover:scale-110"
+                    className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-lg transition group-hover:scale-110"
                     style={{
                       background: `color-mix(in oklab, ${accent} 18%, transparent)`,
                       boxShadow: `inset 0 0 0 1px color-mix(in oklab, ${accent} 35%, transparent)`,
@@ -638,10 +638,10 @@ function TrackPage() {
                     {o.icon}
                   </span>
                   <div className="min-w-0 flex-1">
-                    <div className="text-[15px] font-bold tracking-tight text-white">{o.label}</div>
-                    <div className="mt-1 text-xs leading-snug text-white/55">{o.desc}</div>
+                    <div className="text-sm font-bold tracking-tight text-white">{o.label}</div>
+                    <div className="mt-0.5 text-[11px] leading-snug text-white/55">{o.desc}</div>
                   </div>
-                  <span className="select-none text-white/15 transition group-hover:text-white/40">⋮⋮</span>
+                  <span className="select-none text-[10px] leading-none text-white/15 transition group-hover:text-white/40">⋮⋮</span>
                 </Link>
               </div>
             );
