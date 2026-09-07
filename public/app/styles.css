@@ -760,6 +760,44 @@ button:hover, .download-btn:hover {
 }
 body.light-theme #targetLapsInput { color: #1a1a1a; }
 
+.fuel-calc-presets {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.fuel-preset-btn {
+  flex: 1 1 0;
+  min-width: 52px;
+  padding: 7px 6px;
+  border: 1px solid var(--border-red, rgba(225,6,0,0.5));
+  border-radius: 8px;
+  background: linear-gradient(135deg, rgba(225,6,0,0.10), rgba(225,6,0,0.03));
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color 0.18s, background 0.18s, transform 0.12s;
+}
+body.light-theme .fuel-preset-btn { color: #1a1a1a; }
+.fuel-preset-btn:hover {
+  border-color: var(--f1-red);
+  background: linear-gradient(135deg, rgba(225,6,0,0.18), rgba(225,6,0,0.06));
+  transform: translateY(-1px);
+}
+.fuel-preset-btn:active { transform: translateY(0); }
+.fuel-preset-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+.fuel-preset-info {
+  font-size: 0.65rem;
+  color: var(--text-muted, #9aa3ad);
+  margin-top: 8px;
+  line-height: 1.3;
+}
+
 .lap-row-selected { background: rgba(225,6,0,0.10) !important; }
 .lap-select-cb { accent-color: var(--f1-red); transform: scale(1.1); }
 
