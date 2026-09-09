@@ -41,7 +41,35 @@ function MainPage() {
   const [loading, setLoading] = useState(!cached);
   const [err, setErr] = useState<string | null>(null);
 
-  useEffect(() => { setSeason(getSavedSeason()); }, []);
+  useEffect(() => {
+    let cancelled = false;
+    // Fresh cache (<15s old, e.g. just came from a subpage): paint instantly,
+    // skip the network round-trip entirely.
+    if (!cacheIsFresh() || sessions.length === 0) {
+      fetchSessions()
+        .then((rows) => {
+          if (!cancelled) setSessions(rows);
+        })
+        .catch((e) => {
+          if (!cancelled) setErr(String(e));
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
+    }
+    const onMsg = (e: MessageEvent) => {
+      if (e?.data?.type !== "f1-upload") return;
+      fetchSessions()
+        .then((rows) => !cancelled && setSessions(rows))
+        .catch(() => {});
+    };
+    window.addEventListener("message", onMsg);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("message", onMsg);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
