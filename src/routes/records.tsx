@@ -102,6 +102,11 @@ function RecordsPage() {
             );
           })}
         </div>
+        <div className="mt-4">
+          <Link to="/" className="text-xs font-semibold text-white/60 hover:text-white">
+            ← Back to dashboard
+          </Link>
+        </div>
       </ShellPage>
     </>
   );
@@ -115,6 +120,3 @@ function Stat({ label, value }: { label: string; value: React.ReactNode }) {
     </div>
   );
 }
-
-// Re-export to keep the Link import used in case of future nav.
-void Link;

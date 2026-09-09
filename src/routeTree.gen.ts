@@ -15,6 +15,7 @@ import { Route as CareersRouteImport } from './routes/careers'
 import { Route as RecordsRouteImport } from './routes/records'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as SeasonSeasonTeammateRouteImport } from './routes/season.$season.teammate'
+import { Route as SeasonSeasonTitleRouteImport } from './routes/season.$season.title'
 import { Route as SeasonSeasonTrackTrackRouteImport } from './routes/season.$season.track.$track'
 import { Route as SeasonSeasonTrackTrackIndexRouteImport } from './routes/season.$season.track.$track.index'
 import { Route as SeasonSeasonTrackTrackViewRouteImport } from './routes/season.$season.track.$track.$view'
@@ -50,6 +51,11 @@ const SeasonSeasonTeammateRoute = SeasonSeasonTeammateRouteImport.update({
   path: '/season/$season/teammate',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SeasonSeasonTitleRoute = SeasonSeasonTitleRouteImport.update({
+  id: '/season/$season/title',
+  path: '/season/$season/title',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SeasonSeasonTrackTrackRoute = SeasonSeasonTrackTrackRouteImport.update({
   id: '/season/$season/track/$track',
   path: '/season/$season/track/$track',
@@ -81,6 +87,7 @@ export interface FileRoutesByFullPath {
   '/records': typeof RecordsRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/season/$season/teammate': typeof SeasonSeasonTeammateRoute
+  '/season/$season/title': typeof SeasonSeasonTitleRoute
   '/season/$season/track/$track': typeof SeasonSeasonTrackTrackRouteWithChildren
   '/season/$season/track/$track/$view': typeof SeasonSeasonTrackTrackViewRoute
   '/season/$season/track/$track/strategies': typeof SeasonSeasonTrackTrackStrategiesRoute
@@ -93,6 +100,7 @@ export interface FileRoutesByTo {
   '/records': typeof RecordsRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/season/$season/teammate': typeof SeasonSeasonTeammateRoute
+  '/season/$season/title': typeof SeasonSeasonTitleRoute
   '/season/$season/track/$track/$view': typeof SeasonSeasonTrackTrackViewRoute
   '/season/$season/track/$track/strategies': typeof SeasonSeasonTrackTrackStrategiesRoute
   '/season/$season/track/$track': typeof SeasonSeasonTrackTrackIndexRoute
@@ -105,6 +113,7 @@ export interface FileRoutesById {
   '/records': typeof RecordsRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/season/$season/teammate': typeof SeasonSeasonTeammateRoute
+  '/season/$season/title': typeof SeasonSeasonTitleRoute
   '/season/$season/track/$track': typeof SeasonSeasonTrackTrackRouteWithChildren
   '/season/$season/track/$track/$view': typeof SeasonSeasonTrackTrackViewRoute
   '/season/$season/track/$track/strategies': typeof SeasonSeasonTrackTrackStrategiesRoute
@@ -119,6 +128,7 @@ export interface FileRouteTypes {
     | '/records'
     | '/sitemap.xml'
     | '/season/$season/teammate'
+    | '/season/$season/title'
     | '/season/$season/track/$track'
     | '/season/$season/track/$track/$view'
     | '/season/$season/track/$track/strategies'
@@ -131,6 +141,7 @@ export interface FileRouteTypes {
     | '/records'
     | '/sitemap.xml'
     | '/season/$season/teammate'
+    | '/season/$season/title'
     | '/season/$season/track/$track/$view'
     | '/season/$season/track/$track/strategies'
     | '/season/$season/track/$track'
@@ -142,6 +153,7 @@ export interface FileRouteTypes {
     | '/records'
     | '/sitemap.xml'
     | '/season/$season/teammate'
+    | '/season/$season/title'
     | '/season/$season/track/$track'
     | '/season/$season/track/$track/$view'
     | '/season/$season/track/$track/strategies'
@@ -155,6 +167,7 @@ export interface RootRouteChildren {
   RecordsRoute: typeof RecordsRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   SeasonSeasonTeammateRoute: typeof SeasonSeasonTeammateRoute
+  SeasonSeasonTitleRoute: typeof SeasonSeasonTitleRoute
   SeasonSeasonTrackTrackRoute: typeof SeasonSeasonTrackTrackRouteWithChildren
 }
 
@@ -200,6 +213,13 @@ declare module '@tanstack/react-router' {
       path: '/season/$season/teammate'
       fullPath: '/season/$season/teammate'
       preLoaderRoute: typeof SeasonSeasonTeammateRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/season/$season/title': {
+      id: '/season/$season/title'
+      path: '/season/$season/title'
+      fullPath: '/season/$season/title'
+      preLoaderRoute: typeof SeasonSeasonTitleRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/season/$season/track/$track': {
@@ -259,6 +279,7 @@ const rootRouteChildren: RootRouteChildren = {
   RecordsRoute: RecordsRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   SeasonSeasonTeammateRoute: SeasonSeasonTeammateRoute,
+  SeasonSeasonTitleRoute: SeasonSeasonTitleRoute,
   SeasonSeasonTrackTrackRoute: SeasonSeasonTrackTrackRouteWithChildren,
 }
 export const routeTree = rootRouteImport

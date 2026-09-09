@@ -1,4 +1,4 @@
-// Renders a shareable season-stats card to a canvas and downloads/eshares it.
+// Renders a shareable season-stats card to a canvas and downloads/shares it.
 
 export type ShareStats = {
   season: number;
