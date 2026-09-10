@@ -154,6 +154,18 @@ const TRACK_SLUG_ALIASES: Record<string, string> = {
   "sao_paulo": "brazil",
   "qatar": "losail",
   "austin": "texas",
+  "reverse_zandvoort": "zandvoort_reverse",
+  "zandvoort_reverse": "zandvoort_reverse",
+  "netherlands_reverse": "zandvoort_reverse",
+  "reverse_netherlands": "zandvoort_reverse",
+  "reverse_austria": "austria_reverse",
+  "austria_reverse": "austria_reverse",
+  "red_bull_ring_reverse": "austria_reverse",
+  "reverse_red_bull_ring": "austria_reverse",
+  "reverse_silverstone": "silverstone_reverse",
+  "silverstone_reverse": "silverstone_reverse",
+  "britain_reverse": "silverstone_reverse",
+  "reverse_britain": "silverstone_reverse",
 };
 export function trackSlug(name: string) {
   const base = (name || "").toLowerCase().trim().replace(/\s+/g, "_");
@@ -184,7 +196,8 @@ const TRACK_FLAGS: Record<string, string> = {
   melbourne: "🇦🇺", shanghai: "🇨🇳", suzuka: "🇯🇵", sakhir: "🇧🇭",
   jeddah: "🇸🇦", miami: "🇺🇸", imola: "🇮🇹", monaco: "🇲🇨",
   catalunya: "🇪🇸", montreal: "🇨🇦", austria: "🇦🇹", austria_reverse: "🇦🇹", silverstone: "🇬🇧",
-  spa: "🇧🇪", hungaroring: "🇭🇺", zandvoort: "🇳🇱", monza: "🇮🇹",
+  silverstone_reverse: "🇬🇧",
+  spa: "🇧🇪", hungaroring: "🇭🇺", zandvoort: "🇳🇱", zandvoort_reverse: "🇳🇱", monza: "🇮🇹",
   madrid: "🇪🇸", baku: "🇦🇿", singapore: "🇸🇬", texas: "🇺🇸",
   austin: "🇺🇸", mexico: "🇲🇽", mexico_city: "🇲🇽", interlagos: "🇧🇷",
   brazil: "🇧🇷", las_vegas: "🇺🇸", lasvegas: "🇺🇸", "las vegas": "🇺🇸",
