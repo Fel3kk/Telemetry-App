@@ -57,7 +57,7 @@ function TitlePage() {
     return () => { cancelled = true; };
   }, []);
 
-  const math = useMemo(() => computeTitleMath(sessions, seasonN), [sessions, seasonN]);
+  const math = useMemo(() => computeTitleMath(sessions, seasonN, excluded), [sessions, seasonN, excluded]);
   const { standings, player, leader, remaining, racesLeft, maxPointsLeft } = math;
   const isPlayerLeader = !!player && !!leader && player.name === leader.name;
   const gapToLeader = player && leader ? leader.points - player.points : 0;
@@ -176,9 +176,41 @@ function TitlePage() {
             </div>
 
             <div className="rounded-lg border border-white/10 bg-white/[0.03] p-4">
-              <h2 className="mb-3 text-xs font-bold uppercase tracking-widest text-white/60">
-                Remaining races ({racesLeft})
-              </h2>
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <h2 className="text-xs font-bold uppercase tracking-widest text-white/60">
+                  Remaining races ({racesLeft})
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => setShowCalendar((v) => !v)}
+                  className="rounded-md border border-white/15 bg-white/5 px-2.5 py-1 text-[11px] font-bold text-white/70 hover:bg-white/10 hover:text-white"
+                >
+                  {showCalendar ? "Hide calendar" : "Edit calendar"}
+                </button>
+              </div>
+              {showCalendar && (
+                <div className="mb-3 grid grid-cols-2 gap-1.5 rounded-md border border-white/10 bg-black/30 p-3 sm:grid-cols-3 lg:grid-cols-4">
+                  {SEASON_CALENDAR.map((t) => {
+                    const active = !excluded.has(t.slug);
+                    return (
+                      <button
+                        key={t.slug}
+                        type="button"
+                        onClick={() => toggleTrack(t.slug)}
+                        className={
+                          "flex items-center gap-1.5 rounded-md border px-2 py-1.5 text-left text-[11px] font-semibold transition-colors " +
+                          (active
+                            ? "border-emerald-500/30 bg-emerald-500/10 text-white"
+                            : "border-white/10 bg-white/[0.03] text-white/35 line-through")
+                        }
+                      >
+                        <span>{trackFlag(t.slug)}</span>
+                        <span className="truncate">{t.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
               {racesLeft === 0 ? (
                 <p className="text-sm text-white/50">Season complete — all calendar races uploaded.</p>
               ) : (
