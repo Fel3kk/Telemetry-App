@@ -99,12 +99,37 @@ export type TitleMath = {
   maxPointsLeft: number; // racesLeft * 26 (win + fastest lap)
 };
 
-export function computeTitleMath(sessions: Session[], season: number): TitleMath {
+// Tracks the user has removed from their calendar, persisted locally.
+const EXCLUDED_KEY = "f1_excluded_tracks";
+
+export function loadExcludedTracks(): Set<string> {
+  try {
+    const raw = localStorage.getItem(EXCLUDED_KEY);
+    const arr = raw ? JSON.parse(raw) : [];
+    return new Set(Array.isArray(arr) ? arr.map(String) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+export function saveExcludedTracks(excluded: Set<string>) {
+  try {
+    localStorage.setItem(EXCLUDED_KEY, JSON.stringify(Array.from(excluded)));
+  } catch {
+    /* ignore */
+  }
+}
+
+export function computeTitleMath(
+  sessions: Session[],
+  season: number,
+  excluded: Set<string> = new Set(),
+): TitleMath {
   const seasonSessions = sessions.filter((s) => Number(s.season) === season);
   const standings = computeStandings(seasonSessions);
   const races = seasonSessions.filter((s) => isRaceResultSession(s) === "Race");
   const racedSlugs = new Set(races.map((s) => trackSlug(s.track_name)));
-  const remaining = SEASON_CALENDAR.filter((t) => !racedSlugs.has(t.slug));
+  const remaining = SEASON_CALENDAR.filter((t) => !racedSlugs.has(t.slug) && !excluded.has(t.slug));
   const playerName = playerNameOf(seasonSessions[seasonSessions.length - 1] ?? ({} as Session));
   const player = standings.find((d) => d.name === playerName) ?? null;
   const leader = standings[0] ?? null;
