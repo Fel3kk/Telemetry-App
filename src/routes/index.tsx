@@ -195,7 +195,9 @@ function UploadPanel({ season }: { season: number }) {
   );
 }
 
-function StatsBar({ stats }: { stats: ReturnType<typeof seasonStats> }) {
+function StatsBar({ stats, season }: { stats: ReturnType<typeof seasonStats>; season: number }) {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
   const items = [
     { label: "GP Wins", value: stats.raceWins, icon: "🏆" },
     { label: "Sprint Wins", value: stats.sprintWins, icon: "🏁" },
@@ -204,15 +206,41 @@ function StatsBar({ stats }: { stats: ReturnType<typeof seasonStats> }) {
     { label: "Fastest Laps", value: stats.fastestLaps, icon: "💜" },
     { label: "DNFs", value: stats.dnfs, icon: "💥" },
   ];
+  const onShare = async () => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const res = await shareSeasonStats({ season, ...stats });
+      setMsg(res === "shared" ? "Shared ✓" : "Image saved ✓");
+    } catch {
+      setMsg("Could not create the image");
+    } finally {
+      setBusy(false);
+      setTimeout(() => setMsg(null), 4000);
+    }
+  };
   return (
-    <div className="mb-6 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-      {items.map((it) => (
-        <div key={it.label} className="rounded-md border border-white/10 bg-white/[0.03] px-3 py-3">
-          <div className="text-[10px] uppercase tracking-widest text-white/50">{it.label}</div>
-          <div className="mt-1 text-lg font-black sm:text-xl">{it.icon} {it.value}</div>
-        </div>
-      ))}
+    <div className="mb-6">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+        {items.map((it) => (
+          <div key={it.label} className="rounded-md border border-white/10 bg-white/[0.03] px-3 py-3">
+            <div className="text-[10px] uppercase tracking-widest text-white/50">{it.label}</div>
+            <div className="mt-1 text-lg font-black sm:text-xl">{it.icon} {it.value}</div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-2 flex items-center justify-end gap-2">
+        {msg && <span className="text-[11px] text-white/50">{msg}</span>}
+        <button
+          onClick={onShare}
+          disabled={busy}
+          className="rounded-md border border-white/15 px-3 py-1.5 text-[11px] font-bold uppercase tracking-widest text-white/70 transition hover:border-red-500/60 hover:text-white disabled:opacity-50"
+        >
+          {busy ? "Creating…" : "📤 Share season card"}
+        </button>
+      </div>
     </div>
+
   );
 }
 
