@@ -111,9 +111,26 @@ function MainPage() {
         </div>
 
 
+        <div className="mb-5 flex flex-wrap items-center justify-center gap-2">
+          <Link
+            to="/season/$season/title"
+            params={{ season: String(season) }}
+            className="rounded-md border border-white/15 px-3 py-1.5 text-xs font-bold uppercase tracking-widest text-white/70 transition hover:border-red-500/60 hover:text-white"
+          >
+            🏆 Title Race
+          </Link>
+          <Link
+            to="/records"
+            className="rounded-md border border-white/15 px-3 py-1.5 text-xs font-bold uppercase tracking-widest text-white/70 transition hover:border-purple-400/60 hover:text-white"
+          >
+            ⏱️ Personal Records
+          </Link>
+        </div>
+
         <UploadPanel season={season} />
 
-        <StatsBar stats={stats} />
+        <StatsBar stats={stats} season={season} />
+
 
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-bold uppercase tracking-widest text-white/60">
