@@ -19,6 +19,7 @@ import {
   type Session,
 } from "@/lib/f1-shell";
 import { ShellHeader, ShellPage } from "@/components/f1/ShellHeader";
+import { shareSeasonStats } from "@/lib/share-stats";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -58,7 +59,7 @@ function MainPage() {
         });
     }
     const onMsg = (e: MessageEvent) => {
-      if (e?.data?.type !== "f1-upload") return;
+      if (e?.data?.type !== "f1-upload" && e?.data?.type !== "f1-sessions-updated") return;
       fetchSessions()
         .then((rows) => !cancelled && setSessions(rows))
         .catch(() => {});
@@ -72,21 +73,8 @@ function MainPage() {
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    const refetch = () => {
-      setLoading(sessions.length === 0);
-      fetchSessions()
-        .then((rows) => { if (!cancelled) setSessions(rows); })
-        .catch((e) => { if (!cancelled) setErr(String(e)); })
-        .finally(() => { if (!cancelled) setLoading(false); });
-    };
-    refetch();
-    const onMsg = (ev: MessageEvent) => {
-      if (ev?.data?.type === "f1-sessions-updated") refetch();
-    };
-    window.addEventListener("message", onMsg);
-    return () => { cancelled = true; window.removeEventListener("message", onMsg); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const saved = getSavedSeason();
+    if (saved) setSeason(saved);
   }, []);
 
   const seasonSessions = useMemo(
