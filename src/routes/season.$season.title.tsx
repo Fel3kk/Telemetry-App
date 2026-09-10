@@ -6,7 +6,12 @@ import {
   trackFlag,
   type Session,
 } from "@/lib/f1-shell";
-import { computeTitleMath } from "@/lib/f1-stats";
+import {
+  computeTitleMath,
+  loadExcludedTracks,
+  saveExcludedTracks,
+  SEASON_CALENDAR,
+} from "@/lib/f1-stats";
 import { ShellHeader, ShellPage } from "@/components/f1/ShellHeader";
 
 export const Route = createFileRoute("/season/$season/title")({
@@ -28,6 +33,20 @@ function TitlePage() {
   const [sessions, setSessions] = useState<Session[]>(cached ?? []);
   const [loading, setLoading] = useState(!cached);
   const [err, setErr] = useState<string | null>(null);
+  const [excluded, setExcluded] = useState<Set<string>>(() =>
+    typeof window !== "undefined" ? loadExcludedTracks() : new Set(),
+  );
+  const [showCalendar, setShowCalendar] = useState(false);
+
+  const toggleTrack = (slug: string) => {
+    setExcluded((prev) => {
+      const next = new Set(prev);
+      if (next.has(slug)) next.delete(slug);
+      else next.add(slug);
+      saveExcludedTracks(next);
+      return next;
+    });
+  };
 
   useEffect(() => {
     let cancelled = false;
