@@ -34,16 +34,22 @@ function TitlePage() {
   const [loading, setLoading] = useState(!cached);
   const [err, setErr] = useState<string | null>(null);
   const [excluded, setExcluded] = useState<Set<string>>(() =>
-    typeof window !== "undefined" ? loadExcludedTracks() : new Set(),
+    typeof window !== "undefined" ? loadExcludedTracks(seasonN) : new Set(),
   );
   const [showCalendar, setShowCalendar] = useState(false);
+
+  // Each season keeps its own calendar.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setExcluded(loadExcludedTracks(seasonN));
+  }, [seasonN]);
 
   const toggleTrack = (slug: string) => {
     setExcluded((prev) => {
       const next = new Set(prev);
       if (next.has(slug)) next.delete(slug);
       else next.add(slug);
-      saveExcludedTracks(next);
+      saveExcludedTracks(next, seasonN);
       return next;
     });
   };
