@@ -104,20 +104,37 @@ export type TitleMath = {
 
 // Tracks the user has removed from their calendar, persisted locally.
 const EXCLUDED_KEY = "f1_excluded_tracks";
+const seasonKey = (season: number) => `${EXCLUDED_KEY}_s${season}`;
 
-export function loadExcludedTracks(): Set<string> {
+export function loadExcludedTracks(season?: number): Set<string> {
   try {
-    const raw = localStorage.getItem(EXCLUDED_KEY);
-    const arr = raw ? JSON.parse(raw) : [];
-    return new Set(Array.isArray(arr) ? arr.map(String) : []);
+    if (season == null) {
+      const raw = localStorage.getItem(EXCLUDED_KEY);
+      const arr = raw ? JSON.parse(raw) : [];
+      return new Set(Array.isArray(arr) ? arr.map(String) : []);
+    }
+    const raw = localStorage.getItem(seasonKey(season));
+    if (raw == null) {
+      // First time for this season: seed from the old global list (one-off migration).
+      const legacy = localStorage.getItem(EXCLUDED_KEY);
+      const arr = legacy ? JSON.parse(legacy) : [];
+      const set = new Set<string>(Array.isArray(arr) ? arr.map(String) : []);
+      saveExcludedTracks(set, season);
+      return set;
+    }
+    const arr = JSON.parse(raw);
+    return new Set<string>(Array.isArray(arr) ? arr.map(String) : []);
   } catch {
     return new Set();
   }
 }
 
-export function saveExcludedTracks(excluded: Set<string>) {
+export function saveExcludedTracks(excluded: Set<string>, season?: number) {
   try {
-    localStorage.setItem(EXCLUDED_KEY, JSON.stringify(Array.from(excluded)));
+    localStorage.setItem(
+      season == null ? EXCLUDED_KEY : seasonKey(season),
+      JSON.stringify(Array.from(excluded)),
+    );
   } catch {
     /* ignore */
   }
