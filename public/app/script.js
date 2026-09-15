@@ -32,6 +32,33 @@ let allSessions = [];
 let currentData = null;
 let currentSeason = 1;
 let qualiGapMode = "leader";
+let qualiTimeMode = "lap"; // "lap" | "sectors"
+
+// Team lookup that tolerates casing differences between the
+// telemetry driver names (UPPERCASE) and manually saved keys.
+function teamForDriver(teams, name) {
+  if (!teams || !name) return "";
+  if (teams[name]) return teams[name];
+  const key = String(name).trim().toUpperCase();
+  for (const k of Object.keys(teams)) {
+    if (String(k).trim().toUpperCase() === key) return teams[k];
+  }
+  return "";
+}
+
+// Sector times of a driver's best lap (from the packet session history).
+function bestLapSectors(entry) {
+  const sh = (entry && entry["session-history"]) || {};
+  const laps = sh["lap-history-data"] || [];
+  const idx = (sh["best-lap-time-lap-num"] || 0) - 1;
+  const lap = laps[idx] || null;
+  if (!lap) return { s1: "", s2: "", s3: "" };
+  return {
+    s1: lap["sector-1-time-str"] || "",
+    s2: lap["sector-2-time-str"] || "",
+    s3: lap["sector-3-time-str"] || "",
+  };
+}
 const charts = {};
 
 // ---------------------------------------------------------------
