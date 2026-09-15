@@ -2320,18 +2320,25 @@ function renderQualiResults() {
     tableDiv.className = "table-container";
 
     const weatherIcon = determineWeatherIcon(session);
+    const sectorMode = qualiTimeMode === "sectors";
     let tableHtml = `
       <h3 style="margin-bottom: 12px; color: var(--accent-red); font-size: 0.9rem; text-transform: uppercase; display:flex; align-items:center; gap:8px;">
         <span>⏱️ ${segmentTitle}</span>
         <span style="font-size:1.1rem;">${weatherIcon}</span>
       </h3>
-      <table>
+      <table class="quali-table${sectorMode ? " is-sectors" : ""}">
         <thead>
           <tr>
-            <th class="text-center" style="width: 60px;">Pos</th>
-            <th>Driver</th>
-            <th class="text-center">Best Lap</th>
-            <th class="text-center" style="width: 105px;">Gap</th>
+            <th class="text-center col-pos">P</th>
+            <th class="col-drv">Driver</th>
+            ${
+              sectorMode
+                ? `<th class="text-center col-sec">S1</th>
+                   <th class="text-center col-sec">S2</th>
+                   <th class="text-center col-sec">S3</th>`
+                : `<th class="text-center col-time">Best Lap</th>`
+            }
+            <th class="text-center col-gap">Gap</th>
           </tr>
         </thead>
         <tbody>`;
@@ -2343,6 +2350,15 @@ function renderQualiResults() {
     const lapTimes = sortedResults.map((res) =>
       timeStringToSeconds(res.best_lap || res.q1 || res.q2 || res.q3 || ""),
     );
+
+    // Best (purple) sector times across the segment
+    const secBest = ["s1", "s2", "s3"].map((k) => {
+      const vals = sortedResults
+        .map((r) => parseFloat(r[k]))
+        .filter((v) => Number.isFinite(v) && v > 0);
+      return vals.length ? Math.min(...vals) : null;
+    });
+
 
     sortedResults.forEach((res, idx) => {
       const isPlayer = res.name === currentData.driver_name;
