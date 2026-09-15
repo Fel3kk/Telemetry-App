@@ -1205,6 +1205,7 @@ function processTelemetryData(data) {
                     e["final-classification"]?.["q3-time"] ||
                     e["q3-time"] ||
                     "",
+                  ...bestLapSectors(e),
                 }))
               : Array.isArray(tyre_stints_v2)
                 ? tyre_stints_v2.map((e) => ({
