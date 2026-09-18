@@ -34,6 +34,7 @@ let currentSeason = 1;
 let qualiGapMode = "leader";
 let qualiTimeMode = "lap"; // "lap" | "sectors"
 
+<<<<<<< HEAD
 // Normalizes team names so variants like "Aston Martin 26" or
 // "aston martin" are treated as the same team ("Aston Martin").
 function canonicalTeam(t) {
@@ -99,6 +100,18 @@ function teamFromTelemetry(upperName) {
     _telemetryTeamCacheSize = sessions.length;
   }
   return _telemetryTeamCache[upperName] || "";
+=======
+// Team lookup that tolerates casing differences between the
+// telemetry driver names (UPPERCASE) and manually saved keys.
+function teamForDriver(teams, name) {
+  if (!teams || !name) return "";
+  if (teams[name]) return teams[name];
+  const key = String(name).trim().toUpperCase();
+  for (const k of Object.keys(teams)) {
+    if (String(k).trim().toUpperCase() === key) return teams[k];
+  }
+  return "";
+>>>>>>> 704086099d59c12b9439e515a24d0d3eb896bba4
 }
 
 // Sector times of a driver's best lap (from the packet session history).
@@ -2469,6 +2482,7 @@ function renderQualiResults() {
       timeStringToSeconds(res.best_lap || res.q1 || res.q2 || res.q3 || ""),
     );
 
+<<<<<<< HEAD
     // Sector value in seconds ("28.412" or "1:02.118" both supported)
     const secSeconds = (v) => {
       if (v == null || v === "") return null;
@@ -2484,6 +2498,15 @@ function renderQualiResults() {
       return vals.length ? Math.min(...vals) : null;
     });
     const hasSectors = secBest.some((v) => v != null);
+=======
+    // Best (purple) sector times across the segment
+    const secBest = ["s1", "s2", "s3"].map((k) => {
+      const vals = sortedResults
+        .map((r) => parseFloat(r[k]))
+        .filter((v) => Number.isFinite(v) && v > 0);
+      return vals.length ? Math.min(...vals) : null;
+    });
+>>>>>>> 704086099d59c12b9439e515a24d0d3eb896bba4
 
 
     sortedResults.forEach((res, idx) => {
