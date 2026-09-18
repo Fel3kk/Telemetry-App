@@ -32,6 +32,88 @@ let allSessions = [];
 let currentData = null;
 let currentSeason = 1;
 let qualiGapMode = "leader";
+let qualiTimeMode = "lap"; // "lap" | "sectors"
+
+// Normalizes team names so variants like "Aston Martin 26" or
+// "aston martin" are treated as the same team ("Aston Martin").
+function canonicalTeam(t) {
+  if (!t) return "";
+  let s = String(t).trim();
+  // Strip trailing season/year suffixes: "Aston Martin 26", "Red Bull 2026".
+  s = s.replace(/[\s\-_]*(?:19|20)?\d{2}\s*$/, "").trim();
+  if (!s) return "";
+  const lower = s.toLowerCase();
+  // Match against the known colour palette keys, case-insensitively.
+  if (typeof TEAM_COLORS !== "undefined") {
+    for (const k of Object.keys(TEAM_COLORS)) {
+      if (k.toLowerCase() === lower) return k;
+    }
+  }
+  // Title-case fallback so "ASTON MARTIN" and "Aston Martin" merge.
+  return s.replace(/\w\S*/g, (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+}
+
+// Team lookup that tolerates casing differences between the
+// telemetry driver names (UPPERCASE) and manually saved keys.
+function teamForDriver(teams, name) {
+  if (!name) return "";
+  const key = String(name).trim().toUpperCase();
+  if (teams) {
+    if (teams[name]) return canonicalTeam(teams[name]);
+    for (const k of Object.keys(teams)) {
+      if (String(k).trim().toUpperCase() === key) return canonicalTeam(teams[k]);
+    }
+  }
+  // Fallback: teams recorded inside the uploaded telemetry itself.
+  return canonicalTeam(teamFromTelemetry(key));
+}
+
+// Name -> team map rebuilt from every saved session's telemetry, so drivers
+// that were never assigned manually still show their real team.
+let _telemetryTeamCache = null;
+let _telemetryTeamCacheSize = -1;
+function teamFromTelemetry(upperName) {
+  const sessions = (typeof allSessions !== "undefined" && allSessions) || [];
+  if (!_telemetryTeamCache || _telemetryTeamCacheSize !== sessions.length) {
+    const map = {};
+    const put = (n, t) => {
+      if (!n || !t) return;
+      const k = String(n).trim().toUpperCase();
+      const v = canonicalTeam(t);
+      if (!k || !v || v.toLowerCase() === "unassigned") return;
+      if (!map[k]) map[k] = v;
+    };
+    sessions.forEach((s) => {
+      (Array.isArray(s.results) ? s.results : []).forEach((r) =>
+        put(r && r.name, r && r.team),
+      );
+      const rs = s && s.race_story;
+      if (rs) {
+        put(rs.player_name || s.driver_name, rs.player_team);
+        (Array.isArray(rs.starting_grid) ? rs.starting_grid : []).forEach((e) =>
+          put(e && e.name, e && e.team),
+        );
+      }
+    });
+    _telemetryTeamCache = map;
+    _telemetryTeamCacheSize = sessions.length;
+  }
+  return _telemetryTeamCache[upperName] || "";
+}
+
+// Sector times of a driver's best lap (from the packet session history).
+function bestLapSectors(entry) {
+  const sh = (entry && entry["session-history"]) || {};
+  const laps = sh["lap-history-data"] || [];
+  const idx = (sh["best-lap-time-lap-num"] || 0) - 1;
+  const lap = laps[idx] || null;
+  if (!lap) return { s1: "", s2: "", s3: "" };
+  return {
+    s1: lap["sector-1-time-str"] || "",
+    s2: lap["sector-2-time-str"] || "",
+    s3: lap["sector-3-time-str"] || "",
+  };
+}
 const charts = {};
 
 // ---------------------------------------------------------------
@@ -324,6 +406,22 @@ const trackToFlag = {
   "abu dhabi": "🇦🇪",
 };
 
+// Full race lap counts per track (100 % race distance) matching the F1 26 game calendar.
+const TRACK_RACE_LAPS = {
+  melbourne: 58, shanghai: 56, suzuka: 53, sakhir: 57, jeddah: 50, miami: 57,
+  montreal: 70, monaco: 78, catalunya: 66, austria: 71, austria_reverse: 71,
+  silverstone: 52, silverstone_reverse: 52, spa: 44, hungaroring: 70,
+  zandvoort_reverse: 72, zandvoort: 72, monza: 53,
+  madring: 57, madrid: 57, baku: 51, singapore: 61, texas: 56, austin: 56,
+  mexico: 71, mexico_city: 71, interlagos: 71, brazil: 71, sao_paulo: 71,
+  las_vegas: 50, vegas: 50, losail: 57, qatar: 57, abu_dhabi: 58,
+  yas_marina: 58, abu: 58, imola: 63, portimao: 66,
+};
+function getTrackRaceLength(trackName) {
+  const key = normalizeTrackName(trackName);
+  return TRACK_RACE_LAPS[key] || null;
+}
+
 // Initialize Supabase lazily so GitHub Pages stays interactive even if the CDN is slow/blocked.
 const SUPABASE_URL = "https://kbjjtiajugxvhoboqxwb.supabase.co";
 const SUPABASE_ANON_KEY =
@@ -363,9 +461,11 @@ const F1_2026_CALENDAR = [
   "catalunya",
   "austria_reverse",
   "austria",
+  "silverstone_reverse",
   "silverstone",
   "spa",
   "hungaroring",
+  "zandvoort_reverse",
   "zandvoort",
   "monza",
   "madring",
@@ -393,9 +493,11 @@ const NOTES_TRACKS = [
   { key: "catalunya", label: "Catalunya", flag: "🇪🇸" },
   { key: "austria_reverse", label: "Red Bull Ring (Reverse)", flag: "🇦🇹" },
   { key: "austria", label: "Red Bull Ring", flag: "🇦🇹" },
+  { key: "silverstone_reverse", label: "Silverstone (Reverse)", flag: "🇬🇧" },
   { key: "silverstone", label: "Silverstone", flag: "🇬🇧" },
   { key: "spa", label: "Spa", flag: "🇧🇪" },
   { key: "hungaroring", label: "Hungaroring", flag: "🇭🇺" },
+  { key: "zandvoort_reverse", label: "Zandvoort (Reverse)", flag: "🇳🇱" },
   { key: "zandvoort", label: "Zandvoort", flag: "🇳🇱" },
   { key: "monza", label: "Monza", flag: "🇮🇹" },
   { key: "madring", label: "Madring", flag: "🇪🇸" },
@@ -467,6 +569,16 @@ window.addEventListener("DOMContentLoaded", () => {
       renderQualiResults();
     });
     updateQualiGapButton();
+  }
+
+  const qualiSectorToggleBtn = document.getElementById("qualiSectorToggleBtn");
+  if (qualiSectorToggleBtn) {
+    qualiSectorToggleBtn.addEventListener("click", () => {
+      qualiTimeMode = qualiTimeMode === "lap" ? "sectors" : "lap";
+      updateQualiSectorButton();
+      renderQualiResults();
+    });
+    updateQualiSectorButton();
   }
   // Setup download template button
   const dlBtn = document.getElementById("downloadTemplateBtn");
@@ -794,12 +906,34 @@ function buildRaceStory(rootData, playerName, playerTeam, classification_data) {
   const overtakeRecords = rootData["overtakes"]?.records || [];
   const speedTraps = rootData["speed-trap-records"] || [];
 
-  const playerPos = positionHistoryRoot.find((p) => p.name === playerName);
+  // Driver names arrive with inconsistent casing/whitespace depending on the
+  // career type (Driver career files often differ from My Team ones), so all
+  // player matching below is normalized.
+  const _norm = (v) => String(v == null ? "" : v).trim().toUpperCase();
+  const PLAYER = _norm(playerName);
+  const playerPos = positionHistoryRoot.find((p) => _norm(p.name) === PLAYER);
   if (!playerPos && !classification_data?.length) return null;
 
   const position_history = (playerPos?.["driver-position-history"] || [])
     .filter((p) => p["lap-number"] >= 0)
     .map((p) => ({ lap: p["lap-number"], position: p.position }));
+
+  // Fallback when the file has no per-lap position history for the player
+  // (seen in some Driver-career exports): derive a minimal start→finish line
+  // from the final classification so the Race Story still renders.
+  if (!position_history.length) {
+    const own = (classification_data || []).find(
+      (e) => _norm(e["driver-name"]) === PLAYER,
+    );
+    const fc = own?.["final-classification"] || {};
+    const finishPos = Number(fc.position || 0);
+    const lapsDone = Number(fc["num-laps"] || 0);
+    if (finishPos > 0) {
+      const gridPos = Number(fc["grid-position"] || finishPos);
+      position_history.push({ lap: 0, position: gridPos });
+      position_history.push({ lap: Math.max(1, lapsDone), position: finishPos });
+    }
+  }
 
   // Podium = top 3 by final-classification.position
   const podium = [];
@@ -812,9 +946,9 @@ function buildRaceStory(rootData, playerName, playerTeam, classification_data) {
     )
     .slice(0, 3);
   sortedClass.forEach((entry) => {
-    const name = String(entry["driver-name"] || "").toUpperCase();
-    if (name === playerName) return; // shown as the main line
-    const ph = positionHistoryRoot.find((p) => p.name === name);
+    const name = _norm(entry["driver-name"]);
+    if (name === PLAYER) return; // shown as the main line
+    const ph = positionHistoryRoot.find((p) => _norm(p.name) === name);
     if (!ph) return;
     podium.push({
       name,
@@ -827,10 +961,10 @@ function buildRaceStory(rootData, playerName, playerTeam, classification_data) {
   });
 
   const overtakes_made = overtakeRecords
-    .filter((o) => o["overtaking-driver-name"] === playerName)
+    .filter((o) => _norm(o["overtaking-driver-name"]) === PLAYER)
     .map((o) => ({ lap: o["overtaking-driver-lap"], opponent: o["overtaken-driver-name"] }));
   const overtakes_suffered = overtakeRecords
-    .filter((o) => o["overtaken-driver-name"] === playerName)
+    .filter((o) => _norm(o["overtaken-driver-name"]) === PLAYER)
     .map((o) => ({ lap: o["overtaken-driver-lap"], opponent: o["overtaking-driver-name"] }));
 
   // Pace delta vs field median (in ms)
@@ -841,7 +975,7 @@ function buildRaceStory(rootData, playerName, playerTeam, classification_data) {
     ),
   }));
   const playerLaps =
-    driverLapTimes.find((d) => d.name === playerName)?.laps || [];
+    driverLapTimes.find((d) => d.name === PLAYER)?.laps || [];
   const pace_delta = [];
   for (let i = 0; i < playerLaps.length; i++) {
     const playerMs = playerLaps[i];
@@ -1109,7 +1243,10 @@ function processTelemetryData(data) {
         let player_stints_data = [];
         let pit_laps_from_stints = {};
         if (Array.isArray(tyre_stints_v2)) {
-          const entry = tyre_stints_v2.find((e) => e.name === driver_name);
+          const entry = tyre_stints_v2.find(
+            (e) => String(e.name || "").trim().toUpperCase() === driver_name,
+          );
+
           if (entry) {
             player_stints_data = entry["tyre-stint-history"] || [];
             player_stints_data.forEach((stint, i) => {
@@ -1136,6 +1273,8 @@ function processTelemetryData(data) {
                   name: String(
                     e["driver-name"] || e.name || "UNKNOWN",
                   ).toUpperCase(),
+                  team: e.team || e["team-name"] || "",
+
                   position:
                     e["final-classification"]?.["position"] ||
                     e["track-position"] ||
@@ -1158,6 +1297,7 @@ function processTelemetryData(data) {
                     e["final-classification"]?.["q3-time"] ||
                     e["q3-time"] ||
                     "",
+                  ...bestLapSectors(e),
                 }))
               : Array.isArray(tyre_stints_v2)
                 ? tyre_stints_v2.map((e) => ({
@@ -2156,6 +2296,13 @@ function renderPracticeTable() {
 }
 
 function renderFuelCalculatorUI(container) {
+  const fullLaps = currentData ? getTrackRaceLength(currentData.track_name) : null;
+  const pct25 = fullLaps ? Math.round(fullLaps * 0.25) : "";
+  const pct50 = fullLaps ? Math.round(fullLaps * 0.5) : "";
+  const presetInfo = fullLaps
+    ? `Race length presets for ${escapeHtml(currentData.track_name)} (≈${fullLaps} laps).`
+    : "Race length presets unavailable for this track.";
+
   container.innerHTML = `
     <div class="fuel-calc-item">
       <label>Avg Usage (Selected)</label>
@@ -2164,6 +2311,12 @@ function renderFuelCalculatorUI(container) {
     <div class="fuel-calc-item">
       <label>Target Laps</label>
       <input type="number" id="targetLapsInput" value="10" min="1" step="1">
+      <div class="fuel-calc-presets" data-has-laps="${fullLaps ? "1" : "0"}">
+        <button type="button" class="fuel-preset-btn" data-pct="25" data-laps="${pct25}">25 %</button>
+        <button type="button" class="fuel-preset-btn" data-pct="50" data-laps="${pct50}">50 %</button>
+        <button type="button" class="fuel-preset-btn fuel-preset-full" data-pct="100" data-laps="${fullLaps ?? ""}">Full</button>
+      </div>
+      <div class="fuel-preset-info">${presetInfo}</div>
     </div>
     <div class="fuel-calc-item">
       <label>Fuel Needed</label>
@@ -2175,6 +2328,15 @@ function renderFuelCalculatorUI(container) {
   `;
   const input = container.querySelector("#targetLapsInput");
   input.oninput = () => updateFuelCalculator();
+  container.querySelectorAll(".fuel-preset-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const laps = parseInt(btn.dataset.laps, 10);
+      if (Number.isFinite(laps) && laps > 0) {
+        input.value = String(laps);
+        updateFuelCalculator();
+      }
+    });
+  });
 }
 
 function updateFuelCalculator() {
@@ -2233,6 +2395,32 @@ function renderQualiResults() {
   section.style.display = "block";
   bodyContainer.innerHTML = ""; // Clear old content
 
+  // Inline toolbar (the outer section header is hidden in embedded views)
+  const toolbar = document.createElement("div");
+  toolbar.className = "quali-inline-toolbar";
+  const gapBtn = document.createElement("button");
+  gapBtn.type = "button";
+  gapBtn.className = "btn-secondary quali-inline-btn";
+  gapBtn.textContent =
+    qualiGapMode === "leader" ? "Switch to Gap to Next" : "Switch to Gap to Leader";
+  gapBtn.addEventListener("click", () => {
+    qualiGapMode = qualiGapMode === "leader" ? "next" : "leader";
+    updateQualiGapButton();
+    renderQualiResults();
+  });
+  const secBtn = document.createElement("button");
+  secBtn.type = "button";
+  secBtn.className = "btn-secondary quali-inline-btn";
+  secBtn.textContent = qualiTimeMode === "sectors" ? "Show Best Lap" : "Show Sectors";
+  secBtn.addEventListener("click", () => {
+    qualiTimeMode = qualiTimeMode === "lap" ? "sectors" : "lap";
+    updateQualiSectorButton();
+    renderQualiResults();
+  });
+  toolbar.appendChild(gapBtn);
+  toolbar.appendChild(secBtn);
+  bodyContainer.appendChild(toolbar);
+
   const segmentsGridContainer = document.createElement("div");
   segmentsGridContainer.className = "quali-segments-grid";
   bodyContainer.appendChild(segmentsGridContainer);
@@ -2250,18 +2438,25 @@ function renderQualiResults() {
     tableDiv.className = "table-container";
 
     const weatherIcon = determineWeatherIcon(session);
+    const sectorMode = qualiTimeMode === "sectors";
     let tableHtml = `
       <h3 style="margin-bottom: 12px; color: var(--accent-red); font-size: 0.9rem; text-transform: uppercase; display:flex; align-items:center; gap:8px;">
         <span>⏱️ ${segmentTitle}</span>
         <span style="font-size:1.1rem;">${weatherIcon}</span>
       </h3>
-      <table>
+      <table class="quali-table${sectorMode ? " is-sectors" : ""}">
         <thead>
           <tr>
-            <th class="text-center" style="width: 60px;">Pos</th>
-            <th>Driver</th>
-            <th class="text-center">Best Lap</th>
-            <th class="text-center" style="width: 105px;">Gap</th>
+            <th class="text-center col-pos">P</th>
+            <th class="col-drv">Driver</th>
+            ${
+              sectorMode
+                ? `<th class="text-center col-sec">S1</th>
+                   <th class="text-center col-sec">S2</th>
+                   <th class="text-center col-sec">S3</th>`
+                : `<th class="text-center col-time">Best Lap</th>`
+            }
+            <th class="text-center col-gap">Gap</th>
           </tr>
         </thead>
         <tbody>`;
@@ -2274,6 +2469,23 @@ function renderQualiResults() {
       timeStringToSeconds(res.best_lap || res.q1 || res.q2 || res.q3 || ""),
     );
 
+    // Sector value in seconds ("28.412" or "1:02.118" both supported)
+    const secSeconds = (v) => {
+      if (v == null || v === "") return null;
+      const str = String(v);
+      const n = str.includes(":") ? timeStringToSeconds(str) : parseFloat(str);
+      return Number.isFinite(n) && n > 0 ? n : null;
+    };
+    // Best (purple) sector times across the segment
+    const secBest = ["s1", "s2", "s3"].map((k) => {
+      const vals = sortedResults
+        .map((r) => secSeconds(r[k]))
+        .filter((v) => v != null);
+      return vals.length ? Math.min(...vals) : null;
+    });
+    const hasSectors = secBest.some((v) => v != null);
+
+
     sortedResults.forEach((res, idx) => {
       const isPlayer = res.name === currentData.driver_name;
       const pos = parseInt(res.position);
@@ -2284,7 +2496,10 @@ function renderQualiResults() {
       if (lowerTitle.includes("1") && pos > 16) isEliminated = true;
       else if (lowerTitle.includes("2") && pos > 10) isEliminated = true;
 
-      const team = teamsAssigned[res.name] || "Unassigned";
+      const team =
+        teamForDriver(teamsAssigned, res.name) ||
+        canonicalTeam(res.team) ||
+        "Unassigned";
       const teamColor = teamColorFor(team);
 
       let rowStyle = "";
@@ -2307,21 +2522,40 @@ function renderQualiResults() {
           gapTo = previousTime;
         }
         if (gapTo && gapTo > 0 && currentTime > gapTo) {
-          gapLabel = "+" + secondsToTimeString(currentTime - gapTo);
+          const d = currentTime - gapTo;
+          gapLabel =
+            d < 60
+              ? "+" + d.toFixed(3)
+              : "+" + secondsToTimeString(d);
         } else if (gapTo && gapTo > 0 && currentTime <= gapTo) {
           gapLabel = "-";
         }
       }
 
+      let timeCells;
+      if (sectorMode) {
+        timeCells = ["s1", "s2", "s3"]
+          .map((k, i) => {
+            const raw = res[k];
+            const val = secSeconds(raw);
+            if (val == null) return `<td class="text-center col-sec">-</td>`;
+            const isBest = secBest[i] != null && Math.abs(val - secBest[i]) < 0.0005;
+            return `<td class="text-center col-sec${isBest ? " sector-best" : ""}">${raw}</td>`;
+          })
+          .join("");
+      } else {
+        timeCells = `<td class="text-center col-time">${res.best_lap || res.q1 || "-"}</td>`;
+      }
+
       tableHtml += `
         <tr style="${rowStyle}">
-          <td class="text-center"><strong>${res.position || "-"}</strong></td>
-          <td style="border-left: 4px solid ${teamColor} !important; padding-left: 10px;">
+          <td class="text-center col-pos"><strong>${res.position || "-"}</strong></td>
+          <td class="col-drv" style="border-left: 4px solid ${teamColor} !important; padding-left: 10px;">
             <strong>${res.name}</strong><br>
             <span class="team-name-sub">${team}</span>
           </td>
-          <td class="text-center">${res.q1 || res.best_lap || "-"}</td>
-          <td class="text-center">${gapLabel}</td>
+          ${timeCells}
+          <td class="text-center col-gap">${gapLabel}</td>
         </tr>`;
     });
 
@@ -2340,6 +2574,12 @@ function updateQualiGapButton() {
   } else {
     btn.textContent = "Switch to Gap to Leader";
   }
+}
+
+function updateQualiSectorButton() {
+  const btn = document.getElementById("qualiSectorToggleBtn");
+  if (!btn) return;
+  btn.textContent = qualiTimeMode === "sectors" ? "Show Best Lap" : "Show Sectors";
 }
 
 function renderSessionInfo() {
@@ -3437,8 +3677,8 @@ function createChart(
         },
     grid: {
       color: isMobile
-        ? "rgba(255, 255, 255, 0.05)"
-        : "rgba(255, 255, 255, 0.1)",
+        ? "rgba(255, 255, 255, 0.12)"
+        : "rgba(255, 255, 255, 0.18)",
       ...(yAxisOverride.grid && typeof yAxisOverride.grid === "object"
         ? yAxisOverride.grid
         : {}),
@@ -4002,7 +4242,7 @@ function renderStandingsTable() {
 
   driverNames.forEach((name, idx) => {
     const d = driversMap[name];
-    const team = teamsAssigned[name] || "Unassigned";
+    const team = teamForDriver(teamsAssigned, name) || "Unassigned";
     const teamColor = teamColorFor(team);
     const leaderClass = idx === 0 ? " is-leader" : "";
     html += `<tr class="standings-row${leaderClass}"><td class="col-rank rank-cell"><span class="rank-num">${idx + 1}</span></td><td class="col-driver driver-cell" style="--team-color:${teamColor};"><span class="driver-name">${name.toUpperCase()}</span><span class="driver-team">${team}</span></td>`;
@@ -4041,7 +4281,7 @@ function renderStandingsTable() {
   try {
     const teamAgg = {};
     driverNames.forEach((name) => {
-      const team = teamsAssigned[name] || "Unassigned";
+      const team = teamForDriver(teamsAssigned, name) || "Unassigned";
       if (!teamAgg[team]) teamAgg[team] = { points: 0, drivers: [] };
       teamAgg[team].points += driversMap[name].points || 0;
       teamAgg[team].drivers.push(name);
@@ -4196,7 +4436,7 @@ function renderRecordsTable() {
       driverAgg[name].fastest_laps += s.fastest_laps || 0;
       driverAgg[name].dnfs += s.dnfs || 0;
       driverAgg[name].seasons.add(season);
-      if (teams[name]) driverAgg[name].lastTeam = teams[name];
+      { const _t = teamForDriver(teams, name); if (_t) driverAgg[name].lastTeam = _t; }
     });
 
 
@@ -4211,7 +4451,7 @@ function renderRecordsTable() {
     // Constructor aggregates for this season
     const teamSeason = {};
     Object.entries(standings).forEach(([name, s]) => {
-      const team = teams[name] || "Unassigned";
+      const team = teamForDriver(teams, name) || "Unassigned";
       if (!teamSeason[team]) teamSeason[team] = { points: 0, wins: 0, podiums: 0 };
       teamSeason[team].points += s.points;
       teamSeason[team].wins += s.wins;
@@ -4249,8 +4489,8 @@ function renderRecordsTable() {
       const p1 = posFor(1);
       const p2 = posFor(2);
       if (!p1 || !p2) return;
-      const t1 = teams[p1.name] || null;
-      const t2 = teams[p2.name] || null;
+      const t1 = teamForDriver(teams, p1.name) || null;
+      const t2 = teamForDriver(teams, p2.name) || null;
       if (!t1 || !t2 || t1 !== t2 || t1 === "Unassigned") return;
       if (!teamAgg[t1]) {
         teamAgg[t1] = { points: 0, wins: 0, podiums: 0, one_twos: 0, front_row_lockouts: 0, titles: 0, seasons: new Set() };
@@ -4488,7 +4728,7 @@ function renderDriverAssignments(driverNames) {
 
   // Build cards
   driverNames.forEach((name) => {
-    const teamVal = teams[name] || "";
+    const teamVal = teamForDriver(teams, name) || "";
     const card = document.createElement("div");
     card.className = "driver-card";
     card.setAttribute("data-driver", name);
@@ -5901,7 +6141,7 @@ function renderPaceDeltaChart() {
             color: (ctx) =>
               ctx.tick.value === 0
                 ? "rgba(255,255,255,0.5)"
-                : "rgba(255,255,255,0.08)",
+                : "rgba(255,255,255,0.16)",
           },
         },
       },
@@ -6073,7 +6313,7 @@ function buildStartingGridData() {
       .map((e) => ({
         position: Number(e.position),
         name: String(e.name).toUpperCase(),
-        team: e.team || teams[e.name] || "Unassigned",
+        team: canonicalTeam(e.team) || teamForDriver(teams, e.name) || "Unassigned",
         time: e.lap_time_str || "",
         source: "Race start (lap 0)",
       }));
@@ -6143,7 +6383,7 @@ function gridFromQualiFor(session, teamsMap) {
         byPos.set(r.pos, {
           position: r.pos,
           name,
-          team: teams[r.name] || teams[name] || "Unassigned",
+          team: teamForDriver(teams, r.name) || teamForDriver(teams, name) || "Unassigned",
           time: r.best_lap && r.best_lap !== "N/A" ? r.best_lap : "",
           source: label,
         });
@@ -6307,7 +6547,7 @@ function progressBuildSeries() {
   // Team cumulative points
   const teamPoints = {};
   Object.keys(driverPoints).forEach((name) => {
-    const team = teams[name] || "Unassigned";
+    const team = teamForDriver(teams, name) || "Unassigned";
     if (!teamPoints[team]) teamPoints[team] = new Array(rounds).fill(0);
     for (let i = 0; i < rounds; i++) teamPoints[team][i] += driverPoints[name][i];
   });
@@ -6331,7 +6571,7 @@ function progressBuildSeries() {
   Object.keys(driverPoints)
     .sort((a, b) => driverPoints[b][rounds - 1] - driverPoints[a][rounds - 1])
     .forEach((name) => {
-      const team = teams[name] || "Unassigned";
+      const team = teamForDriver(teams, name) || "Unassigned";
       seenPerTeam[team] = (seenPerTeam[team] || 0) + 1;
       driverStyle[name] = {
         color: teamColorFor(team),
@@ -6454,7 +6694,7 @@ function renderSeasonProgress() {
       x: {
         title: { display: true, text: "Round" },
         ticks: { color: "#bbb", maxRotation: 60, minRotation: 0 },
-        grid: { color: "rgba(255,255,255,0.06)" },
+        grid: { color: "rgba(255,255,255,0.14)" },
       },
     },
   };
@@ -6469,14 +6709,14 @@ function renderSeasonProgress() {
             title: { display: true, text: "Points" },
             beginAtZero: true,
             ticks: { color: "#bbb" },
-            grid: { color: "rgba(255,255,255,0.06)" },
+            grid: { color: "rgba(255,255,255,0.14)" },
           }
         : {
             title: { display: true, text: "Position" },
             reverse: true,
             min: 1,
             ticks: { color: "#bbb", stepSize: 1, precision: 0 },
-            grid: { color: "rgba(255,255,255,0.06)" },
+            grid: { color: "rgba(255,255,255,0.14)" },
           };
     charts[canvasId] = new Chart(el.getContext("2d"), {
       type: "line",

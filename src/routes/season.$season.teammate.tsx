@@ -77,9 +77,14 @@ function TeammatePage() {
 
   // Group drivers by team, pick the 2 who actually race (most appearances)
   const teamGroups = useMemo(() => {
+    const canonicalTeam = (t: string) =>
+      String(t)
+        .trim()
+        .replace(/[\s\-_]*(?:19|20)?\d{2}\s*$/, "")
+        .trim();
     const g: Record<string, string[]> = {};
     teams.forEach((t) => {
-      const team = t.team;
+      const team = canonicalTeam(t.team);
       const name = String(t.driver_name).toUpperCase().trim();
       if (!team || !name) return;
       g[team] = g[team] || [];
