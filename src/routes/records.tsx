@@ -90,7 +90,8 @@ function RecordsPage() {
                 </div>
                 <div className="mt-1 flex items-center justify-between text-[11px] text-white/50">
                   <span>
-                    Season {r.bestSeason} · {r.bestCategory}
+                    Season {r.bestSeason}
+                    {r.bestTeam ? ` · ${r.bestTeam}` : ""} · {r.bestCategory}
                   </span>
                   {delta != null && delta > 0 && (
                     <span className="font-semibold text-emerald-400">
@@ -98,6 +99,42 @@ function RecordsPage() {
                     </span>
                   )}
                 </div>
+                {r.seasons.length > 0 && (
+                  <div className="mt-3 border-t border-white/10 pt-2">
+                    <div className="mb-1 text-[10px] uppercase tracking-widest text-white/40">
+                      By season
+                    </div>
+                    <ul className="space-y-1">
+                      {r.seasons.map((s) => (
+                        <li
+                          key={s.season}
+                          className="grid grid-cols-[auto_1fr_auto_auto] items-center gap-2 text-[11px]"
+                        >
+                          <span className="font-bold text-white/70">S{s.season}</span>
+                          <span className="truncate text-white/50">{s.team || "—"}</span>
+                          <span
+                            className={`font-mono ${s.ms === r.bestMs ? "text-purple-300" : "text-white/80"}`}
+                          >
+                            {formatLapMs(s.ms)}
+                          </span>
+                          <span
+                            className={`w-14 text-right font-mono ${
+                              s.deltaPrevMs == null
+                                ? "text-white/30"
+                                : s.deltaPrevMs < 0
+                                  ? "text-emerald-400"
+                                  : "text-red-400"
+                            }`}
+                          >
+                            {s.deltaPrevMs == null
+                              ? "—"
+                              : `${s.deltaPrevMs < 0 ? "−" : "+"}${(Math.abs(s.deltaPrevMs) / 1000).toFixed(3)}`}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
             );
           })}

@@ -3676,9 +3676,7 @@ function createChart(
             : {}),
         },
     grid: {
-      color: isMobile
-        ? "rgba(255, 255, 255, 0.12)"
-        : "rgba(255, 255, 255, 0.18)",
+      color: "rgba(255, 255, 255, 0.065)",
       ...(yAxisOverride.grid && typeof yAxisOverride.grid === "object"
         ? yAxisOverride.grid
         : {}),
@@ -4339,6 +4337,14 @@ function getTeamsForSeason(season) {
   }
 }
 
+function sessionFingerprint(s) {
+  const sig = (s.results || [])
+    .map((r) => `${(r.name || "").toUpperCase()}:${r.position}`)
+    .sort()
+    .join("|");
+  return `${s.season}|${(s.track || "").toLowerCase()}|${(s.category || "").toLowerCase()}|${sig}`;
+}
+
 function computeSeasonStandings(season) {
   const drivers = {};
   const sessions = allSessions
@@ -4348,6 +4354,17 @@ function computeSeasonStandings(season) {
         ((s.category || "").toLowerCase() === "race" ||
           (s.category || "").toLowerCase() === "sprint"),
     );
+  // Drop exact duplicate sessions (same event re-uploaded with identical results)
+  const seenSessions = new Set();
+  const uniqueSessions = sessions.filter((s) => {
+    if (!s.results || s.results.length === 0) return true;
+    const fp = sessionFingerprint(s);
+    if (seenSessions.has(fp)) return false;
+    seenSessions.add(fp);
+    return true;
+  });
+  sessions.length = 0;
+  sessions.push(...uniqueSessions);
   sessions.forEach((session) => {
     const seen = new Set();
     const rsClass = session.race_story?.classification || [];
@@ -4374,10 +4391,10 @@ function computeSeasonStandings(season) {
         if (cat === "race" && (dnfNames.has(name) || !pos || pos <= 0)) {
           drivers[name].dnfs += 1;
         }
-      }
-      if (cat === "race") {
-        if (pos === 1) drivers[name].wins += 1;
-        if (pos >= 1 && pos <= 3) drivers[name].podiums += 1;
+        if (cat === "race") {
+          if (pos === 1) drivers[name].wins += 1;
+          if (pos >= 1 && pos <= 3) drivers[name].podiums += 1;
+        }
       }
     });
     // Fallback: include drivers from race_story classification not already

@@ -90,8 +90,8 @@ function AuthPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#0a0a0f] px-4 text-white">
-      <form onSubmit={submit} className="w-full max-w-sm rounded-xl border border-white/10 bg-white/[0.03] p-6 shadow-xl">
+    <div className="flex min-h-screen items-center justify-center bg-background px-4 text-foreground">
+      <form onSubmit={submit} className="w-full max-w-sm rounded-lg border border-border bg-card p-6 shadow-xl">
         <h1 className="mb-1 text-2xl font-black tracking-tight">
           <span className="text-red-500">F1</span> Telemetry
         </h1>

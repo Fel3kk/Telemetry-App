@@ -166,19 +166,35 @@ export function computeTitleMath(
   };
 }
 
+export type SeasonBest = {
+  season: number;
+  team: string;
+  ms: number;
+  category: string;
+  deltaPrevMs: number | null; // vs previous season best (negative = faster)
+};
+
 export type TrackRecord = {
   slug: string;
   track: string;
   bestMs: number;
   bestSeason: number;
+  bestTeam: string;
   bestCategory: string;
   secondBestMs: number | null;
   attempts: number;
+  seasons: SeasonBest[];
 };
 
-// Player's best lap per track across every uploaded season.
+function cleanTeam(t: unknown): string {
+  const s = String(t || "").trim().replace(/\s+(19|20)?\d{2}$/, "");
+  return s ? s.replace(/\b\w/g, (c) => c.toUpperCase()) : "";
+}
+
+// Player's best lap per track across every uploaded season, with per-season bests.
 export function personalRecords(sessions: Session[]): TrackRecord[] {
-  const byTrack = new Map<string, { track: string; laps: { ms: number; season: number; category: string }[] }>();
+  type Lap = { ms: number; season: number; category: string; team: string };
+  const byTrack = new Map<string, { track: string; laps: Lap[] }>();
   for (const s of sessions) {
     const player = playerNameOf(s);
     if (!player) continue;
@@ -186,26 +202,45 @@ export function personalRecords(sessions: Session[]): TrackRecord[] {
       (e: any) => String(e?.name || "").toUpperCase() === player,
     );
     const ms = Number(entry?.best_lap_ms) || 0;
-    // Guard against corrupted laps (lapped cars, missing data).
     if (ms < 30000 || ms > 200000) continue;
     const slug = trackSlug(s.track_name);
     if (!slug) continue;
+    const team = cleanTeam(entry?.team || (s as any).race_story?.player_team || (s as any).team);
     const bucket = byTrack.get(slug) ?? { track: s.track_name, laps: [] };
-    bucket.laps.push({ ms, season: Number(s.season) || 1, category: s.category || "Race" });
+    bucket.laps.push({ ms, season: Number(s.season) || 1, category: s.category || "Race", team });
     byTrack.set(slug, bucket);
   }
   const out: TrackRecord[] = [];
   for (const [slug, bucket] of byTrack) {
     const sorted = [...bucket.laps].sort((a, b) => a.ms - b.ms);
     const best = sorted[0];
+    const perSeason = new Map<number, Lap>();
+    for (const l of bucket.laps) {
+      const cur = perSeason.get(l.season);
+      if (!cur || l.ms < cur.ms) perSeason.set(l.season, l);
+    }
+    const seasons: SeasonBest[] = [];
+    let prev: number | null = null;
+    for (const l of [...perSeason.values()].sort((a, b) => a.season - b.season)) {
+      seasons.push({
+        season: l.season,
+        team: l.team,
+        ms: l.ms,
+        category: l.category,
+        deltaPrevMs: prev == null ? null : l.ms - prev,
+      });
+      prev = l.ms;
+    }
     out.push({
       slug,
       track: bucket.track,
       bestMs: best.ms,
       bestSeason: best.season,
+      bestTeam: best.team,
       bestCategory: best.category,
       secondBestMs: sorted.length > 1 ? sorted[1].ms : null,
       attempts: bucket.laps.length,
+      seasons,
     });
   }
   return out.sort((a, b) => a.track.localeCompare(b.track));

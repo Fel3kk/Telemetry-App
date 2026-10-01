@@ -1,5 +1,5 @@
-// Tyre strategies stored per track (shared across every season / session of
-// that track) and scoped to the signed-in user + active career slot.
+// Tyre strategies are stored per user + track and shared across every season,
+// session, and career slot for that track.
 
 import { supabase } from "./supabase";
 
@@ -84,8 +84,30 @@ export function formatStrategy(stints: StrategyStint[]) {
     .join(" · ");
 }
 
+let sharedStrategyMigration: Promise<void> | null = null;
+
+async function migrateOwnedStrategiesToShared(): Promise<void> {
+  if (sharedStrategyMigration) return sharedStrategyMigration;
+  sharedStrategyMigration = (async () => {
+    const { data: userData } = await supabase.auth.getUser();
+    const uid = userData?.user?.id;
+    if (!uid) return;
+    const { error } = await supabase
+      .from("tyre_strategies")
+      .update({ career_slot: null })
+      .eq("user_id", uid)
+      .not("career_slot", "is", null);
+    if (error) throw error;
+  })().catch((error) => {
+    sharedStrategyMigration = null;
+    throw error;
+  });
+  return sharedStrategyMigration;
+}
+
 export async function listStrategies(trackKey: string): Promise<Strategy[]> {
   // Universal per track: shared across every season and career slot.
+  await migrateOwnedStrategiesToShared();
   const { data, error } = await supabase
     .from("tyre_strategies")
     .select("*")
@@ -121,8 +143,6 @@ export async function createStrategy(input: {
     career_slot: null,
     track_key: input.track_key,
     season: null,
-
-
     name: input.name,
     notes: input.notes ?? "",
     source: input.source ?? "custom",

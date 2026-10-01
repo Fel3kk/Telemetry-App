@@ -1,6 +1,17 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { SUPABASE_URL, SUPABASE_ANON_KEY, titleCaseTrack, currentAccessToken } from "@/lib/f1-shell";
+import { getActiveCareer } from "@/lib/career";
+
+const COLLAPSED_KEY = "f1.h2h.collapsed";
+function loadCollapsed(): Set<string> {
+  try {
+    const arr = JSON.parse(localStorage.getItem(COLLAPSED_KEY) || "[]");
+    return new Set(Array.isArray(arr) ? arr.map(String) : []);
+  } catch {
+    return new Set();
+  }
+}
 import { ShellHeader, ShellPage } from "@/components/f1/ShellHeader";
 
 export const Route = createFileRoute("/season/$season/teammate")({
@@ -15,7 +26,7 @@ type FullSession = {
   category: string;
   starting_pos?: number | null;
   finishing_pos?: number | null;
-  results?: { name: string; position: any; best_lap?: string }[];
+  results?: { name: string; position: any; best_lap?: string; team?: string }[];
   session_date?: string;
 };
 type Team = { driver_name: string; team: string };
@@ -46,9 +57,11 @@ function TeammatePage() {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    const career = getActiveCareer();
+    const careerFilter = career ? `&career_slot=eq.${encodeURIComponent(career)}` : "";
     Promise.all([
       sbFetch<FullSession[]>(
-        `telemetry_sessions?select=id,season,driver_name,track_name,category,starting_pos,finishing_pos,results,session_date&season=eq.${seasonN}&order=session_date.asc`,
+        `telemetry_sessions?select=id,season,driver_name,track_name,category,starting_pos,finishing_pos,results,session_date&season=eq.${seasonN}${careerFilter}&order=session_date.asc`,
       ),
       sbFetch<Team[]>(`driver_teams?select=driver_name,team&season=eq.${seasonN}`),
     ])
@@ -82,24 +95,35 @@ function TeammatePage() {
         .trim()
         .replace(/[\s\-_]*(?:19|20)?\d{2}\s*$/, "")
         .trim();
+    const key = (t: string) => canonicalTeam(t).toLowerCase();
+    const label: Record<string, string> = {};
     const g: Record<string, string[]> = {};
-    teams.forEach((t) => {
-      const team = canonicalTeam(t.team);
-      const name = String(t.driver_name).toUpperCase().trim();
+    const add = (teamRaw: string | undefined, nameRaw: string | undefined) => {
+      const team = canonicalTeam(String(teamRaw || ""));
+      const name = String(nameRaw || "").toUpperCase().trim();
       if (!team || !name) return;
-      g[team] = g[team] || [];
-      if (!g[team].includes(name)) g[team].push(name);
-    });
+      const k = key(team);
+      label[k] = label[k] || team;
+      // A driver belongs to one team: remove from any other team first
+      Object.keys(g).forEach((o) => {
+        if (o !== k) g[o] = g[o].filter((n) => n !== name);
+      });
+      g[k] = g[k] || [];
+      if (!g[k].includes(name)) g[k].push(name);
+    };
+    // Teams from the uploaded session results first, manual assignments override
+    sessions.forEach((s) => (s.results || []).forEach((r) => add(r.team, r.name)));
+    teams.forEach((t) => add(t.team, t.driver_name));
     return Object.entries(g)
       .filter(([, ds]) => ds.length >= 2)
       .map(([team, ds]) => {
         const sorted = [...ds].sort(
           (x, y) => (appearanceByDriver[y] || 0) - (appearanceByDriver[x] || 0),
         );
-        return { team, drivers: sorted.slice(0, 2) as [string, string] };
+        return { team: label[team] || team, drivers: sorted.slice(0, 2) as [string, string] };
       })
       .sort((a, b) => a.team.localeCompare(b.team));
-  }, [teams, appearanceByDriver]);
+  }, [teams, sessions, appearanceByDriver]);
 
 
   return (
@@ -120,7 +144,7 @@ function TeammatePage() {
           </div>
         )}
 
-        <div className="grid gap-6 lg:grid-cols-2">
+        <div className="grid items-start gap-4 lg:grid-cols-2">
           {teamGroups.map(({ team, drivers }) => (
             <TeamH2H key={team} team={team} drivers={drivers} sessions={sessions} />
           ))}
@@ -215,11 +239,52 @@ function TeamH2H({
     (r) => r.raceA || r.raceB || r.qA || r.qB || r.sqA || r.sqB || r.sA || r.sB,
   );
   const aLeads = totals.ptsA >= totals.ptsB;
+  const [collapsed, setCollapsed] = useState(false);
+  useEffect(() => {
+    setCollapsed(loadCollapsed().has(team));
+  }, [team]);
+  const toggle = () => {
+    const set = loadCollapsed();
+    if (collapsed) set.delete(team);
+    else set.add(team);
+    try {
+      localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...set]));
+    } catch {}
+    setCollapsed(!collapsed);
+  };
+
+  if (collapsed) {
+    return (
+      <button
+        type="button"
+        onClick={toggle}
+        className="flex w-full items-center justify-between self-start rounded-lg border border-white/10 bg-white/[0.03] p-3 text-left hover:border-white/25"
+      >
+        <span className="text-xs font-bold uppercase tracking-widest text-white/60">{team}</span>
+        <span className="flex items-center gap-3 text-[11px] text-white/50">
+          <span className="flex items-center gap-2 font-mono">
+            <span className={aLeads ? "font-bold text-emerald-400" : ""}>{a.split(" ").pop()}</span>
+            <span className="rounded bg-white/5 px-2 py-0.5 text-white">{totals.ptsA} – {totals.ptsB}</span>
+            <span className={!aLeads ? "font-bold text-emerald-400" : ""}>{b.split(" ").pop()}</span>
+          </span>
+          <span aria-hidden>▸</span>
+        </span>
+      </button>
+    );
+  }
 
   return (
-    <div className="rounded-lg border border-white/10 bg-white/[0.03] p-4">
+    <div className="self-start rounded-lg border border-white/10 bg-white/[0.03] p-4">
       <div className="mb-3 flex items-center justify-between">
-        <div className="text-xs font-bold uppercase tracking-widest text-white/60">{team}</div>
+        <button
+          type="button"
+          onClick={toggle}
+          className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-white/60 hover:text-white"
+          aria-label={`Collapse ${team}`}
+        >
+          <span aria-hidden>▾</span>
+          {team}
+        </button>
         <div className="text-[10px] text-white/40">{relevantRows.length} weekend{relevantRows.length === 1 ? "" : "s"}</div>
       </div>
       <div className="mb-3 grid grid-cols-2 gap-2">

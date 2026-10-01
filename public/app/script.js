@@ -34,7 +34,6 @@ let currentSeason = 1;
 let qualiGapMode = "leader";
 let qualiTimeMode = "lap"; // "lap" | "sectors"
 
-<<<<<<< HEAD
 // Normalizes team names so variants like "Aston Martin 26" or
 // "aston martin" are treated as the same team ("Aston Martin").
 function canonicalTeam(t) {
@@ -100,18 +99,6 @@ function teamFromTelemetry(upperName) {
     _telemetryTeamCacheSize = sessions.length;
   }
   return _telemetryTeamCache[upperName] || "";
-=======
-// Team lookup that tolerates casing differences between the
-// telemetry driver names (UPPERCASE) and manually saved keys.
-function teamForDriver(teams, name) {
-  if (!teams || !name) return "";
-  if (teams[name]) return teams[name];
-  const key = String(name).trim().toUpperCase();
-  for (const k of Object.keys(teams)) {
-    if (String(k).trim().toUpperCase() === key) return teams[k];
-  }
-  return "";
->>>>>>> 704086099d59c12b9439e515a24d0d3eb896bba4
 }
 
 // Sector times of a driver's best lap (from the packet session history).
@@ -1903,23 +1890,28 @@ function renderSavedSessions(sessions) {
     const isActive =
       currentData && group.sessions.some((s) => s.id === currentData.id);
 
+    const trackLabel = (group.track_name || "Unknown")
+      .replace(/[_-]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .replace(/\b\w/g, (c) => c.toUpperCase());
+
     const card = document.createElement("div");
     card.className = `session-row ${isActive ? "active" : ""}`;
     card.innerHTML = `
-      <button class="delete-btn" title="Delete weekend">🗑️</button>
-      <button class="expand-btn" title="Show individual sessions">▾</button>
-      <div class="sr-left">
-        <div class="sr-track">
-          <span class="flag-icon">${flag}</span>
-          <span class="sr-track-name">${group.track_name || "Unknown"}</span>
-        </div>
+      <div class="sr-head">
+        <span class="flag-icon">${flag}</span>
+        <span class="sr-track-name">${trackLabel}</span>
+        <span class="sr-cat ${group.bucket === "Sprint" ? "is-sprint" : ""}">${group.bucket.toUpperCase()}</span>
       </div>
-      <div class="sr-right">
-        <span class="sr-cat">🏁 ${group.bucket.toUpperCase()}</span>
+      <div class="sr-meta">
+        <span class="sr-count">${group.sessions.length} SESSION${group.sessions.length === 1 ? "" : "S"}</span>
         <span class="sr-chips">${chips}</span>
         <span class="sr-weather">${weatherIcon}</span>
-        ${badgeHtml}
       </div>
+      ${badgeHtml ? `<div class="sr-tags">${badgeHtml}</div>` : ""}
+      <button class="delete-btn" title="Delete weekend">🗑️</button>
+      <button class="expand-btn" title="Show individual sessions">▾</button>
     `;
 
     card.querySelector(".delete-btn").onclick = async (e) => {
@@ -2482,7 +2474,6 @@ function renderQualiResults() {
       timeStringToSeconds(res.best_lap || res.q1 || res.q2 || res.q3 || ""),
     );
 
-<<<<<<< HEAD
     // Sector value in seconds ("28.412" or "1:02.118" both supported)
     const secSeconds = (v) => {
       if (v == null || v === "") return null;
@@ -2498,15 +2489,6 @@ function renderQualiResults() {
       return vals.length ? Math.min(...vals) : null;
     });
     const hasSectors = secBest.some((v) => v != null);
-=======
-    // Best (purple) sector times across the segment
-    const secBest = ["s1", "s2", "s3"].map((k) => {
-      const vals = sortedResults
-        .map((r) => parseFloat(r[k]))
-        .filter((v) => Number.isFinite(v) && v > 0);
-      return vals.length ? Math.min(...vals) : null;
-    });
->>>>>>> 704086099d59c12b9439e515a24d0d3eb896bba4
 
 
     sortedResults.forEach((res, idx) => {
@@ -3699,9 +3681,7 @@ function createChart(
             : {}),
         },
     grid: {
-      color: isMobile
-        ? "rgba(255, 255, 255, 0.12)"
-        : "rgba(255, 255, 255, 0.18)",
+      color: "rgba(255, 255, 255, 0.065)",
       ...(yAxisOverride.grid && typeof yAxisOverride.grid === "object"
         ? yAxisOverride.grid
         : {}),
@@ -4362,6 +4342,14 @@ function getTeamsForSeason(season) {
   }
 }
 
+function sessionFingerprint(s) {
+  const sig = (s.results || [])
+    .map((r) => `${(r.name || "").toUpperCase()}:${r.position}`)
+    .sort()
+    .join("|");
+  return `${s.season}|${(s.track || "").toLowerCase()}|${(s.category || "").toLowerCase()}|${sig}`;
+}
+
 function computeSeasonStandings(season) {
   const drivers = {};
   const sessions = allSessions
@@ -4371,6 +4359,17 @@ function computeSeasonStandings(season) {
         ((s.category || "").toLowerCase() === "race" ||
           (s.category || "").toLowerCase() === "sprint"),
     );
+  // Drop exact duplicate sessions (same event re-uploaded with identical results)
+  const seenSessions = new Set();
+  const uniqueSessions = sessions.filter((s) => {
+    if (!s.results || s.results.length === 0) return true;
+    const fp = sessionFingerprint(s);
+    if (seenSessions.has(fp)) return false;
+    seenSessions.add(fp);
+    return true;
+  });
+  sessions.length = 0;
+  sessions.push(...uniqueSessions);
   sessions.forEach((session) => {
     const seen = new Set();
     const rsClass = session.race_story?.classification || [];
@@ -4397,10 +4396,10 @@ function computeSeasonStandings(season) {
         if (cat === "race" && (dnfNames.has(name) || !pos || pos <= 0)) {
           drivers[name].dnfs += 1;
         }
-      }
-      if (cat === "race") {
-        if (pos === 1) drivers[name].wins += 1;
-        if (pos >= 1 && pos <= 3) drivers[name].podiums += 1;
+        if (cat === "race") {
+          if (pos === 1) drivers[name].wins += 1;
+          if (pos >= 1 && pos <= 3) drivers[name].podiums += 1;
+        }
       }
     });
     // Fallback: include drivers from race_story classification not already
@@ -5661,6 +5660,26 @@ function strategyTrackKey(name) {
   return STRAT_SLUG_ALIASES[base] || base;
 }
 const STRAT_SHORT = { Soft: "S", Medium: "M", Hard: "H", Intermediate: "I", Wet: "W" };
+let sharedStrategyMigration = null;
+
+async function migrateOwnedStrategiesToShared(db) {
+  if (sharedStrategyMigration) return sharedStrategyMigration;
+  sharedStrategyMigration = (async () => {
+    const { data } = await db.auth.getUser();
+    const uid = data?.user?.id;
+    if (!uid) return;
+    const { error } = await db
+      .from("tyre_strategies")
+      .update({ career_slot: null })
+      .eq("user_id", uid)
+      .not("career_slot", "is", null);
+    if (error) throw error;
+  })().catch((error) => {
+    sharedStrategyMigration = null;
+    throw error;
+  });
+  return sharedStrategyMigration;
+}
 
 function currentStintsAsStrategy() {
   return (currentData?.stints || []).map((s) => ({
@@ -5673,6 +5692,11 @@ function currentStintsAsStrategy() {
 async function loadTrackStrategies() {
   const db = getSupabaseClient({ silent: true });
   if (!db || !currentData) return [];
+  try {
+    await migrateOwnedStrategiesToShared(db);
+  } catch (error) {
+    console.warn("Could not share older tyre strategies", error?.message || error);
+  }
   const { data, error } = await db
     .from("tyre_strategies")
     .select("*")

@@ -9,10 +9,10 @@
 
   // ---------- Global defaults ----------
   const css = getComputedStyle(document.documentElement);
-  const text = "#e8e8ee";
-  const textDim = "#9a9aa6";
-  const grid = "rgba(255,255,255,0.06)";
-  const gridStrong = "rgba(255,255,255,0.12)";
+  const text = "#e7e7ec";
+  const textDim = "#858794";
+  const grid = "rgba(255,255,255,0.065)";
+  const gridStrong = "rgba(255,255,255,0.16)";
 
   Chart.defaults.font.family =
     '"Titillium Web", "Segoe UI", system-ui, sans-serif';
@@ -21,12 +21,16 @@
   Chart.defaults.color = text;
   Chart.defaults.borderColor = grid;
   Chart.defaults.scale.grid.color = grid;
-  Chart.defaults.scale.grid.borderColor = gridStrong;
+  Chart.defaults.scale.grid.lineWidth = 1;
+  Chart.defaults.scale.grid.tickLength = 5;
+  Chart.defaults.scale.border.color = gridStrong;
+  Chart.defaults.scale.border.width = 1;
   Chart.defaults.scale.ticks.color = textDim;
-  Chart.defaults.scale.ticks.font = { family: '"JetBrains Mono", monospace', size: 11 };
+  Chart.defaults.scale.ticks.padding = 8;
+  Chart.defaults.scale.ticks.font = { family: '"JetBrains Mono", monospace', size: 10 };
 
   // Animation: snappier
-  Chart.defaults.animation.duration = 550;
+  Chart.defaults.animation.duration = 420;
   Chart.defaults.animation.easing = "easeOutQuart";
 
   // Legend
@@ -41,11 +45,11 @@
     weight: "600",
   };
 
-  // Tooltip — dark glass card with F1-red accent
+  // Tooltip — restrained telemetry panel
   Object.assign(Chart.defaults.plugins.tooltip, {
     enabled: true,
     backgroundColor: "rgba(12, 12, 18, 0.96)",
-    borderColor: "rgba(225, 6, 0, 0.55)",
+    borderColor: "rgba(255,255,255,0.16)",
     borderWidth: 1,
     titleColor: "#fff",
     titleFont: { family: '"Titillium Web", sans-serif', size: 12, weight: "700" },
@@ -54,7 +58,7 @@
     bodyFont: { family: '"JetBrains Mono", monospace', size: 11 },
     bodySpacing: 4,
     padding: 12,
-    cornerRadius: 8,
+    cornerRadius: 4,
     boxPadding: 6,
     usePointStyle: true,
     caretSize: 6,
@@ -119,8 +123,8 @@
         ds.pointHoverBackgroundColor = remap(ds.pointHoverBackgroundColor);
 
         if (type === "line" || ds.type === "line") {
-          if (ds.tension == null) ds.tension = 0.32;
-          if (ds.borderWidth == null) ds.borderWidth = 2.4;
+          if (ds.tension == null) ds.tension = 0.18;
+          if (ds.borderWidth == null) ds.borderWidth = 1.8;
           if (ds.pointRadius == null) ds.pointRadius = 0;
           if (ds.pointHoverRadius == null) ds.pointHoverRadius = 5;
           if (ds.pointHoverBorderWidth == null) ds.pointHoverBorderWidth = 2;
@@ -128,7 +132,7 @@
             ds.pointHoverBackgroundColor = "#fff";
           if (ds.pointHoverBorderColor == null)
             ds.pointHoverBorderColor = ds.borderColor;
-          if (ds.fill === undefined) ds.fill = true;
+          ds.fill = false;
           if (ds.spanGaps === undefined) ds.spanGaps = true;
         }
         if (type === "bar" || ds.type === "bar") {
@@ -139,45 +143,6 @@
         }
       });
 
-      // Convert solid fills under line charts to soft gradients
-      if (type === "line") {
-        const ctx = chart.ctx;
-        const area = () => chart.chartArea;
-        chart.data.datasets.forEach((ds) => {
-          if (!ds.fill) return;
-          const base = ds.borderColor;
-          if (typeof base !== "string") return;
-          // Defer until after layout, using a callable backgroundColor
-          ds.backgroundColor = (ctxArg) => {
-            const ch = ctxArg.chart;
-            const ca = ch.chartArea;
-            if (!ca) return "rgba(0,0,0,0)";
-            const g = ch.ctx.createLinearGradient(0, ca.top, 0, ca.bottom);
-            // borderColor is hex or rgb(a); build translucent stops
-            g.addColorStop(0, withAlpha(base, 0.28));
-            g.addColorStop(1, withAlpha(base, 0));
-            return g;
-          };
-        });
-      }
     },
   });
-
-  function withAlpha(color, a) {
-    if (!color) return `rgba(255,255,255,${a})`;
-    if (color.startsWith("#")) {
-      const h = color.slice(1);
-      const full = h.length === 3 ? h.split("").map((x) => x + x).join("") : h;
-      const r = parseInt(full.slice(0, 2), 16);
-      const g = parseInt(full.slice(2, 4), 16);
-      const b = parseInt(full.slice(4, 6), 16);
-      return `rgba(${r},${g},${b},${a})`;
-    }
-    const m = color.match(/rgba?\(([^)]+)\)/);
-    if (m) {
-      const parts = m[1].split(",").map((s) => s.trim());
-      return `rgba(${parts[0]},${parts[1]},${parts[2]},${a})`;
-    }
-    return color;
-  }
 })();

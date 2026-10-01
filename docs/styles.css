@@ -454,29 +454,25 @@ body.light-theme::before { display: none; }
 /* ---------- Charts ---------- */
 .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-bottom: 36px; }
 .chart-container {
-  background: var(--bg-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 22px;
+  background: #111114;
+  border: 1px solid rgba(255,255,255,0.045);
+  border-radius: 4px;
+  padding: 16px 18px 12px;
   position: relative;
   height: 440px;
-  box-shadow: var(--shadow-md);
+  box-shadow: none;
   transition: border-color 0.2s, box-shadow 0.2s;
 }
-.chart-container:hover { border-color: var(--border-strong); }
+.chart-container:hover { border-color: rgba(255,255,255,0.10); }
 .chart-container.full-width { grid-column: 1 / -1; height: 560px; }
 .chart-title {
   font-weight: 700; font-size: 0.95em;
-  text-transform: uppercase; letter-spacing: 0.14em;
+  text-transform: none; letter-spacing: 0;
   color: var(--text);
   margin-bottom: 14px;
   display: flex; align-items: center; gap: 10px;
 }
-.chart-title::before {
-  content: ""; width: 8px; height: 8px; border-radius: 50%;
-  background: var(--f1-red);
-  box-shadow: 0 0 10px var(--f1-red);
-}
+.chart-title::before { display: none; }
 
 /* ---------- Tables ---------- */
 table {
@@ -682,28 +678,31 @@ button:hover, .download-btn:hover {
   background: radial-gradient(400px circle at 0% 0%, rgba(225,6,0,0.08), transparent 40%);
 }
 
-/* Quali grid */
-.quali-segments-grid { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+/* Quali grid: stack Q1/Q2/Q3 vertically so the full lap time and gap fit */
+.quali-segments-grid { display: flex; flex-direction: column; gap: 22px; }
+.quali-segments-grid .table-container { width: 100%; max-width: 100%; }
 /* Qualifying table: fixed column widths so the Gap column always fits,
    in both Best Lap and S1/S2/S3 modes, on any screen width. */
 .quali-table { width: 100%; table-layout: fixed; min-width: 0 !important; font-size: 0.9em; }
 .quali-table th, .quali-table td { overflow: hidden; text-overflow: ellipsis; padding: 8px 6px !important; letter-spacing: 0.05em; }
-.quali-table .col-pos { width: 30px; text-align: center; }
-.quali-table .col-time { width: 84px; white-space: nowrap; }
-.quali-table .col-gap { width: 78px; white-space: nowrap; }
-.quali-table.is-sectors .col-sec { width: 56px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.quali-table.is-sectors .col-gap { width: 62px; }
+.quali-table .col-pos { width: 34px; text-align: center; }
+.quali-table .col-drv { width: auto; }
+.quali-table .col-time { width: 110px; white-space: nowrap; }
+.quali-table .col-gap { width: 90px; white-space: nowrap; }
+.quali-table.is-sectors .col-sec { width: 80px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.quali-table.is-sectors .col-gap { width: 80px; }
 .quali-table td.sector-best { color: #b14aed; font-weight: 700; }
 .quali-toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
 @media (max-width: 640px) {
-  .quali-table { font-size: 0.8em; }
-  .quali-table th, .quali-table td { padding: 7px 4px !important; }
-  .quali-table .col-pos { width: 26px; }
-  .quali-table .col-time { width: 74px; }
-  .quali-table .col-gap { width: 66px; }
-  .quali-table.is-sectors .col-sec { width: 48px; }
-  .quali-table.is-sectors .col-gap { width: 56px; }
+  .quali-table { font-size: 0.82em; }
+  .quali-table th, .quali-table td { padding: 7px 5px !important; }
+  .quali-table .col-pos { width: 30px; }
+  .quali-table .col-time { width: 92px; }
+  .quali-table .col-gap { width: 76px; }
+  .quali-table.is-sectors .col-sec { width: 64px; }
+  .quali-table.is-sectors .col-gap { width: 66px; }
 }
+
 
 
 /* Practice fuel calc */

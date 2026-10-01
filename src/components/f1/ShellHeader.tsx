@@ -12,7 +12,7 @@ export function titleCase(name: string) {
 
 export function ShellHeader({ crumbs }: { crumbs: { label: string; to?: any; params?: any; search?: any }[] }) {
   return (
-    <header className="sticky top-0 z-40 border-b border-white/10 bg-[#0a0a0f]/95 backdrop-blur">
+    <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur">
       <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5 sm:px-4 sm:py-3">
         <Link to="/careers" className="flex shrink-0 items-center gap-2 text-base font-black tracking-tight text-white hover:text-red-400 sm:text-lg">
           <span>🏎️</span>
@@ -95,7 +95,7 @@ function UserMenu() {
 
 export function ShellPage({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-screen bg-[#0a0a0f] text-white">
+    <div className="min-h-screen bg-background text-foreground">
       <div className="mx-auto max-w-[1400px] px-3 py-4 sm:px-4 sm:py-6">{children}</div>
     </div>
   );
