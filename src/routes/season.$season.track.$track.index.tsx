@@ -11,6 +11,7 @@ import {
   titleCaseTrack,
   badgesFor,
   racePosition,
+  clearSessionsCache,
   type Session,
 } from "@/lib/f1-shell";
 import { supabase } from "@/lib/supabase";
@@ -574,6 +575,16 @@ function TrackPage() {
             )}
           </div>
         </section>
+
+        <UploadedSessions
+          sessions={sessions.filter(
+            (s) => Number(s.season) === seasonN && trackSlug(s.track_name) === trackSlug(track),
+          )}
+          onDeleted={(id) => {
+            setSessions((prev) => prev.filter((s) => s.id !== id));
+            clearSessionsCache();
+          }}
+        />
 
         <div className="mb-3 flex items-center justify-between">
           <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-white/70">
