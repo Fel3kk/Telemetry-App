@@ -1360,7 +1360,36 @@ function processTelemetryData(data) {
           );
         }
 
-        per_lap_info.forEach((lap) => {
+        // per-lap-info can skip laps (e.g. the lap a red flag is shown), which
+        // shifted every following row in race story / practice tables. Build a
+        // gap-free list covering every timed lap, carrying the previous lap's
+        // car state into any missing lap.
+        const perLapByNum = new Map();
+        per_lap_info.forEach((l) => {
+          const n = Number(l["lap-number"]);
+          if (Number.isFinite(n)) perLapByNum.set(n, l);
+        });
+        const maxPerLap = perLapByNum.size ? Math.max(...perLapByNum.keys()) : 0;
+        const totalLapsSeen = Math.max(maxPerLap, lap_times_list.filter((t) => Number(t?.["lap-time-in-ms"]) > 0).length);
+        const filledPerLap = [];
+        let prevLapInfo = perLapByNum.get(0) || null;
+        for (let n = 1; n <= totalLapsSeen; n++) {
+          let l = perLapByNum.get(n);
+          if (!l) {
+            l = { ...(prevLapInfo || {}), "lap-number": n };
+            const st = player_stints_data.find((s) => n >= Number(s["start-lap"]) && n <= Number(s["end-lap"]));
+            if (st && l["car-status-data"]) {
+              l["car-status-data"] = {
+                ...l["car-status-data"],
+                "visual-tyre-compound": st["tyre-set-data"]?.["visual-tyre-compound"] || l["car-status-data"]["visual-tyre-compound"],
+              };
+            }
+          }
+          filledPerLap.push(l);
+          prevLapInfo = l;
+        }
+
+        filledPerLap.forEach((lap) => {
           const lap_num = lap["lap-number"];
           if (lap_num === 0 || lap_num === undefined || lap_num === null) {
             return;
@@ -1464,6 +1493,24 @@ function processTelemetryData(data) {
             },
           });
         });
+
+        // Red flags are often not reported per lap. When the session had one,
+        // flag the abnormally slow non-pit laps so they are excluded from pace.
+        const redFlags = Number(data?.["session-info"]?.["num-red-flag-periods"] || 0);
+        if (redFlags > 0) {
+          const ms = (t) => {
+            const m = String(t || "").match(/^(?:(\d+):)?(\d+(?:\.\d+)?)$/);
+            return m ? (Number(m[1] || 0) * 60 + Number(m[2])) * 1000 : 0;
+          };
+          const times = summary.lap_history.map((l) => ms(l.lap_time)).filter((v) => v > 0).sort((a, b) => a - b);
+          const median = times[Math.floor(times.length / 2)] || 0;
+          if (median > 0) {
+            summary.lap_history.forEach((l) => {
+              if (ms(l.lap_time) > median * 1.8 && l.sc_status === 0) l.sc_status = 3;
+            });
+          }
+        }
+
 
         summary.race_story = buildRaceStory(
           data,
