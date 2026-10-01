@@ -724,3 +724,76 @@ function NavLink({
     </Link>
   );
 }
+
+function sessionLabel(s: Session) {
+  const st = String(s.session_type || "").trim();
+  return st && st.toLowerCase() !== String(s.category || "").toLowerCase()
+    ? `${s.category} · ${st}`
+    : s.category;
+}
+
+function UploadedSessions({
+  sessions,
+  onDeleted,
+}: {
+  sessions: Session[];
+  onDeleted: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  if (!sessions.length) return null;
+  const sorted = [...sessions].sort(
+    (a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime(),
+  );
+
+  async function remove(s: Session) {
+    if (!confirm(`Delete only "${sessionLabel(s)}" from this weekend? This cannot be undone.`)) return;
+    setBusy(s.id);
+    setError(null);
+    const { error } = await supabase.from("telemetry_sessions").delete().eq("id", s.id);
+    setBusy(null);
+    if (error) setError(error.message);
+    else onDeleted(s.id);
+  }
+
+  return (
+    <section className="mb-8 rounded-lg border border-white/10 bg-white/[0.02]">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between px-4 py-3 text-left"
+      >
+        <span className="flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-white/70">
+          <span className="h-3.5 w-[3px] rounded-full bg-red-500" />
+          Uploaded sessions ({sessions.length})
+        </span>
+        <span className="text-xs text-white/50">{open ? "Hide" : "Manage"}</span>
+      </button>
+      {open && (
+        <ul className="divide-y divide-white/5 border-t border-white/10">
+          {sorted.map((s) => (
+            <li key={s.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5">
+              <div className="min-w-0">
+                <div className="truncate text-sm font-semibold">{sessionLabel(s)}</div>
+                <div className="text-[11px] text-white/45">
+                  {s.created_at ? new Date(s.created_at).toLocaleString() : ""}
+                  {s.finishing_position ? ` · P${s.finishing_position}` : ""}
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={busy === s.id}
+                onClick={() => remove(s)}
+                className="rounded-md border border-red-500/40 px-3 py-1 text-xs font-semibold text-red-400 hover:bg-red-500/10 disabled:opacity-50"
+              >
+                {busy === s.id ? "Deleting…" : "Delete"}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {error && <p className="px-4 pb-3 text-xs text-red-400">{error}</p>}
+    </section>
+  );
+}
