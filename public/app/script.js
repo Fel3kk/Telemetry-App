@@ -5390,19 +5390,26 @@ function renderRaceStory() {
       <span class="rs-pill ${gained > 0 ? "rs-pos" : gained < 0 ? "rs-neg" : ""}">
         ${gained > 0 ? "▲ +" + gained : gained < 0 ? "▼ " + gained : "—"} positions
       </span>
-      <span class="rs-pill">Overtakes made ${rs.overtakes_made.length}</span>
-      <span class="rs-pill">Lost ${rs.overtakes_suffered.length}</span>
-      ${badges.grandSlam ? `<span class="rs-pill rs-grand-slam">👑 GRAND SLAM</span>` : ""}
+      <span class="rs-pill">Overtakes made ${(rs.overtakes_made || []).length}</span>
+      <span class="rs-pill">Lost ${(rs.overtakes_suffered || []).length}</span>
+      ${badges && badges.grandSlam ? `<span class="rs-pill rs-grand-slam">👑 GRAND SLAM</span>` : ""}
     `;
   }
 
-  renderPositionChart(rs);
-  renderOvertakesChart(rs);
-  renderStintStrip();
-  renderDamageSection();
-  renderTopSpeedList(rs);
-  renderFinalClassification(rs);
-  renderCompareTab();
+  // Render each panel independently so one bad panel (e.g. red-flag gaps
+  // in lap data) can't blank the whole Race Story.
+  rs.overtakes_made = rs.overtakes_made || [];
+  rs.overtakes_suffered = rs.overtakes_suffered || [];
+  const safe = (name, fn) => {
+    try { fn(); } catch (err) { console.error(`[race-story] ${name} failed`, err); }
+  };
+  safe("position", () => renderPositionChart(rs));
+  safe("overtakes", () => renderOvertakesChart(rs));
+  safe("stints", () => renderStintStrip());
+  safe("damage", () => renderDamageSection());
+  safe("topspeed", () => renderTopSpeedList(rs));
+  safe("classification", () => renderFinalClassification(rs));
+  safe("compare", () => renderCompareTab());
 }
 
 
