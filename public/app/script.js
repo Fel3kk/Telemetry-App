@@ -2091,15 +2091,27 @@ function parseTimestamp(timestampStr) {
 function renderContent() {
   if (!currentData) return;
 
-  renderSessionInfo();
-  renderCharts();
-  renderStints();
-  renderTable();
-  renderQualiResults();
-  renderStartingGrid();
-  renderPracticeSection();
-  renderRaceStory();
-  renderCompareTab();
+  // Each step is isolated and its progress recorded, so one failing (or
+  // freezing) panel can't take the others down and we can see where it stopped.
+  const onlyRaceStory = typeof EMBED_VIEW !== "undefined" && (EMBED_VIEW === "race-story" || EMBED_VIEW === "compare");
+  const steps = onlyRaceStory
+    ? [["raceStory", renderRaceStory]]
+    : [
+        ["sessionInfo", renderSessionInfo],
+        ["charts", renderCharts],
+        ["stints", renderStints],
+        ["table", renderTable],
+        ["quali", renderQualiResults],
+        ["grid", renderStartingGrid],
+        ["practice", renderPracticeSection],
+        ["raceStory", renderRaceStory],
+        ["compare", renderCompareTab],
+      ];
+  for (const [name, fn] of steps) {
+    try { localStorage.setItem("f1.lastRenderStep", `${name}@${Date.now()}`); } catch {}
+    try { fn(); } catch (err) { console.error(`[render] ${name} failed`, err); }
+  }
+  try { localStorage.setItem("f1.lastRenderStep", `done@${Date.now()}`); } catch {}
   document.getElementById("content").style.display = "block";
 
 }
