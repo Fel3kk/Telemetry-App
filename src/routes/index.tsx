@@ -270,76 +270,73 @@ function TrackCard({ season, track, category, sessions }: { season: number; trac
       to="/season/$season/track/$track"
       params={{ season: String(season), track: trackSlug(track) }}
       search={{ cat: category }}
-      className="group relative flex flex-col overflow-hidden rounded-xl border border-white/10 bg-[#111114] shadow-[0_8px_24px_-12px_rgba(0,0,0,0.8)] transition duration-200 hover:-translate-y-1 hover:border-red-500/50 hover:shadow-[0_12px_32px_-12px_rgba(239,68,68,0.35)]"
+      className="group relative isolate flex min-h-[220px] flex-col justify-end overflow-hidden rounded-xl border border-white/10 bg-[#0c0c10] shadow-[0_8px_24px_-12px_rgba(0,0,0,0.8)] transition duration-300 hover:-translate-y-1 hover:border-red-500/50 hover:shadow-[0_14px_36px_-12px_rgba(239,68,68,0.4)] sm:min-h-[260px]"
     >
-      <span className="absolute inset-y-0 left-0 z-10 w-[3px] bg-red-500 opacity-0 transition group-hover:opacity-100" />
-      <div className="relative hidden aspect-[16/9] bg-[radial-gradient(ellipse_at_center,#1a1a20_0%,#0a0a0d_75%)] sm:block">
-        {imgOk ? (
-          <img
-            src={imgSrc}
-            alt={display}
-            loading="lazy"
-            decoding="async"
-            className="h-full w-full object-contain p-4 transition duration-300 group-hover:scale-[1.03]"
-            onError={() => {
-              if (!triedFallback.v) { triedFallback.v = true; setImgSrc(trackMapFallbackUrl(track)); }
-              else setImgOk(false);
-            }}
-          />
-        ) : (
-          <div className="flex h-full items-center justify-center text-5xl opacity-30">{trackFlag(track)}</div>
-        )}
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-[#111114] to-transparent" />
-        <div className="absolute right-2 top-2 flex flex-wrap gap-1">
-          {badgeAgg.gs && <Tag color="#c084fc">GS</Tag>}
-          {badgeAgg.win && <Tag color="#ffd700">W</Tag>}
-          {badgeAgg.fl && <Tag color="#a855f7">FL</Tag>}
-          {!badgeAgg.win && badgeAgg.podium && bestPos && <Tag color="#cd7f32">P{bestPos}</Tag>}
-          {badgeAgg.dnf && <Tag color="#ef4444">DNF</Tag>}
-        </div>
+      {/* Track map as a large, faded background layer */}
+      {imgOk ? (
+        <img
+          src={imgSrc}
+          alt=""
+          aria-hidden
+          loading="lazy"
+          decoding="async"
+          className="pointer-events-none absolute -right-[12%] -top-[8%] -z-10 h-[115%] w-[90%] object-contain opacity-40 saturate-[1.2] transition duration-500 group-hover:-translate-x-2 group-hover:scale-105 group-hover:opacity-70"
+          onError={() => {
+            if (!triedFallback.v) { triedFallback.v = true; setImgSrc(trackMapFallbackUrl(track)); }
+            else setImgOk(false);
+          }}
+        />
+      ) : (
+        <div className="pointer-events-none absolute -right-4 -top-6 -z-10 text-[9rem] leading-none opacity-10">{trackFlag(track)}</div>
+      )}
+      {/* Readability gradients */}
+      <div className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-t from-[#0c0c10] via-[#0c0c10]/75 to-transparent" />
+      <div className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-r from-[#0c0c10]/90 via-transparent to-transparent" />
+      <span className={"absolute inset-y-0 left-0 w-[3px] " + (isSprint ? "bg-amber-400" : isPractice ? "bg-slate-400" : "bg-red-500") + " opacity-60 transition group-hover:opacity-100"} />
+
+      <div className="absolute right-3 top-3 flex flex-wrap justify-end gap-1">
+        {badgeAgg.gs && <Tag color="#c084fc">GS</Tag>}
+        {badgeAgg.win && <Tag color="#ffd700">W</Tag>}
+        {badgeAgg.fl && <Tag color="#a855f7">FL</Tag>}
+        {!badgeAgg.win && badgeAgg.podium && bestPos && <Tag color="#cd7f32">P{bestPos}</Tag>}
+        {badgeAgg.dnf && <Tag color="#ef4444">DNF</Tag>}
       </div>
-      <div className="flex flex-1 flex-col gap-2.5 px-4 pb-4 pt-3">
-        <div className="flex items-center gap-2.5">
-          <span className="text-2xl leading-none">{trackFlag(track)}</span>
-          <span className="truncate text-lg font-black tracking-tight">{display}</span>
+      <div className="absolute left-4 top-3 flex items-center gap-1.5">
+        <span
+          className={
+            "rounded px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.15em] " +
+            (isSprint ? "border border-amber-400/70 bg-black/40 text-amber-300" : isPractice ? "bg-slate-500 text-white" : "bg-red-500 text-white")
+          }
+        >
+          {category}
+        </span>
+        <span className="rounded bg-black/40 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white/60 backdrop-blur-sm">
+          {sessions.length} session{sessions.length === 1 ? "" : "s"}
+        </span>
+      </div>
+
+      <div className="flex flex-col gap-2 px-4 pb-4 pt-16">
+        <div className="flex items-center gap-2">
+          <span className="text-xl leading-none">{trackFlag(track)}</span>
+          <span className="truncate text-2xl font-black uppercase italic tracking-tight drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]">{display}</span>
         </div>
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span
-            className={
-              "rounded px-2 py-0.5 text-[11px] font-black uppercase tracking-wider " +
-              (isSprint
-                ? "border border-amber-400/70 text-amber-300"
-                : isPractice
-                  ? "bg-slate-500 text-white"
-                  : "bg-red-500 text-white")
-            }
-          >
-            {category}
-          </span>
-          <span className="rounded border border-white/15 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-white/60">
-            {sessions.length} session{sessions.length === 1 ? "" : "s"}
-          </span>
-        </div>
-        {fin && (
-          <div className="mt-auto flex items-center justify-between rounded-lg border border-white/5 bg-white/[0.03] px-3 py-2">
+        {fin ? (
+          <div className="flex items-end justify-between">
             <div className="flex items-baseline gap-2 font-mono">
               {start && <span className="text-sm text-white/45">P{start}</span>}
               {start && <span className="text-white/30">→</span>}
-              <span className={"text-xl font-black " + (fin === 1 ? "text-yellow-400" : fin <= 3 ? "text-orange-300" : "text-white")}>
+              <span className={"text-4xl font-black leading-none " + (fin === 1 ? "text-yellow-400" : fin <= 3 ? "text-orange-300" : "text-white")}>
                 P{fin}
               </span>
             </div>
             {gained !== null && gained !== 0 && (
-              <span
-                className={
-                  "rounded px-1.5 py-0.5 font-mono text-xs font-bold " +
-                  (gained > 0 ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400")
-                }
-              >
+              <span className={"rounded px-1.5 py-0.5 font-mono text-xs font-bold " + (gained > 0 ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400")}>
                 {gained > 0 ? `▲ +${gained}` : `▼ ${gained}`}
               </span>
             )}
           </div>
+        ) : (
+          <div className="text-xs font-semibold uppercase tracking-wider text-white/35">No race result yet</div>
         )}
       </div>
     </Link>
