@@ -5416,6 +5416,7 @@ function renderRaceStory() {
   rs.overtakes_made = rs.overtakes_made || [];
   rs.overtakes_suffered = rs.overtakes_suffered || [];
   const safe = (name, fn) => {
+    try { localStorage.setItem("f1.lastRenderStep", `rs-${name}@${Date.now()}`); } catch {}
     try { fn(); } catch (err) { console.error(`[race-story] ${name} failed`, err); }
   };
   safe("position", () => renderPositionChart(rs));
