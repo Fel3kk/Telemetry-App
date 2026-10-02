@@ -2217,6 +2217,9 @@ function renderPracticeTable() {
     const th = document.createElement("th");
     th.className = "text-center select-header";
     th.style.width = "40px";
+    // Header has two rows (grouped Sectors / Tire Wear / ERS); span both so
+    // the second row doesn't shift left by one column.
+    if (table.querySelectorAll("thead tr").length > 1) th.rowSpan = 2;
     th.innerHTML =
       '<input type="checkbox" id="selectAllPracticeLaps" style="cursor:pointer;" title="Select All Laps">';
     thead.prepend(th);
