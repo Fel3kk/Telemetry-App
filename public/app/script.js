@@ -2091,15 +2091,27 @@ function parseTimestamp(timestampStr) {
 function renderContent() {
   if (!currentData) return;
 
-  renderSessionInfo();
-  renderCharts();
-  renderStints();
-  renderTable();
-  renderQualiResults();
-  renderStartingGrid();
-  renderPracticeSection();
-  renderRaceStory();
-  renderCompareTab();
+  // Each step is isolated and its progress recorded, so one failing (or
+  // freezing) panel can't take the others down and we can see where it stopped.
+  const onlyRaceStory = typeof EMBED_VIEW !== "undefined" && (EMBED_VIEW === "race-story" || EMBED_VIEW === "compare");
+  const steps = onlyRaceStory
+    ? [["raceStory", renderRaceStory]]
+    : [
+        ["sessionInfo", renderSessionInfo],
+        ["charts", renderCharts],
+        ["stints", renderStints],
+        ["table", renderTable],
+        ["quali", renderQualiResults],
+        ["grid", renderStartingGrid],
+        ["practice", renderPracticeSection],
+        ["raceStory", renderRaceStory],
+        ["compare", renderCompareTab],
+      ];
+  for (const [name, fn] of steps) {
+    try { localStorage.setItem("f1.lastRenderStep", `${name}@${Date.now()}`); } catch {}
+    try { fn(); } catch (err) { console.error(`[render] ${name} failed`, err); }
+  }
+  try { localStorage.setItem("f1.lastRenderStep", `done@${Date.now()}`); } catch {}
   document.getElementById("content").style.display = "block";
 
 }
@@ -2217,6 +2229,9 @@ function renderPracticeTable() {
     const th = document.createElement("th");
     th.className = "text-center select-header";
     th.style.width = "40px";
+    // Header has two rows (grouped Sectors / Tire Wear / ERS); span both so
+    // the second row doesn't shift left by one column.
+    if (table.querySelectorAll("thead tr").length > 1) th.rowSpan = 2;
     th.innerHTML =
       '<input type="checkbox" id="selectAllPracticeLaps" style="cursor:pointer;" title="Select All Laps">';
     thead.prepend(th);
@@ -5401,6 +5416,7 @@ function renderRaceStory() {
   rs.overtakes_made = rs.overtakes_made || [];
   rs.overtakes_suffered = rs.overtakes_suffered || [];
   const safe = (name, fn) => {
+    try { localStorage.setItem("f1.lastRenderStep", `rs-${name}@${Date.now()}`); } catch {}
     try { fn(); } catch (err) { console.error(`[race-story] ${name} failed`, err); }
   };
   safe("position", () => renderPositionChart(rs));
