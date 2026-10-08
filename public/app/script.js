@@ -533,6 +533,38 @@ document
   .getElementById("fileInput")
   .addEventListener("change", handleFileUpload);
 
+// Drag & drop: route dropped files through the same change handler as the
+// file picker, and stop the browser from navigating away on stray drops.
+(function () {
+  const label = document.querySelector('label[for="fileInput"]');
+  const input = document.getElementById("fileInput");
+  if (!label || !input) return;
+  ["dragenter", "dragover"].forEach((type) =>
+    label.addEventListener(type, (e) => {
+      e.preventDefault();
+      label.classList.add("dragover");
+    })
+  );
+  ["dragleave", "drop"].forEach((type) =>
+    label.addEventListener(type, () => label.classList.remove("dragover"))
+  );
+  label.addEventListener("drop", (e) => {
+    e.preventDefault();
+    const files = e.dataTransfer && e.dataTransfer.files;
+    if (!files || !files.length) return;
+    try {
+      const dt = new DataTransfer();
+      for (const f of files) dt.items.add(f);
+      input.files = dt.files;
+    } catch {
+      return;
+    }
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  window.addEventListener("dragover", (e) => e.preventDefault());
+  window.addEventListener("drop", (e) => e.preventDefault());
+})();
+
 window.addEventListener("DOMContentLoaded", () => {
   // Initialize Theme
   const themeToggle = document.getElementById("themeToggle");
