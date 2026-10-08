@@ -90,21 +90,21 @@ function MainPage() {
     <>
       <ShellHeader crumbs={[{ label: `Season ${season}` }]} />
       <ShellPage>
-        <div className="mb-4 flex flex-col items-center gap-2">
-          <span className="text-xs uppercase tracking-widest text-white/50">Season</span>
-          <div className="flex flex-wrap items-center justify-center gap-2">
+        <div className="mb-4 flex flex-col items-center gap-2.5">
+          <span className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/40">Season</span>
+          <div className="flex flex-wrap items-center justify-center gap-1 rounded-xl border border-white/10 bg-white/[0.03] p-1">
             {SEASONS.map((n) => (
               <button
                 key={n}
                 onClick={() => pick(n)}
                 className={
-                  "rounded-md border px-3 py-1.5 text-sm font-semibold transition " +
+                  "min-w-[42px] rounded-lg px-2.5 py-1.5 text-sm font-bold transition " +
                   (season === n
-                    ? "border-red-500 bg-red-500 text-white"
-                    : "border-white/15 text-white/70 hover:border-white/40")
+                    ? "bg-red-500 text-white shadow-[0_4px_18px_-4px_rgba(239,68,68,0.7)]"
+                    : "text-white/55 hover:bg-white/[0.06] hover:text-white")
                 }
               >
-                S{n}
+                {n}
               </button>
             ))}
           </div>
@@ -115,13 +115,13 @@ function MainPage() {
           <Link
             to="/season/$season/title"
             params={{ season: String(season) }}
-            className="rounded-md border border-white/15 px-3 py-1.5 text-xs font-bold uppercase tracking-widest text-white/70 transition hover:border-red-500/60 hover:text-white"
+            className="rounded-lg border border-white/10 bg-white/[0.04] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.15em] text-white/70 transition hover:-translate-y-0.5 hover:border-red-500/60 hover:bg-red-500/10 hover:text-white"
           >
             🏆 Title Race
           </Link>
           <Link
             to="/records"
-            className="rounded-md border border-white/15 px-3 py-1.5 text-xs font-bold uppercase tracking-widest text-white/70 transition hover:border-purple-400/60 hover:text-white"
+            className="rounded-lg border border-white/10 bg-white/[0.04] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.15em] text-white/70 transition hover:-translate-y-0.5 hover:border-purple-400/60 hover:bg-purple-500/10 hover:text-white"
           >
             ⏱️ Personal Records
           </Link>
@@ -179,18 +179,23 @@ function UploadPanel({ season }: { season: number }) {
   }, []);
 
   return (
-    <div className="mb-6 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2">
-      <div className="mb-1 flex items-center justify-between">
-        <div className="text-[11px] font-bold uppercase tracking-widest text-white/60">Upload sessions</div>
-        <div className="text-[10px] text-white/40">Race · Qualifying · Practice · batch</div>
+    <div className="mb-6 overflow-hidden rounded-xl border border-white/10 bg-white/[0.03] shadow-[0_12px_32px_-18px_rgba(0,0,0,0.9)]">
+      <div className="flex items-center gap-2 border-b border-white/[0.06] bg-white/[0.02] px-3.5 py-2.5">
+        <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-red-500/15 text-xs">📤</span>
+        <span className="min-w-0 truncate text-[11px] font-bold uppercase tracking-[0.18em] text-white/80">Upload sessions</span>
+        <span className="ml-auto hidden shrink-0 text-[10px] uppercase tracking-wider text-white/40 sm:inline">
+          Race · Qualifying · Practice · batch
+        </span>
       </div>
-      <iframe
-        title="Upload sessions"
-        src={src}
-        loading="lazy"
-        className="w-full rounded border-0 bg-transparent transition-[height] duration-200"
-        style={{ height }}
-      />
+      <div className="px-3 py-3">
+        <iframe
+          title="Upload sessions"
+          src={src}
+          loading="lazy"
+          className="w-full rounded-lg border border-dashed border-white/10 bg-transparent transition-[height] duration-200"
+          style={{ height }}
+        />
+      </div>
     </div>
   );
 }

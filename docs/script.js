@@ -533,6 +533,38 @@ document
   .getElementById("fileInput")
   .addEventListener("change", handleFileUpload);
 
+// Drag & drop: route dropped files through the same change handler as the
+// file picker, and stop the browser from navigating away on stray drops.
+(function () {
+  const label = document.querySelector('label[for="fileInput"]');
+  const input = document.getElementById("fileInput");
+  if (!label || !input) return;
+  ["dragenter", "dragover"].forEach((type) =>
+    label.addEventListener(type, (e) => {
+      e.preventDefault();
+      label.classList.add("dragover");
+    })
+  );
+  ["dragleave", "drop"].forEach((type) =>
+    label.addEventListener(type, () => label.classList.remove("dragover"))
+  );
+  label.addEventListener("drop", (e) => {
+    e.preventDefault();
+    const files = e.dataTransfer && e.dataTransfer.files;
+    if (!files || !files.length) return;
+    try {
+      const dt = new DataTransfer();
+      for (const f of files) dt.items.add(f);
+      input.files = dt.files;
+    } catch {
+      return;
+    }
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  window.addEventListener("dragover", (e) => e.preventDefault());
+  window.addEventListener("drop", (e) => e.preventDefault());
+})();
+
 window.addEventListener("DOMContentLoaded", () => {
   // Initialize Theme
   const themeToggle = document.getElementById("themeToggle");
@@ -1360,7 +1392,36 @@ function processTelemetryData(data) {
           );
         }
 
-        per_lap_info.forEach((lap) => {
+        // per-lap-info can skip laps (e.g. the lap a red flag is shown), which
+        // shifted every following row in race story / practice tables. Build a
+        // gap-free list covering every timed lap, carrying the previous lap's
+        // car state into any missing lap.
+        const perLapByNum = new Map();
+        per_lap_info.forEach((l) => {
+          const n = Number(l["lap-number"]);
+          if (Number.isFinite(n)) perLapByNum.set(n, l);
+        });
+        const maxPerLap = perLapByNum.size ? Math.max(...perLapByNum.keys()) : 0;
+        const totalLapsSeen = Math.max(maxPerLap, lap_times_list.filter((t) => Number(t?.["lap-time-in-ms"]) > 0).length);
+        const filledPerLap = [];
+        let prevLapInfo = perLapByNum.get(0) || null;
+        for (let n = 1; n <= totalLapsSeen; n++) {
+          let l = perLapByNum.get(n);
+          if (!l) {
+            l = { ...(prevLapInfo || {}), "lap-number": n };
+            const st = player_stints_data.find((s) => n >= Number(s["start-lap"]) && n <= Number(s["end-lap"]));
+            if (st && l["car-status-data"]) {
+              l["car-status-data"] = {
+                ...l["car-status-data"],
+                "visual-tyre-compound": st["tyre-set-data"]?.["visual-tyre-compound"] || l["car-status-data"]["visual-tyre-compound"],
+              };
+            }
+          }
+          filledPerLap.push(l);
+          prevLapInfo = l;
+        }
+
+        filledPerLap.forEach((lap) => {
           const lap_num = lap["lap-number"];
           if (lap_num === 0 || lap_num === undefined || lap_num === null) {
             return;
@@ -1464,6 +1525,24 @@ function processTelemetryData(data) {
             },
           });
         });
+
+        // Red flags are often not reported per lap. When the session had one,
+        // flag the abnormally slow non-pit laps so they are excluded from pace.
+        const redFlags = Number(data?.["session-info"]?.["num-red-flag-periods"] || 0);
+        if (redFlags > 0) {
+          const ms = (t) => {
+            const m = String(t || "").match(/^(?:(\d+):)?(\d+(?:\.\d+)?)$/);
+            return m ? (Number(m[1] || 0) * 60 + Number(m[2])) * 1000 : 0;
+          };
+          const times = summary.lap_history.map((l) => ms(l.lap_time)).filter((v) => v > 0).sort((a, b) => a - b);
+          const median = times[Math.floor(times.length / 2)] || 0;
+          if (median > 0) {
+            summary.lap_history.forEach((l) => {
+              if (ms(l.lap_time) > median * 1.8 && l.sc_status === 0) l.sc_status = 3;
+            });
+          }
+        }
+
 
         summary.race_story = buildRaceStory(
           data,
@@ -1890,23 +1969,28 @@ function renderSavedSessions(sessions) {
     const isActive =
       currentData && group.sessions.some((s) => s.id === currentData.id);
 
+    const trackLabel = (group.track_name || "Unknown")
+      .replace(/[_-]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .replace(/\b\w/g, (c) => c.toUpperCase());
+
     const card = document.createElement("div");
     card.className = `session-row ${isActive ? "active" : ""}`;
     card.innerHTML = `
-      <button class="delete-btn" title="Delete weekend">🗑️</button>
-      <button class="expand-btn" title="Show individual sessions">▾</button>
-      <div class="sr-left">
-        <div class="sr-track">
-          <span class="flag-icon">${flag}</span>
-          <span class="sr-track-name">${group.track_name || "Unknown"}</span>
-        </div>
+      <div class="sr-head">
+        <span class="flag-icon">${flag}</span>
+        <span class="sr-track-name">${trackLabel}</span>
+        <span class="sr-cat ${group.bucket === "Sprint" ? "is-sprint" : ""}">${group.bucket.toUpperCase()}</span>
       </div>
-      <div class="sr-right">
-        <span class="sr-cat">🏁 ${group.bucket.toUpperCase()}</span>
+      <div class="sr-meta">
+        <span class="sr-count">${group.sessions.length} SESSION${group.sessions.length === 1 ? "" : "S"}</span>
         <span class="sr-chips">${chips}</span>
         <span class="sr-weather">${weatherIcon}</span>
-        ${badgeHtml}
       </div>
+      ${badgeHtml ? `<div class="sr-tags">${badgeHtml}</div>` : ""}
+      <button class="delete-btn" title="Delete weekend">🗑️</button>
+      <button class="expand-btn" title="Show individual sessions">▾</button>
     `;
 
     card.querySelector(".delete-btn").onclick = async (e) => {
@@ -2039,15 +2123,27 @@ function parseTimestamp(timestampStr) {
 function renderContent() {
   if (!currentData) return;
 
-  renderSessionInfo();
-  renderCharts();
-  renderStints();
-  renderTable();
-  renderQualiResults();
-  renderStartingGrid();
-  renderPracticeSection();
-  renderRaceStory();
-  renderCompareTab();
+  // Each step is isolated and its progress recorded, so one failing (or
+  // freezing) panel can't take the others down and we can see where it stopped.
+  const onlyRaceStory = typeof EMBED_VIEW !== "undefined" && (EMBED_VIEW === "race-story" || EMBED_VIEW === "compare");
+  const steps = onlyRaceStory
+    ? [["raceStory", renderRaceStory]]
+    : [
+        ["sessionInfo", renderSessionInfo],
+        ["charts", renderCharts],
+        ["stints", renderStints],
+        ["table", renderTable],
+        ["quali", renderQualiResults],
+        ["grid", renderStartingGrid],
+        ["practice", renderPracticeSection],
+        ["raceStory", renderRaceStory],
+        ["compare", renderCompareTab],
+      ];
+  for (const [name, fn] of steps) {
+    try { localStorage.setItem("f1.lastRenderStep", `${name}@${Date.now()}`); } catch {}
+    try { fn(); } catch (err) { console.error(`[render] ${name} failed`, err); }
+  }
+  try { localStorage.setItem("f1.lastRenderStep", `done@${Date.now()}`); } catch {}
   document.getElementById("content").style.display = "block";
 
 }
@@ -2165,6 +2261,9 @@ function renderPracticeTable() {
     const th = document.createElement("th");
     th.className = "text-center select-header";
     th.style.width = "40px";
+    // Header has two rows (grouped Sectors / Tire Wear / ERS); span both so
+    // the second row doesn't shift left by one column.
+    if (table.querySelectorAll("thead tr").length > 1) th.rowSpan = 2;
     th.innerHTML =
       '<input type="checkbox" id="selectAllPracticeLaps" style="cursor:pointer;" title="Select All Laps">';
     thead.prepend(th);
@@ -5338,19 +5437,27 @@ function renderRaceStory() {
       <span class="rs-pill ${gained > 0 ? "rs-pos" : gained < 0 ? "rs-neg" : ""}">
         ${gained > 0 ? "▲ +" + gained : gained < 0 ? "▼ " + gained : "—"} positions
       </span>
-      <span class="rs-pill">Overtakes made ${rs.overtakes_made.length}</span>
-      <span class="rs-pill">Lost ${rs.overtakes_suffered.length}</span>
-      ${badges.grandSlam ? `<span class="rs-pill rs-grand-slam">👑 GRAND SLAM</span>` : ""}
+      <span class="rs-pill">Overtakes made ${(rs.overtakes_made || []).length}</span>
+      <span class="rs-pill">Lost ${(rs.overtakes_suffered || []).length}</span>
+      ${badges && badges.grandSlam ? `<span class="rs-pill rs-grand-slam">👑 GRAND SLAM</span>` : ""}
     `;
   }
 
-  renderPositionChart(rs);
-  renderOvertakesChart(rs);
-  renderStintStrip();
-  renderDamageSection();
-  renderTopSpeedList(rs);
-  renderFinalClassification(rs);
-  renderCompareTab();
+  // Render each panel independently so one bad panel (e.g. red-flag gaps
+  // in lap data) can't blank the whole Race Story.
+  rs.overtakes_made = rs.overtakes_made || [];
+  rs.overtakes_suffered = rs.overtakes_suffered || [];
+  const safe = (name, fn) => {
+    try { localStorage.setItem("f1.lastRenderStep", `rs-${name}@${Date.now()}`); } catch {}
+    try { fn(); } catch (err) { console.error(`[race-story] ${name} failed`, err); }
+  };
+  safe("position", () => renderPositionChart(rs));
+  safe("overtakes", () => renderOvertakesChart(rs));
+  safe("stints", () => renderStintStrip());
+  safe("damage", () => renderDamageSection());
+  safe("topspeed", () => renderTopSpeedList(rs));
+  safe("classification", () => renderFinalClassification(rs));
+  safe("compare", () => renderCompareTab());
 }
 
 
@@ -5655,6 +5762,26 @@ function strategyTrackKey(name) {
   return STRAT_SLUG_ALIASES[base] || base;
 }
 const STRAT_SHORT = { Soft: "S", Medium: "M", Hard: "H", Intermediate: "I", Wet: "W" };
+let sharedStrategyMigration = null;
+
+async function migrateOwnedStrategiesToShared(db) {
+  if (sharedStrategyMigration) return sharedStrategyMigration;
+  sharedStrategyMigration = (async () => {
+    const { data } = await db.auth.getUser();
+    const uid = data?.user?.id;
+    if (!uid) return;
+    const { error } = await db
+      .from("tyre_strategies")
+      .update({ career_slot: null })
+      .eq("user_id", uid)
+      .not("career_slot", "is", null);
+    if (error) throw error;
+  })().catch((error) => {
+    sharedStrategyMigration = null;
+    throw error;
+  });
+  return sharedStrategyMigration;
+}
 
 function currentStintsAsStrategy() {
   return (currentData?.stints || []).map((s) => ({
@@ -5667,6 +5794,11 @@ function currentStintsAsStrategy() {
 async function loadTrackStrategies() {
   const db = getSupabaseClient({ silent: true });
   if (!db || !currentData) return [];
+  try {
+    await migrateOwnedStrategiesToShared(db);
+  } catch (error) {
+    console.warn("Could not share older tyre strategies", error?.message || error);
+  }
   const { data, error } = await db
     .from("tyre_strategies")
     .select("*")
