@@ -2775,25 +2775,33 @@ body.embed-upload .sidebar-block-body {
   padding: 2px;
 }
 body.embed-upload .file-input-label {
+  flex-direction: column;
   justify-content: center;
+  gap: 6px;
   width: 100%;
-  padding: 10px 16px;
+  padding: 20px 16px;
   background:
-    linear-gradient(135deg, rgba(225,6,0,0.16), rgba(225,6,0,0.04));
-  border: 1px dashed rgba(225,6,0,0.55);
+    linear-gradient(135deg, rgba(225,6,0,0.14), rgba(225,6,0,0.03));
+  border: 1.5px dashed rgba(225,6,0,0.5);
   color: var(--text);
-  border-radius: 12px;
-  letter-spacing: 0.14em;
+  border-radius: 14px;
+  letter-spacing: 0.12em;
   font-size: 0.82em;
   box-shadow: none;
-  transition: border-color .18s ease, background .18s ease, transform .18s ease;
+  transition: border-color .18s ease, background .18s ease, box-shadow .18s ease;
 }
 body.embed-upload .file-input-label:hover {
   border-color: var(--f1-red);
-  background: linear-gradient(135deg, rgba(225,6,0,0.28), rgba(225,6,0,0.08));
+  background: linear-gradient(135deg, rgba(225,6,0,0.26), rgba(225,6,0,0.07));
   transform: none;
-  box-shadow: 0 0 0 3px rgba(225,6,0,0.15);
+  box-shadow: 0 0 0 4px rgba(225,6,0,0.14);
 }
+body.embed-upload .file-input-label.dragover {
+  border-color: var(--f1-red);
+  background: linear-gradient(135deg, rgba(225,6,0,0.3), rgba(225,6,0,0.1));
+  box-shadow: 0 0 0 4px rgba(225,6,0,0.2);
+}
+body.embed-upload .file-input-hint { color: rgba(255,255,255,0.45); }
 body.embed-upload .sidebar-template-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
