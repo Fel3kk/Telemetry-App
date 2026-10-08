@@ -179,24 +179,13 @@ function UploadPanel({ season }: { season: number }) {
   }, []);
 
   return (
-    <div className="mb-6 overflow-hidden rounded-xl border border-white/10 bg-white/[0.03] shadow-[0_12px_32px_-18px_rgba(0,0,0,0.9)]">
-      <div className="flex items-center gap-2 border-b border-white/[0.06] bg-white/[0.02] px-3.5 py-2.5">
-        <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-red-500/15 text-xs">📤</span>
-        <span className="min-w-0 truncate text-[11px] font-bold uppercase tracking-[0.18em] text-white/80">Upload sessions</span>
-        <span className="ml-auto hidden shrink-0 text-[10px] uppercase tracking-wider text-white/40 sm:inline">
-          Race · Qualifying · Practice · batch
-        </span>
-      </div>
-      <div className="px-3 py-3">
-        <iframe
-          title="Upload sessions"
-          src={src}
-          loading="lazy"
-          className="w-full rounded-lg border border-dashed border-white/10 bg-transparent transition-[height] duration-200"
-          style={{ height }}
-        />
-      </div>
-    </div>
+    <iframe
+      title="Upload sessions"
+      src={src}
+      loading="lazy"
+      className="mb-6 block w-full border-0 bg-transparent transition-[height] duration-200"
+      style={{ height }}
+    />
   );
 }
 
