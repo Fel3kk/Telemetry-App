@@ -185,8 +185,7 @@ function UploadPanel({ season }: { season: number }) {
     <iframe
       title="Upload sessions"
       src={src}
-      loading="lazy"
-      className="mb-6 block w-full border-0 bg-transparent transition-[height] duration-200"
+      className="block w-full border-0 bg-transparent"
       style={{ height }}
     />
   );
