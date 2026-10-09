@@ -90,44 +90,47 @@ function MainPage() {
     <>
       <ShellHeader crumbs={[{ label: `Season ${season}` }]} />
       <ShellPage>
-        <div className="mb-4 flex flex-col items-center gap-2.5">
-          <span className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/40">Season</span>
-          <div className="flex flex-wrap items-center justify-center gap-1 rounded-xl border border-white/10 bg-white/[0.03] p-1">
-            {SEASONS.map((n) => (
-              <button
-                key={n}
-                onClick={() => pick(n)}
-                className={
-                  "min-w-[42px] rounded-lg px-2.5 py-1.5 text-sm font-bold transition " +
-                  (season === n
-                    ? "bg-red-500 text-white shadow-[0_4px_18px_-4px_rgba(239,68,68,0.7)]"
-                    : "text-white/55 hover:bg-white/[0.06] hover:text-white")
-                }
+        <section className="mb-5 rounded-2xl border border-border bg-card/60 p-3 sm:p-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
+              <span className="text-[10px] font-bold uppercase tracking-[0.22em] text-muted-foreground">Season</span>
+              <div className="flex flex-wrap items-center gap-1 rounded-xl border border-border bg-background/60 p-1">
+                {SEASONS.map((n) => (
+                  <button
+                    key={n}
+                    onClick={() => pick(n)}
+                    className={
+                      "min-w-[38px] rounded-lg px-2 py-1.5 text-sm font-bold transition " +
+                      (season === n
+                        ? "bg-primary text-primary-foreground shadow-[0_4px_18px_-4px_var(--primary)]"
+                        : "text-muted-foreground hover:bg-accent hover:text-foreground")
+                    }
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2 sm:flex">
+              <Link
+                to="/season/$season/title"
+                params={{ season: String(season) }}
+                className="rounded-lg border border-border bg-background/60 px-4 py-2 text-center text-[11px] font-bold uppercase tracking-[0.15em] text-foreground/80 transition hover:border-primary/60 hover:bg-primary/10 hover:text-foreground"
               >
-                {n}
-              </button>
-            ))}
+                🏆 Title Race
+              </Link>
+              <Link
+                to="/records"
+                className="rounded-lg border border-border bg-background/60 px-4 py-2 text-center text-[11px] font-bold uppercase tracking-[0.15em] text-foreground/80 transition hover:border-primary/60 hover:bg-primary/10 hover:text-foreground"
+              >
+                ⏱️ Records
+              </Link>
+            </div>
           </div>
-        </div>
-
-
-        <div className="mb-5 flex flex-wrap items-center justify-center gap-2">
-          <Link
-            to="/season/$season/title"
-            params={{ season: String(season) }}
-            className="rounded-lg border border-white/10 bg-white/[0.04] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.15em] text-white/70 transition hover:-translate-y-0.5 hover:border-red-500/60 hover:bg-red-500/10 hover:text-white"
-          >
-            🏆 Title Race
-          </Link>
-          <Link
-            to="/records"
-            className="rounded-lg border border-white/10 bg-white/[0.04] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.15em] text-white/70 transition hover:-translate-y-0.5 hover:border-purple-400/60 hover:bg-purple-500/10 hover:text-white"
-          >
-            ⏱️ Personal Records
-          </Link>
-        </div>
-
-        <UploadPanel season={season} />
+          <div className="mt-3 border-t border-border pt-3">
+            <UploadPanel season={season} />
+          </div>
+        </section>
 
         <StatsBar stats={stats} season={season} />
 
@@ -182,8 +185,7 @@ function UploadPanel({ season }: { season: number }) {
     <iframe
       title="Upload sessions"
       src={src}
-      loading="lazy"
-      className="mb-6 block w-full border-0 bg-transparent transition-[height] duration-200"
+      className="block w-full border-0 bg-transparent"
       style={{ height }}
     />
   );
