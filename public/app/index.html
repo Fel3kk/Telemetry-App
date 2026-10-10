@@ -37,11 +37,17 @@
               <div class="spinner"></div>
               <p>Processing...</p>
             </div>
-            <label for="fileInput" class="file-input-label compact">📁 Choose JSON</label>
+            <label for="fileInput" class="file-input-label compact">
+              <span class="file-input-icon">📁</span>
+              <span class="file-input-text">
+                <span class="file-input-main">Choose telemetry JSON</span>
+                <span class="file-input-hint">or drag &amp; drop files here</span>
+              </span>
+            </label>
             <input type="file" id="fileInput" accept=".json" multiple />
             <div class="sidebar-template-row">
-              <button id="downloadTemplateBtn" class="download-btn small" title="Race Template">📥 Race</button>
-              <button id="downloadQualiTemplateBtn" class="download-btn small" title="Qualifying Template">📥 Quali</button>
+              <button id="downloadTemplateBtn" class="download-btn small" title="Download a race telemetry template to fill in">📥 Race template</button>
+              <button id="downloadQualiTemplateBtn" class="download-btn small" title="Download a qualifying telemetry template to fill in">📥 Quali template</button>
             </div>
           </div>
         </details>
@@ -341,7 +347,7 @@
                     <canvas id="ersChart"></canvas>
                   </div>
                   <div class="chart-container full-width">
-                    <div class="chart-title">Tire Wear (All Wheels)</div>
+                    <div class="chart-title">Tyre Wear by Wheel &amp; Average</div>
                     <canvas id="tireWearChart"></canvas>
                   </div>
                   <div class="chart-container full-width">

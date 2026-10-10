@@ -447,7 +447,7 @@ body.light-theme::before { display: none; }
 }
 
 /* ---------- Charts ---------- */
-.charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-bottom: 36px; }
+.charts-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px; margin-bottom: 36px; }
 .chart-container {
   background: #111114;
   border: 1px solid rgba(255,255,255,0.045);
@@ -457,6 +457,8 @@ body.light-theme::before { display: none; }
   height: 440px;
   box-shadow: none;
   transition: border-color 0.2s, box-shadow 0.2s;
+  width: 100%;
+  min-width: 0;
 }
 .chart-container:hover { border-color: rgba(255,255,255,0.10); }
 .chart-container.full-width { grid-column: 1 / -1; height: 560px; }
@@ -468,6 +470,19 @@ body.light-theme::before { display: none; }
   display: flex; align-items: center; gap: 10px;
 }
 .chart-title::before { display: none; }
+.chart-collapse-toggle {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+}
+.chart-collapse-toggle:focus-visible { outline: 2px solid var(--f1-red); outline-offset: 3px; }
+.chart-collapse-icon { color: var(--secondary-text); transition: transform 0.18s ease; }
+.chart-container.chart-collapsed { height: auto !important; min-height: 0 !important; }
+.chart-container.chart-collapsed canvas { display: none !important; }
 
 /* ---------- Tables ---------- */
 table {
@@ -1545,8 +1560,54 @@ body.light-theme #driver-assignments-container { background: #ffffff; }
 .sidebar-block-body { display: flex; flex-direction: column; gap: 10px; }
 
 .file-input-label.compact {
-  padding: 10px 12px; font-size: 0.8em; text-align: center;
+  flex-direction: column;
+  gap: 6px;
+  padding: 18px 16px;
+  font-size: 0.8em;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1.5px dashed rgba(225, 6, 0, 0.5);
+  color: var(--text);
+  border-radius: 14px;
+  box-shadow: none;
 }
+.file-input-label.compact::after { display: none; }
+.file-input-label.compact:hover {
+  transform: none;
+  border-color: var(--f1-red);
+  background: linear-gradient(135deg, rgba(225, 6, 0, 0.26), rgba(225, 6, 0, 0.07));
+  box-shadow: 0 0 0 4px rgba(225, 6, 0, 0.14);
+}
+.file-input-label .file-input-icon {
+  font-size: 1.5em;
+  line-height: 1;
+  filter: drop-shadow(0 2px 6px rgba(225, 6, 0, 0.35));
+  transition: transform 0.18s ease;
+}
+.file-input-label .file-input-text {
+  display: flex; flex-direction: column; gap: 2px; min-width: 0;
+}
+.file-input-label .file-input-main {
+  font-weight: 800;
+  font-size: 0.95em;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #fff;
+}
+.file-input-label .file-input-hint {
+  font-size: 0.78em;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--text-mute);
+}
+.file-input-label:hover .file-input-icon { transform: translateY(-2px) scale(1.08); }
+.file-input-label.dragover {
+  border-color: var(--f1-red);
+  background: linear-gradient(135deg, rgba(225, 6, 0, 0.3), rgba(225, 6, 0, 0.1));
+  box-shadow: 0 0 0 4px rgba(225, 6, 0, 0.2);
+}
+.file-input-label.dragover .file-input-icon { transform: translateY(-3px) scale(1.15); }
 .sidebar-template-row {
   display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
 }
@@ -2729,25 +2790,33 @@ body.embed-upload .sidebar-block-body {
   padding: 2px;
 }
 body.embed-upload .file-input-label {
+  flex-direction: column;
   justify-content: center;
+  gap: 6px;
   width: 100%;
-  padding: 10px 16px;
+  padding: 20px 16px;
   background:
-    linear-gradient(135deg, rgba(225,6,0,0.16), rgba(225,6,0,0.04));
-  border: 1px dashed rgba(225,6,0,0.55);
+    linear-gradient(135deg, rgba(225,6,0,0.14), rgba(225,6,0,0.03));
+  border: 1.5px dashed rgba(225,6,0,0.5);
   color: var(--text);
-  border-radius: 12px;
-  letter-spacing: 0.14em;
+  border-radius: 14px;
+  letter-spacing: 0.12em;
   font-size: 0.82em;
   box-shadow: none;
-  transition: border-color .18s ease, background .18s ease, transform .18s ease;
+  transition: border-color .18s ease, background .18s ease, box-shadow .18s ease;
 }
 body.embed-upload .file-input-label:hover {
   border-color: var(--f1-red);
-  background: linear-gradient(135deg, rgba(225,6,0,0.28), rgba(225,6,0,0.08));
+  background: linear-gradient(135deg, rgba(225,6,0,0.26), rgba(225,6,0,0.07));
   transform: none;
-  box-shadow: 0 0 0 3px rgba(225,6,0,0.15);
+  box-shadow: 0 0 0 4px rgba(225,6,0,0.14);
 }
+body.embed-upload .file-input-label.dragover {
+  border-color: var(--f1-red);
+  background: linear-gradient(135deg, rgba(225,6,0,0.3), rgba(225,6,0,0.1));
+  box-shadow: 0 0 0 4px rgba(225,6,0,0.2);
+}
+body.embed-upload .file-input-hint { color: rgba(255,255,255,0.45); }
 body.embed-upload .sidebar-template-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -3128,3 +3197,20 @@ body.embed-upload .download-btn.small:hover {
   background: rgba(225, 6, 0, 0.18);
   border-color: rgba(225, 6, 0, 0.5);
 }
+
+/* Upload progress / validation panel */
+.upload-status{display:none;margin:12px 0;padding:12px 14px;border-radius:12px;border:1px solid rgba(255,255,255,.12);background:rgba(20,22,30,.85);font-size:13px;color:#e5e7eb}
+.upload-status .up-head{display:flex;justify-content:space-between;gap:8px;margin-bottom:8px}
+.upload-status .up-bar{height:6px;border-radius:99px;background:rgba(255,255,255,.08);overflow:hidden}
+.upload-status .up-bar>div{height:100%;background:#e10600;transition:width .3s ease}
+.up-phase-done .up-bar>div{background:#22c55e}
+.up-phase-failed .up-bar>div{background:#ef4444}
+.upload-status .up-hint{margin-top:8px;color:#fbbf24}
+.upload-status .up-list{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:6px;max-height:220px;overflow:auto}
+.upload-status .up-row{display:grid;grid-template-columns:18px 1fr;gap:2px 8px;align-items:start}
+.upload-status .up-ico{grid-row:span 2;font-weight:700;text-align:center}
+.upload-status .up-name{font-weight:600;word-break:break-all}
+.upload-status .up-msg{color:#9ca3af;font-size:12px}
+.up-ok .up-ico{color:#22c55e}.up-error .up-ico{color:#ef4444}.up-error .up-msg{color:#fca5a5}.up-working .up-ico{color:#fbbf24}
+.upload-status .up-dismiss{margin-top:10px;padding:8px 14px;min-height:36px;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:transparent;color:inherit;cursor:pointer}
+@media (max-width:480px){.upload-status{font-size:12px;padding:10px}}

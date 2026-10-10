@@ -239,10 +239,7 @@ function TeamH2H({
     (r) => r.raceA || r.raceB || r.qA || r.qB || r.sqA || r.sqB || r.sA || r.sB,
   );
   const aLeads = totals.ptsA >= totals.ptsB;
-  const [collapsed, setCollapsed] = useState(false);
-  useEffect(() => {
-    setCollapsed(loadCollapsed().has(team));
-  }, [team]);
+  const [collapsed, setCollapsed] = useState(() => loadCollapsed().has(team));
   const toggle = () => {
     const set = loadCollapsed();
     if (collapsed) set.delete(team);

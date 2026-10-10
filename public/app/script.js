@@ -533,6 +533,38 @@ document
   .getElementById("fileInput")
   .addEventListener("change", handleFileUpload);
 
+// Drag & drop: route dropped files through the same change handler as the
+// file picker, and stop the browser from navigating away on stray drops.
+(function () {
+  const label = document.querySelector('label[for="fileInput"]');
+  const input = document.getElementById("fileInput");
+  if (!label || !input) return;
+  ["dragenter", "dragover"].forEach((type) =>
+    label.addEventListener(type, (e) => {
+      e.preventDefault();
+      label.classList.add("dragover");
+    })
+  );
+  ["dragleave", "drop"].forEach((type) =>
+    label.addEventListener(type, () => label.classList.remove("dragover"))
+  );
+  label.addEventListener("drop", (e) => {
+    e.preventDefault();
+    const files = e.dataTransfer && e.dataTransfer.files;
+    if (!files || !files.length) return;
+    try {
+      const dt = new DataTransfer();
+      for (const f of files) dt.items.add(f);
+      input.files = dt.files;
+    } catch {
+      return;
+    }
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  window.addEventListener("dragover", (e) => e.preventDefault());
+  window.addEventListener("drop", (e) => e.preventDefault());
+})();
+
 window.addEventListener("DOMContentLoaded", () => {
   // Initialize Theme
   const themeToggle = document.getElementById("themeToggle");
@@ -550,6 +582,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
   renderSeasonSelector();
   initCollapsibleSections();
+  initChartCollapseControls();
   _embedApplyView();
 
   // Load sessions then attempt to auto-load driver teams for the selected season.
@@ -785,36 +818,90 @@ window.addEventListener("resize", () => {
   }, 250);
 });
 
-async function handleFileUpload(e) {
-  const files = e.target.files;
-  if (!files || files.length === 0) return;
+const UPLOAD_MAX_BYTES = 25 * 1024 * 1024;
 
-  showLoading(true);
+function uploadStatusEl() {
+  let el = document.getElementById("uploadStatus");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "uploadStatus";
+    el.setAttribute("role", "status");
+    el.setAttribute("aria-live", "polite");
+    const anchor = document.getElementById("error");
+    if (anchor && anchor.parentNode) anchor.parentNode.insertBefore(el, anchor);
+    else document.body.prepend(el);
+  }
+  return el;
+}
+
+function escUp(v) {
+  return String(v == null ? "" : v).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+}
+
+function renderUploadStatus(state) {
+  const el = uploadStatusEl();
+  if (!state) { el.innerHTML = ""; el.style.display = "none"; return; }
+  el.style.display = "block";
+  const done = state.files.filter((f) => f.status !== "pending" && f.status !== "working").length;
+  const pct = state.files.length ? Math.round((done / state.files.length) * 100) : 0;
+  const icon = { pending: "•", working: "⏳", ok: "✓", warn: "!", error: "✕" };
+  const rows = state.files.map((f) =>
+    `<li class="up-row up-${f.status}"><span class="up-ico">${icon[f.status] || "•"}</span>` +
+    `<span class="up-name">${escUp(f.name)}</span>` +
+    `<span class="up-msg">${escUp(f.msg || "")}</span></li>`).join("");
+  el.className = "upload-status up-phase-" + state.phase;
+  el.innerHTML =
+    `<div class="up-head"><strong>${escUp(state.title)}</strong><span>${pct}%</span></div>` +
+    `<div class="up-bar"><div style="width:${state.phase === "saving" ? 95 : pct}%"></div></div>` +
+    (state.hint ? `<div class="up-hint">${escUp(state.hint)}</div>` : "") +
+    `<ul class="up-list">${rows}</ul>` +
+    (state.phase === "done" || state.phase === "failed"
+      ? `<button type="button" class="up-dismiss">Dismiss</button>` : "");
+  const btn = el.querySelector(".up-dismiss");
+  if (btn) btn.onclick = () => renderUploadStatus(null);
+}
+
+async function handleFileUpload(e) {
+  const files = Array.from(e.target.files || []);
+  if (files.length === 0) return;
+
   hideError();
+  const state = {
+    phase: "reading",
+    title: `Reading ${files.length} file${files.length > 1 ? "s" : ""}…`,
+    hint: "",
+    files: files.map((f) => ({ name: f.name, status: "pending", msg: "Waiting" })),
+  };
+  renderUploadStatus(state);
+  showLoading(true);
 
   const sessionsToPersist = [];
+  const sessionRow = [];
   let lastProcessedSession = null;
 
-  for (const file of files) {
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    const row = state.files[i];
+    row.status = "working";
+    row.msg = "Reading…";
+    renderUploadStatus(state);
+
     const filename = file.name.toLowerCase();
-    let category = "Race";
-    if (filename.includes("shootout") || filename.includes("sprint_shootout")) {
-      category = "Sprint Shootout";
-    } else if (filename.includes("qualifying") || filename.includes("quali")) {
-      category = "Qualifying";
-    } else if (filename.includes("sprint")) {
-      category = "Sprint";
-    } else if (
-      filename.includes("practice") ||
-      filename.includes("practise") ||
-      filename.includes("fp1") ||
-      filename.includes("fp2") ||
-      filename.includes("fp3")
-    ) {
-      category = "Practice";
-    } else if (filename.includes("time trial") || filename.includes("tt")) {
-      category = "Time Trial";
+    if (!/\.(json|txt|jsonl)$/i.test(file.name)) {
+      row.status = "error"; row.msg = "Not a JSON file — export the session as .json from the telemetry app.";
+      continue;
     }
+    if (file.size === 0) { row.status = "error"; row.msg = "File is empty."; continue; }
+    if (file.size > UPLOAD_MAX_BYTES) {
+      row.status = "error"; row.msg = `Too large (${(file.size / 1048576).toFixed(1)} MB, max 25 MB).`; continue;
+    }
+
+    let category = "Race";
+    if (filename.includes("shootout") || filename.includes("sprint_shootout")) category = "Sprint Shootout";
+    else if (filename.includes("qualifying") || filename.includes("quali")) category = "Qualifying";
+    else if (filename.includes("sprint")) category = "Sprint";
+    else if (/practi[cs]e|fp1|fp2|fp3/.test(filename)) category = "Practice";
+    else if (filename.includes("time trial") || filename.includes("tt")) category = "Time Trial";
 
     try {
       const rawText = await file.text();
@@ -822,65 +909,80 @@ async function handleFileUpload(e) {
       try {
         data = JSON.parse(rawText);
       } catch (error) {
-        const lines = rawText.split(/\r?\n/).filter((l) => l.trim().length > 0);
         const parsedLines = [];
-        for (const line of lines) {
-          try {
-            parsedLines.push(JSON.parse(line));
-          } catch (err) {
-            continue;
-          }
+        for (const line of rawText.split(/\r?\n/)) {
+          if (!line.trim()) continue;
+          try { parsedLines.push(JSON.parse(line)); } catch (err) { /* skip */ }
+        }
+        if (!parsedLines.length) {
+          row.status = "error"; row.msg = "Couldn't read JSON — the file may be cut off or corrupted. Re-export it.";
+          continue;
         }
         data = parsedLines;
       }
 
+      row.msg = "Processing telemetry…";
+      renderUploadStatus(state);
       data = sanitizeDeep(data);
       const playerData = processTelemetryData(data);
       if (playerData && playerData.length > 0) {
         const session = playerData[0];
         session.category = category;
         session.season = currentSeason;
-
-        // Fallback: If track is unknown, try to guess from filename
         if (session.track_name === "Unknown" || !session.track_name) {
           const parts = filename.replace(".json", "").split(/[_-]/);
-          const trackGuess = parts.find(
-            (p) =>
-              p !== "race" &&
-              p !== "sprint" &&
-              p !== "quali" &&
-              p !== "qualifying",
-          );
+          const trackGuess = parts.find((p) => !["race", "sprint", "quali", "qualifying"].includes(p));
           if (trackGuess) session.track_name = trackGuess;
         }
-
-        // Persist every session, including Practice, so it shows up under the race weekend card
         sessionsToPersist.push(session);
+        sessionRow.push(row);
         lastProcessedSession = session;
+        row.status = "working";
+        row.msg = `${category} · ${session.track_name || "Unknown track"} — ready to save`;
+      } else {
+        row.status = "error";
+        row.msg = "No player driver found (is-player: true). Make sure this is your own session file.";
       }
     } catch (err) {
       console.error(`Error processing file ${file.name}:`, err);
+      row.status = "error";
+      row.msg = "Couldn't process this file: " + (err && err.message ? err.message : "unknown error");
     }
+    renderUploadStatus(state);
   }
 
-  if (lastProcessedSession) {
-    if (sessionsToPersist.length > 0) {
+  if (sessionsToPersist.length > 0) {
+    state.phase = "saving";
+    state.title = `Saving ${sessionsToPersist.length} session${sessionsToPersist.length > 1 ? "s" : ""} to Season ${currentSeason}…`;
+    renderUploadStatus(state);
+    try {
       await saveSessions(sessionsToPersist);
-      currentData =
-        allSessions.find(
-          (s) => s.session_date === lastProcessedSession.created_at,
-        ) || lastProcessedSession;
-    } else {
-      currentData = lastProcessedSession;
+      sessionRow.forEach((r) => { r.status = "ok"; r.msg = r.msg.replace(" — ready to save", " — saved"); });
+      currentData = allSessions.find((s) => s.session_date === lastProcessedSession.created_at) || lastProcessedSession;
+      renderContent();
+    } catch (err) {
+      console.error("Save failed:", err);
+      const msg = err && err.message ? err.message : "Save failed";
+      sessionRow.forEach((r) => { r.status = "error"; r.msg = "Not saved: " + msg; });
+      state.hint = /signed in/i.test(msg)
+        ? "Sign in again, then pick the same files — nothing was saved."
+        : /network|fetch|Failed to fetch/i.test(msg)
+          ? "Connection problem. Check your internet and upload the same files again."
+          : "Nothing was saved. Try uploading the same files again.";
     }
-
-    renderContent();
-  } else {
-    showError("No valid player data found in the selected files.");
   }
+
+  const ok = state.files.filter((f) => f.status === "ok").length;
+  const bad = state.files.filter((f) => f.status === "error").length;
+  state.phase = ok > 0 ? "done" : "failed";
+  state.title = ok > 0
+    ? `Uploaded ${ok} of ${files.length} file${files.length > 1 ? "s" : ""}${bad ? ` · ${bad} skipped` : ""}`
+    : "Upload failed";
+  if (!state.hint && bad) state.hint = "Fix the files marked ✕ and upload just those again — saved ones don't need re-uploading.";
+  renderUploadStatus(state);
+  if (ok > 0 && !bad) setTimeout(() => { if (state.phase === "done") renderUploadStatus(null); }, 8000);
 
   showLoading(false);
-  // Reset input value to allow re-uploading the same files if needed
   e.target.value = "";
 }
 
@@ -1360,7 +1462,36 @@ function processTelemetryData(data) {
           );
         }
 
-        per_lap_info.forEach((lap) => {
+        // per-lap-info can skip laps (e.g. the lap a red flag is shown), which
+        // shifted every following row in race story / practice tables. Build a
+        // gap-free list covering every timed lap, carrying the previous lap's
+        // car state into any missing lap.
+        const perLapByNum = new Map();
+        per_lap_info.forEach((l) => {
+          const n = Number(l["lap-number"]);
+          if (Number.isFinite(n)) perLapByNum.set(n, l);
+        });
+        const maxPerLap = perLapByNum.size ? Math.max(...perLapByNum.keys()) : 0;
+        const totalLapsSeen = Math.max(maxPerLap, lap_times_list.filter((t) => Number(t?.["lap-time-in-ms"]) > 0).length);
+        const filledPerLap = [];
+        let prevLapInfo = perLapByNum.get(0) || null;
+        for (let n = 1; n <= totalLapsSeen; n++) {
+          let l = perLapByNum.get(n);
+          if (!l) {
+            l = { ...(prevLapInfo || {}), "lap-number": n };
+            const st = player_stints_data.find((s) => n >= Number(s["start-lap"]) && n <= Number(s["end-lap"]));
+            if (st && l["car-status-data"]) {
+              l["car-status-data"] = {
+                ...l["car-status-data"],
+                "visual-tyre-compound": st["tyre-set-data"]?.["visual-tyre-compound"] || l["car-status-data"]["visual-tyre-compound"],
+              };
+            }
+          }
+          filledPerLap.push(l);
+          prevLapInfo = l;
+        }
+
+        filledPerLap.forEach((lap) => {
           const lap_num = lap["lap-number"];
           if (lap_num === 0 || lap_num === undefined || lap_num === null) {
             return;
@@ -1464,6 +1595,24 @@ function processTelemetryData(data) {
             },
           });
         });
+
+        // Red flags are often not reported per lap. When the session had one,
+        // flag the abnormally slow non-pit laps so they are excluded from pace.
+        const redFlags = Number(data?.["session-info"]?.["num-red-flag-periods"] || 0);
+        if (redFlags > 0) {
+          const ms = (t) => {
+            const m = String(t || "").match(/^(?:(\d+):)?(\d+(?:\.\d+)?)$/);
+            return m ? (Number(m[1] || 0) * 60 + Number(m[2])) * 1000 : 0;
+          };
+          const times = summary.lap_history.map((l) => ms(l.lap_time)).filter((v) => v > 0).sort((a, b) => a - b);
+          const median = times[Math.floor(times.length / 2)] || 0;
+          if (median > 0) {
+            summary.lap_history.forEach((l) => {
+              if (ms(l.lap_time) > median * 1.8 && l.sc_status === 0) l.sc_status = 3;
+            });
+          }
+        }
+
 
         summary.race_story = buildRaceStory(
           data,
@@ -2044,15 +2193,27 @@ function parseTimestamp(timestampStr) {
 function renderContent() {
   if (!currentData) return;
 
-  renderSessionInfo();
-  renderCharts();
-  renderStints();
-  renderTable();
-  renderQualiResults();
-  renderStartingGrid();
-  renderPracticeSection();
-  renderRaceStory();
-  renderCompareTab();
+  // Each step is isolated and its progress recorded, so one failing (or
+  // freezing) panel can't take the others down and we can see where it stopped.
+  const onlyRaceStory = typeof EMBED_VIEW !== "undefined" && (EMBED_VIEW === "race-story" || EMBED_VIEW === "compare");
+  const steps = onlyRaceStory
+    ? [["raceStory", renderRaceStory]]
+    : [
+        ["sessionInfo", renderSessionInfo],
+        ["charts", renderCharts],
+        ["stints", renderStints],
+        ["table", renderTable],
+        ["quali", renderQualiResults],
+        ["grid", renderStartingGrid],
+        ["practice", renderPracticeSection],
+        ["raceStory", renderRaceStory],
+        ["compare", renderCompareTab],
+      ];
+  for (const [name, fn] of steps) {
+    try { localStorage.setItem("f1.lastRenderStep", `${name}@${Date.now()}`); } catch {}
+    try { fn(); } catch (err) { console.error(`[render] ${name} failed`, err); }
+  }
+  try { localStorage.setItem("f1.lastRenderStep", `done@${Date.now()}`); } catch {}
   document.getElementById("content").style.display = "block";
 
 }
@@ -2170,6 +2331,9 @@ function renderPracticeTable() {
     const th = document.createElement("th");
     th.className = "text-center select-header";
     th.style.width = "40px";
+    // Header has two rows (grouped Sectors / Tire Wear / ERS); span both so
+    // the second row doesn't shift left by one column.
+    if (table.querySelectorAll("thead tr").length > 1) th.rowSpan = 2;
     th.innerHTML =
       '<input type="checkbox" id="selectAllPracticeLaps" style="cursor:pointer;" title="Select All Laps">';
     thead.prepend(th);
@@ -2596,10 +2760,8 @@ function renderSessionInfo() {
   const totalFuelConsumed = Math.max(0, startFuel - lastFuel);
   const avgFuelPerLap = laps.length > 0 ? totalFuelConsumed / laps.length : 0;
 
-  // Consistency rating: STINT-SEPARATED weighted CV across clean racing laps.
-  // Each stint is measured on its own (accounts for fuel burn, tyre compound,
-  // and track evolution), then combined by clean-lap weight into a Total CV.
-  // Rating = max(0, min(100, 100 − Total CV × 2500)).
+  // Consistency uses robust, stint-separated lap-time variation so a single
+  // unusually slow lap cannot dominate the session score.
   const pitLapNumbers = new Set(
     laps
       .filter((l) => Number(l.pit_status || 0) === 1)
@@ -2648,7 +2810,15 @@ function renderSessionInfo() {
     if (cur.length) stintGroups.push(cur);
   }
 
-  // Per-stint CV, with >107% of stint median trimmed as outliers.
+  const medianOf = (values) => {
+    const sorted = [...values].sort((a, b) => a - b);
+    const middle = Math.floor(sorted.length / 2);
+    return sorted.length % 2
+      ? sorted[middle]
+      : (sorted[middle - 1] + sorted[middle]) / 2;
+  };
+
+  // Cap extreme deviations symmetrically, then combine stint CVs by lap.
   const stintStats = [];
   let totalCleanLaps = 0;
   stintGroups.forEach((group) => {
@@ -2657,17 +2827,19 @@ function renderSessionInfo() {
       .map((l) => timeStringToSeconds(l.lap_time))
       .filter((t) => typeof t === "number" && t > 0);
     if (times.length < 3) return;
-    const sorted = [...times].sort((a, b) => a - b);
-    const median = sorted[Math.floor(sorted.length / 2)];
-    const trimmed = times.filter((t) => t <= median * 1.07);
-    const sample = trimmed.length >= 3 ? trimmed : times;
+    const median = medianOf(times);
+    const mad = medianOf(times.map((t) => Math.abs(t - median)));
+    const deviationLimit = Math.max(mad * 3, median * 0.005);
+    const sample = times.map((t) =>
+      median + Math.max(-deviationLimit, Math.min(deviationLimit, t - median)),
+    );
     const mean = sample.reduce((a, b) => a + b, 0) / sample.length;
     const variance =
       sample.reduce((a, b) => a + (b - mean) * (b - mean), 0) / sample.length;
     const stddev = Math.sqrt(variance);
-    const cv = mean > 0 ? stddev / mean : 0;
-    stintStats.push({ cv, cleanLaps: sample.length });
-    totalCleanLaps += sample.length;
+    const cv = median > 0 ? stddev / median : 0;
+    stintStats.push({ cv, cleanLaps: times.length });
+    totalCleanLaps += times.length;
   });
 
   let consistencyHtml = "—";
@@ -2678,15 +2850,15 @@ function renderSessionInfo() {
       (acc, s) => acc + s.cv * (s.cleanLaps / totalCleanLaps),
       0,
     );
-    const rating = Math.max(0, Math.min(100, 100 - totalCV * 2500));
+    const rating = Math.max(0, Math.min(100, 100 - totalCV * 1200));
     const tier =
       rating >= 92 ? "elite" : rating >= 82 ? "good" : rating >= 68 ? "mid" : "low";
     consistencyHtml = `<span class="consistency-pill consistency-${tier}">${rating.toFixed(1)}<span class="consistency-unit">/100</span></span>`;
     const perStint = stintStats
-      .map((s, i) => `S${i + 1}: CV ${(s.cv * 100).toFixed(2)}% (${s.cleanLaps} laps)`)
+      .map((s, i) => `S${i + 1}: robust CV ${(s.cv * 100).toFixed(2)}% (${s.cleanLaps} laps)`)
       .join(" · ");
     consistencyTitle =
-      `Weighted Total CV ${(totalCV * 100).toFixed(3)}% across ${stintStats.length} stint${stintStats.length > 1 ? "s" : ""} · ${totalCleanLaps} clean laps · ${perStint}`;
+      `Weighted robust CV ${(totalCV * 100).toFixed(3)}% across ${stintStats.length} stint${stintStats.length > 1 ? "s" : ""} · ${totalCleanLaps} clean laps · Score = 100 − CV × 1200 · ${perStint}`;
   }
 
   const statusCounts = laps.reduce(
@@ -2760,7 +2932,7 @@ function renderSessionInfo() {
             <div class="info-value">${avgFuelPerLap.toFixed(3)} kg</div>
         </div>
         <div class="info-item" title="${consistencyTitle.replace(/"/g, "&quot;")}">
-            <div class="info-label" style="display:flex;align-items:center;gap:6px;">Consistency Rating<span class="hint-icon" data-tooltip="Stint-Separated Weighted CV. For each stint: filter clean laps (excl. lap 1, in/out laps, SC/VSC/Red, >107% of stint median), compute Stint CV = σ/mean. Total CV = Σ [Stint CV × (stint clean laps / total clean laps)]. Rating = max(0, min(100, 100 − Total CV × 2500)).">?</span></div>
+            <div class="info-label" style="display:flex;align-items:center;gap:6px;">Consistency Rating<span class="hint-icon" data-tooltip="Stint-separated robust pace variation. Excludes lap 1, pit/in-out laps, and SC/VSC/Red laps. Extreme deviations are symmetrically capped at 3×MAD or 0.5% of median lap time. Stint CVs are weighted by clean laps; score = clamp(100 − weighted CV × 1200, 0, 100).">?</span></div>
             <div class="info-value">${consistencyHtml}</div>
         </div>
     `;
@@ -3187,7 +3359,7 @@ function renderCharts() {
       validLapTimes.reduce((acc, v) => acc + Math.pow(v - mean, 2), 0) /
       validLapTimes.length;
     const stddev = Math.sqrt(variance);
-    const padding = Math.max(3, stddev * 1.5, 5); // seconds padding
+    const padding = Math.max(0.5, stddev * 1.5); // tighter focus around typical pace
     yMinForAvg = Math.max(0, mean - padding);
     yMaxForAvg = mean + padding;
   }
@@ -3226,7 +3398,7 @@ function renderCharts() {
         {
           ticks: {
             maxTicksLimit: 6,
-            stepSize: 0.5,
+            stepSize: 0.1,
           },
         },
         yMinForAvg !== null && yMaxForAvg !== null
@@ -3356,6 +3528,18 @@ function renderCharts() {
     })(),
   );
 
+  // Tire wear by wheel, plus the average across all four wheels.
+  const averageWear = laps.map((lap) => {
+    const values = [lap.tyre_wear.FL, lap.tyre_wear.FR, lap.tyre_wear.RL, lap.tyre_wear.RR]
+      .map(Number)
+      .filter(Number.isFinite);
+    return values.length
+      ? values.reduce((sum, value) => sum + value, 0) / values.length
+      : null;
+  });
+  const wearColor = (value, baseColor) =>
+    Number(value) >= 80 ? "#ff4545" : Number(value) >= 60 ? "#ff9f43" : baseColor;
+
   // Tire Wear Charts - Combined
   createChart(
     "tireWearChart",
@@ -3371,6 +3555,8 @@ function renderCharts() {
           tension: 0.4,
           fill: false,
           borderWidth: 2,
+          segment: { borderColor: (context) => wearColor(context.p1.parsed.y, "#51cf66") },
+          pointBackgroundColor: (context) => wearColor(context.parsed.y, "#51cf66"),
         },
         {
           label: "FR",
@@ -3380,6 +3566,8 @@ function renderCharts() {
           tension: 0.4,
           fill: false,
           borderWidth: 2,
+          segment: { borderColor: (context) => wearColor(context.p1.parsed.y, "#ffd43b") },
+          pointBackgroundColor: (context) => wearColor(context.parsed.y, "#ffd43b"),
         },
         {
           label: "RL",
@@ -3389,6 +3577,8 @@ function renderCharts() {
           tension: 0.4,
           fill: false,
           borderWidth: 2,
+          segment: { borderColor: (context) => wearColor(context.p1.parsed.y, "#a78bfa") },
+          pointBackgroundColor: (context) => wearColor(context.parsed.y, "#a78bfa"),
         },
         {
           label: "RR",
@@ -3398,6 +3588,20 @@ function renderCharts() {
           tension: 0.4,
           fill: false,
           borderWidth: 2,
+          segment: { borderColor: (context) => wearColor(context.p1.parsed.y, "#ff922b") },
+          pointBackgroundColor: (context) => wearColor(context.parsed.y, "#ff922b"),
+        },
+        {
+          label: "Average",
+          data: averageWear,
+          borderColor: "#f4f4f5",
+          backgroundColor: "rgba(244, 244, 245, 0.1)",
+          tension: 0.4,
+          fill: false,
+          borderWidth: 2,
+          borderDash: [6, 4],
+          segment: { borderColor: (context) => wearColor(context.p1.parsed.y, "#f4f4f5") },
+          pointBackgroundColor: (context) => wearColor(context.parsed.y, "#f4f4f5"),
         },
       ],
     },
@@ -3405,6 +3609,12 @@ function renderCharts() {
     {
       fastestLapSeconds,
       fastestLapLap,
+      xAxisTitle: "Lap",
+      yAxis: {
+        min: 0,
+        ticks: { stepSize: 20 },
+        title: { display: true, text: "Wear %" },
+      },
     },
   );
 
@@ -3506,7 +3716,7 @@ function renderCharts() {
   // ERS Chart
   createChart(
     "ersChart",
-    "line",
+    "bar",
     {
       labels: lapNumbers,
       datasets: [
@@ -3514,18 +3724,15 @@ function renderCharts() {
           label: "Deployed",
           data: laps.map((l) => l.ers_deployed_j / 1000000),
           borderColor: "#667eea",
-          backgroundColor: "rgba(102, 126, 234, 0.1)",
-          tension: 0.4,
-          fill: true,
+          backgroundColor: "rgba(102, 126, 234, 0.75)",
+          borderWidth: 1,
         },
         {
           label: "Remaining",
           data: laps.map((l) => l.ers_remaining_j / 1000000),
           borderColor: "#ff6b6b",
-          backgroundColor: "rgba(255, 107, 107, 0.1)",
-          tension: 0.4,
-          fill: true,
-          borderDash: [5, 5],
+          backgroundColor: "rgba(255, 107, 107, 0.75)",
+          borderWidth: 1,
         },
       ],
     },
@@ -3984,6 +4191,9 @@ function createChart(
       },
       scales: {
         x: {
+          title: extraOptions.xAxisTitle
+            ? { display: true, text: extraOptions.xAxisTitle }
+            : undefined,
           ticks: {
             font: {
               size: isMobile ? 9 : 11,
@@ -5105,6 +5315,52 @@ function renderNotesGrid() {
   if (!trackNotesLoaded) loadTrackNotes();
 }
 
+const CHART_COLLAPSED_KEY = "f1.chartCollapsed.v1";
+
+function initChartCollapseControls() {
+  let collapsedIds = new Set();
+  try {
+    const stored = JSON.parse(localStorage.getItem(CHART_COLLAPSED_KEY) || "[]");
+    if (Array.isArray(stored)) collapsedIds = new Set(stored.map(String));
+  } catch {}
+
+  document.querySelectorAll(".chart-container").forEach((container) => {
+    const canvas = container.querySelector("canvas[id]");
+    const title = container.querySelector(".chart-title");
+    if (!canvas || !title || title.matches("button")) return;
+
+    const toggle = document.createElement("button");
+    const icon = document.createElement("span");
+    const collapsed = collapsedIds.has(canvas.id);
+    toggle.type = "button";
+    toggle.className = "chart-title chart-collapse-toggle";
+    toggle.setAttribute("aria-controls", canvas.id);
+    toggle.setAttribute("aria-expanded", String(!collapsed));
+    toggle.textContent = title.textContent.trim();
+    icon.className = "chart-collapse-icon";
+    icon.setAttribute("aria-hidden", "true");
+    icon.textContent = collapsed ? "▸" : "▾";
+    toggle.appendChild(icon);
+    title.replaceWith(toggle);
+    container.classList.toggle("chart-collapsed", collapsed);
+
+    toggle.addEventListener("click", () => {
+      const nextCollapsed = !container.classList.contains("chart-collapsed");
+      container.classList.toggle("chart-collapsed", nextCollapsed);
+      toggle.setAttribute("aria-expanded", String(!nextCollapsed));
+      icon.textContent = nextCollapsed ? "▸" : "▾";
+      try {
+        const stored = JSON.parse(localStorage.getItem(CHART_COLLAPSED_KEY) || "[]");
+        const saved = new Set(Array.isArray(stored) ? stored.map(String) : []);
+        if (nextCollapsed) saved.add(canvas.id);
+        else saved.delete(canvas.id);
+        localStorage.setItem(CHART_COLLAPSED_KEY, JSON.stringify([...saved]));
+      } catch {}
+      if (!nextCollapsed && charts[canvas.id]) charts[canvas.id].resize();
+    });
+  });
+}
+
 function initCollapsibleSections() {
 
 
@@ -5343,19 +5599,27 @@ function renderRaceStory() {
       <span class="rs-pill ${gained > 0 ? "rs-pos" : gained < 0 ? "rs-neg" : ""}">
         ${gained > 0 ? "▲ +" + gained : gained < 0 ? "▼ " + gained : "—"} positions
       </span>
-      <span class="rs-pill">Overtakes made ${rs.overtakes_made.length}</span>
-      <span class="rs-pill">Lost ${rs.overtakes_suffered.length}</span>
-      ${badges.grandSlam ? `<span class="rs-pill rs-grand-slam">👑 GRAND SLAM</span>` : ""}
+      <span class="rs-pill">Overtakes made ${(rs.overtakes_made || []).length}</span>
+      <span class="rs-pill">Lost ${(rs.overtakes_suffered || []).length}</span>
+      ${badges && badges.grandSlam ? `<span class="rs-pill rs-grand-slam">👑 GRAND SLAM</span>` : ""}
     `;
   }
 
-  renderPositionChart(rs);
-  renderOvertakesChart(rs);
-  renderStintStrip();
-  renderDamageSection();
-  renderTopSpeedList(rs);
-  renderFinalClassification(rs);
-  renderCompareTab();
+  // Render each panel independently so one bad panel (e.g. red-flag gaps
+  // in lap data) can't blank the whole Race Story.
+  rs.overtakes_made = rs.overtakes_made || [];
+  rs.overtakes_suffered = rs.overtakes_suffered || [];
+  const safe = (name, fn) => {
+    try { localStorage.setItem("f1.lastRenderStep", `rs-${name}@${Date.now()}`); } catch {}
+    try { fn(); } catch (err) { console.error(`[race-story] ${name} failed`, err); }
+  };
+  safe("position", () => renderPositionChart(rs));
+  safe("overtakes", () => renderOvertakesChart(rs));
+  safe("stints", () => renderStintStrip());
+  safe("damage", () => renderDamageSection());
+  safe("topspeed", () => renderTopSpeedList(rs));
+  safe("classification", () => renderFinalClassification(rs));
+  safe("compare", () => renderCompareTab());
 }
 
 
