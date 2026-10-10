@@ -261,13 +261,13 @@ function TeamH2H({
       <button
         type="button"
         onClick={toggle}
-        className="flex w-full items-center justify-between self-start rounded-md border border-white/10 bg-white/[0.025] px-2.5 py-2 text-left hover:border-white/25"
+        className="flex w-full items-center justify-between self-start rounded-md border border-white/[0.06] bg-[#111114] px-2.5 py-2 text-left hover:border-white/15"
       >
         <span className="text-xs font-bold uppercase tracking-widest text-white/60">{team}</span>
         <span className="flex items-center gap-3 text-[11px] text-white/50">
           <span className="flex items-center gap-2 font-mono">
             <span className={aLeads ? "font-bold text-emerald-400" : ""}>{a.split(" ").pop()}</span>
-            <span className="rounded bg-white/5 px-2 py-0.5 text-white">{totals.ptsA} – {totals.ptsB}</span>
+            <span className="font-semibold text-white/80">{totals.ptsA} – {totals.ptsB}</span>
             <span className={!aLeads ? "font-bold text-emerald-400" : ""}>{b.split(" ").pop()}</span>
           </span>
           <span aria-hidden>▸</span>
@@ -277,7 +277,7 @@ function TeamH2H({
   }
 
   return (
-    <div className="self-start rounded-md border border-white/10 bg-white/[0.025] p-3">
+    <div className="self-start rounded-md border border-white/[0.06] bg-[#111114] p-3">
       <div className="mb-2 flex items-center justify-between">
         <button
           type="button"
@@ -344,7 +344,7 @@ function TeamH2H({
 
 function DriverBlock({ name, pts, good }: { name: string; pts: number; good?: boolean }) {
   return (
-    <div className={"rounded border p-1.5 " + (good ? "border-emerald-500/40 bg-emerald-500/5" : "border-white/10 bg-white/[0.02]")}>
+    <div className={"rounded border p-1.5 " + (good ? "border-emerald-500/25 bg-emerald-500/[0.035]" : "border-white/[0.05] bg-white/[0.015]")}>
       <div className="truncate text-sm font-black">{name}</div>
       <div className={"mt-0.5 text-xs font-semibold " + (good ? "text-emerald-400" : "text-white/60")}>{pts} pts</div>
     </div>
