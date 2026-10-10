@@ -125,6 +125,8 @@ function TeammatePage() {
       .sort((a, b) => a.team.localeCompare(b.team));
   }, [teams, sessions, appearanceByDriver]);
 
+  const teamSplit = Math.ceil(teamGroups.length / 2);
+  const teamColumns = [teamGroups.slice(0, teamSplit), teamGroups.slice(teamSplit)];
 
   return (
     <>
@@ -144,9 +146,13 @@ function TeammatePage() {
           </div>
         )}
 
-        <div className="grid items-start gap-4 lg:grid-cols-2">
-          {teamGroups.map(({ team, drivers }) => (
-            <TeamH2H key={team} team={team} drivers={drivers} sessions={sessions} />
+        <div className="grid items-start gap-3 lg:grid-cols-2">
+          {teamColumns.map((column, index) => (
+            <div key={index} className="flex min-w-0 flex-col gap-3">
+              {column.map(({ team, drivers }) => (
+                <TeamH2H key={team} team={team} drivers={drivers} sessions={sessions} />
+              ))}
+            </div>
           ))}
         </div>
 
@@ -255,7 +261,7 @@ function TeamH2H({
       <button
         type="button"
         onClick={toggle}
-        className="flex w-full items-center justify-between self-start rounded-lg border border-white/10 bg-white/[0.03] p-3 text-left hover:border-white/25"
+        className="flex w-full items-center justify-between self-start rounded-md border border-white/10 bg-white/[0.025] px-2.5 py-2 text-left hover:border-white/25"
       >
         <span className="text-xs font-bold uppercase tracking-widest text-white/60">{team}</span>
         <span className="flex items-center gap-3 text-[11px] text-white/50">
@@ -271,8 +277,8 @@ function TeamH2H({
   }
 
   return (
-    <div className="self-start rounded-lg border border-white/10 bg-white/[0.03] p-4">
-      <div className="mb-3 flex items-center justify-between">
+    <div className="self-start rounded-md border border-white/10 bg-white/[0.025] p-3">
+      <div className="mb-2 flex items-center justify-between">
         <button
           type="button"
           onClick={toggle}
@@ -284,11 +290,11 @@ function TeamH2H({
         </button>
         <div className="text-[10px] text-white/40">{relevantRows.length} weekend{relevantRows.length === 1 ? "" : "s"}</div>
       </div>
-      <div className="mb-3 grid grid-cols-2 gap-2">
+      <div className="mb-2 grid grid-cols-2 gap-1.5">
         <DriverBlock name={a} pts={totals.ptsA} good={aLeads} />
         <DriverBlock name={b} pts={totals.ptsB} good={!aLeads} />
       </div>
-      <div className="mb-3 grid grid-cols-4 gap-2 text-center text-[11px] uppercase tracking-widest text-white/50">
+      <div className="mb-2 grid grid-cols-4 gap-1.5 text-center text-[10px] uppercase tracking-widest text-white/50">
         <div>
           <div>Quali</div>
           <div className="mt-0.5 font-mono text-sm text-white">{totals.qA}–{totals.qB}</div>
@@ -338,7 +344,7 @@ function TeamH2H({
 
 function DriverBlock({ name, pts, good }: { name: string; pts: number; good?: boolean }) {
   return (
-    <div className={"rounded-md border p-2 " + (good ? "border-emerald-500/40 bg-emerald-500/5" : "border-white/10 bg-white/[0.02]")}>
+    <div className={"rounded border p-1.5 " + (good ? "border-emerald-500/40 bg-emerald-500/5" : "border-white/10 bg-white/[0.02]")}>
       <div className="truncate text-sm font-black">{name}</div>
       <div className={"mt-0.5 text-xs font-semibold " + (good ? "text-emerald-400" : "text-white/60")}>{pts} pts</div>
     </div>
