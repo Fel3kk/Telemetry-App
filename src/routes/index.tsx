@@ -124,7 +124,9 @@ function MainPage() {
                 className={ACTION_CLS}
               >
                 🏆
-                <span className="truncate">Title Race</span>
+                <span className="truncate">
+                  Title<span className="hidden sm:inline"> Race</span>
+                </span>
               </Link>
               <Link
                 to="/records"
