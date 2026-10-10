@@ -817,36 +817,90 @@ window.addEventListener("resize", () => {
   }, 250);
 });
 
-async function handleFileUpload(e) {
-  const files = e.target.files;
-  if (!files || files.length === 0) return;
+const UPLOAD_MAX_BYTES = 25 * 1024 * 1024;
 
-  showLoading(true);
+function uploadStatusEl() {
+  let el = document.getElementById("uploadStatus");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "uploadStatus";
+    el.setAttribute("role", "status");
+    el.setAttribute("aria-live", "polite");
+    const anchor = document.getElementById("error");
+    if (anchor && anchor.parentNode) anchor.parentNode.insertBefore(el, anchor);
+    else document.body.prepend(el);
+  }
+  return el;
+}
+
+function escUp(v) {
+  return String(v == null ? "" : v).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+}
+
+function renderUploadStatus(state) {
+  const el = uploadStatusEl();
+  if (!state) { el.innerHTML = ""; el.style.display = "none"; return; }
+  el.style.display = "block";
+  const done = state.files.filter((f) => f.status !== "pending" && f.status !== "working").length;
+  const pct = state.files.length ? Math.round((done / state.files.length) * 100) : 0;
+  const icon = { pending: "•", working: "⏳", ok: "✓", warn: "!", error: "✕" };
+  const rows = state.files.map((f) =>
+    `<li class="up-row up-${f.status}"><span class="up-ico">${icon[f.status] || "•"}</span>` +
+    `<span class="up-name">${escUp(f.name)}</span>` +
+    `<span class="up-msg">${escUp(f.msg || "")}</span></li>`).join("");
+  el.className = "upload-status up-phase-" + state.phase;
+  el.innerHTML =
+    `<div class="up-head"><strong>${escUp(state.title)}</strong><span>${pct}%</span></div>` +
+    `<div class="up-bar"><div style="width:${state.phase === "saving" ? 95 : pct}%"></div></div>` +
+    (state.hint ? `<div class="up-hint">${escUp(state.hint)}</div>` : "") +
+    `<ul class="up-list">${rows}</ul>` +
+    (state.phase === "done" || state.phase === "failed"
+      ? `<button type="button" class="up-dismiss">Dismiss</button>` : "");
+  const btn = el.querySelector(".up-dismiss");
+  if (btn) btn.onclick = () => renderUploadStatus(null);
+}
+
+async function handleFileUpload(e) {
+  const files = Array.from(e.target.files || []);
+  if (files.length === 0) return;
+
   hideError();
+  const state = {
+    phase: "reading",
+    title: `Reading ${files.length} file${files.length > 1 ? "s" : ""}…`,
+    hint: "",
+    files: files.map((f) => ({ name: f.name, status: "pending", msg: "Waiting" })),
+  };
+  renderUploadStatus(state);
+  showLoading(true);
 
   const sessionsToPersist = [];
+  const sessionRow = [];
   let lastProcessedSession = null;
 
-  for (const file of files) {
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    const row = state.files[i];
+    row.status = "working";
+    row.msg = "Reading…";
+    renderUploadStatus(state);
+
     const filename = file.name.toLowerCase();
-    let category = "Race";
-    if (filename.includes("shootout") || filename.includes("sprint_shootout")) {
-      category = "Sprint Shootout";
-    } else if (filename.includes("qualifying") || filename.includes("quali")) {
-      category = "Qualifying";
-    } else if (filename.includes("sprint")) {
-      category = "Sprint";
-    } else if (
-      filename.includes("practice") ||
-      filename.includes("practise") ||
-      filename.includes("fp1") ||
-      filename.includes("fp2") ||
-      filename.includes("fp3")
-    ) {
-      category = "Practice";
-    } else if (filename.includes("time trial") || filename.includes("tt")) {
-      category = "Time Trial";
+    if (!/\.(json|txt|jsonl)$/i.test(file.name)) {
+      row.status = "error"; row.msg = "Not a JSON file — export the session as .json from the telemetry app.";
+      continue;
     }
+    if (file.size === 0) { row.status = "error"; row.msg = "File is empty."; continue; }
+    if (file.size > UPLOAD_MAX_BYTES) {
+      row.status = "error"; row.msg = `Too large (${(file.size / 1048576).toFixed(1)} MB, max 25 MB).`; continue;
+    }
+
+    let category = "Race";
+    if (filename.includes("shootout") || filename.includes("sprint_shootout")) category = "Sprint Shootout";
+    else if (filename.includes("qualifying") || filename.includes("quali")) category = "Qualifying";
+    else if (filename.includes("sprint")) category = "Sprint";
+    else if (/practi[cs]e|fp1|fp2|fp3/.test(filename)) category = "Practice";
+    else if (filename.includes("time trial") || filename.includes("tt")) category = "Time Trial";
 
     try {
       const rawText = await file.text();
@@ -854,65 +908,80 @@ async function handleFileUpload(e) {
       try {
         data = JSON.parse(rawText);
       } catch (error) {
-        const lines = rawText.split(/\r?\n/).filter((l) => l.trim().length > 0);
         const parsedLines = [];
-        for (const line of lines) {
-          try {
-            parsedLines.push(JSON.parse(line));
-          } catch (err) {
-            continue;
-          }
+        for (const line of rawText.split(/\r?\n/)) {
+          if (!line.trim()) continue;
+          try { parsedLines.push(JSON.parse(line)); } catch (err) { /* skip */ }
+        }
+        if (!parsedLines.length) {
+          row.status = "error"; row.msg = "Couldn't read JSON — the file may be cut off or corrupted. Re-export it.";
+          continue;
         }
         data = parsedLines;
       }
 
+      row.msg = "Processing telemetry…";
+      renderUploadStatus(state);
       data = sanitizeDeep(data);
       const playerData = processTelemetryData(data);
       if (playerData && playerData.length > 0) {
         const session = playerData[0];
         session.category = category;
         session.season = currentSeason;
-
-        // Fallback: If track is unknown, try to guess from filename
         if (session.track_name === "Unknown" || !session.track_name) {
           const parts = filename.replace(".json", "").split(/[_-]/);
-          const trackGuess = parts.find(
-            (p) =>
-              p !== "race" &&
-              p !== "sprint" &&
-              p !== "quali" &&
-              p !== "qualifying",
-          );
+          const trackGuess = parts.find((p) => !["race", "sprint", "quali", "qualifying"].includes(p));
           if (trackGuess) session.track_name = trackGuess;
         }
-
-        // Persist every session, including Practice, so it shows up under the race weekend card
         sessionsToPersist.push(session);
+        sessionRow.push(row);
         lastProcessedSession = session;
+        row.status = "working";
+        row.msg = `${category} · ${session.track_name || "Unknown track"} — ready to save`;
+      } else {
+        row.status = "error";
+        row.msg = "No player driver found (is-player: true). Make sure this is your own session file.";
       }
     } catch (err) {
       console.error(`Error processing file ${file.name}:`, err);
+      row.status = "error";
+      row.msg = "Couldn't process this file: " + (err && err.message ? err.message : "unknown error");
     }
+    renderUploadStatus(state);
   }
 
-  if (lastProcessedSession) {
-    if (sessionsToPersist.length > 0) {
+  if (sessionsToPersist.length > 0) {
+    state.phase = "saving";
+    state.title = `Saving ${sessionsToPersist.length} session${sessionsToPersist.length > 1 ? "s" : ""} to Season ${currentSeason}…`;
+    renderUploadStatus(state);
+    try {
       await saveSessions(sessionsToPersist);
-      currentData =
-        allSessions.find(
-          (s) => s.session_date === lastProcessedSession.created_at,
-        ) || lastProcessedSession;
-    } else {
-      currentData = lastProcessedSession;
+      sessionRow.forEach((r) => { r.status = "ok"; r.msg = r.msg.replace(" — ready to save", " — saved"); });
+      currentData = allSessions.find((s) => s.session_date === lastProcessedSession.created_at) || lastProcessedSession;
+      renderContent();
+    } catch (err) {
+      console.error("Save failed:", err);
+      const msg = err && err.message ? err.message : "Save failed";
+      sessionRow.forEach((r) => { r.status = "error"; r.msg = "Not saved: " + msg; });
+      state.hint = /signed in/i.test(msg)
+        ? "Sign in again, then pick the same files — nothing was saved."
+        : /network|fetch|Failed to fetch/i.test(msg)
+          ? "Connection problem. Check your internet and upload the same files again."
+          : "Nothing was saved. Try uploading the same files again.";
     }
-
-    renderContent();
-  } else {
-    showError("No valid player data found in the selected files.");
   }
+
+  const ok = state.files.filter((f) => f.status === "ok").length;
+  const bad = state.files.filter((f) => f.status === "error").length;
+  state.phase = ok > 0 ? "done" : "failed";
+  state.title = ok > 0
+    ? `Uploaded ${ok} of ${files.length} file${files.length > 1 ? "s" : ""}${bad ? ` · ${bad} skipped` : ""}`
+    : "Upload failed";
+  if (!state.hint && bad) state.hint = "Fix the files marked ✕ and upload just those again — saved ones don't need re-uploading.";
+  renderUploadStatus(state);
+  if (ok > 0 && !bad) setTimeout(() => { if (state.phase === "done") renderUploadStatus(null); }, 8000);
 
   showLoading(false);
-  // Reset input value to allow re-uploading the same files if needed
   e.target.value = "";
 }
 

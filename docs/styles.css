@@ -3182,3 +3182,20 @@ body.embed-upload .download-btn.small:hover {
   background: rgba(225, 6, 0, 0.18);
   border-color: rgba(225, 6, 0, 0.5);
 }
+
+/* Upload progress / validation panel */
+.upload-status{display:none;margin:12px 0;padding:12px 14px;border-radius:12px;border:1px solid rgba(255,255,255,.12);background:rgba(20,22,30,.85);font-size:13px;color:#e5e7eb}
+.upload-status .up-head{display:flex;justify-content:space-between;gap:8px;margin-bottom:8px}
+.upload-status .up-bar{height:6px;border-radius:99px;background:rgba(255,255,255,.08);overflow:hidden}
+.upload-status .up-bar>div{height:100%;background:#e10600;transition:width .3s ease}
+.up-phase-done .up-bar>div{background:#22c55e}
+.up-phase-failed .up-bar>div{background:#ef4444}
+.upload-status .up-hint{margin-top:8px;color:#fbbf24}
+.upload-status .up-list{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:6px;max-height:220px;overflow:auto}
+.upload-status .up-row{display:grid;grid-template-columns:18px 1fr;gap:2px 8px;align-items:start}
+.upload-status .up-ico{grid-row:span 2;font-weight:700;text-align:center}
+.upload-status .up-name{font-weight:600;word-break:break-all}
+.upload-status .up-msg{color:#9ca3af;font-size:12px}
+.up-ok .up-ico{color:#22c55e}.up-error .up-ico{color:#ef4444}.up-error .up-msg{color:#fca5a5}.up-working .up-ico{color:#fbbf24}
+.upload-status .up-dismiss{margin-top:10px;padding:8px 14px;min-height:36px;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:transparent;color:inherit;cursor:pointer}
+@media (max-width:480px){.upload-status{font-size:12px;padding:10px}}
