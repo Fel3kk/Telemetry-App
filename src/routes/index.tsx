@@ -35,6 +35,9 @@ export const Route = createFileRoute("/")({
 
 const SEASONS = Array.from({ length: 10 }, (_, i) => i + 1);
 
+const ACTION_CLS =
+  "flex min-w-0 items-center justify-center gap-1 rounded-lg border border-border bg-background/60 px-2 py-2 text-[10px] font-bold uppercase tracking-[0.06em] text-foreground/80 transition hover:-translate-y-0.5 hover:border-primary/60 hover:bg-primary/10 hover:text-foreground active:translate-y-0 sm:gap-1.5 sm:px-4 sm:text-[11px] sm:tracking-[0.15em]";
+
 function MainPage() {
   const [season, setSeason] = useState<number>(1);
   const cached = typeof window !== "undefined" ? loadCachedSessions() : null;
@@ -90,17 +93,20 @@ function MainPage() {
     <>
       <ShellHeader crumbs={[{ label: `Season ${season}` }]} />
       <ShellPage>
-        <section className="mb-5 rounded-2xl border border-border bg-card/60 p-3 sm:p-4">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
-              <span className="text-[10px] font-bold uppercase tracking-[0.22em] text-muted-foreground">Season</span>
-              <div className="flex flex-wrap items-center gap-1 rounded-xl border border-border bg-background/60 p-1">
+        <section className="mb-4 rounded-2xl border border-border bg-card/60 p-2.5 sm:mb-5 sm:p-4">
+          <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center lg:gap-4">
+            <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+              <span className="shrink-0 text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
+                Season
+              </span>
+              <div className="flex min-w-0 flex-nowrap items-center gap-1 overflow-x-auto rounded-xl border border-border bg-background/60 p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 {SEASONS.map((n) => (
                   <button
                     key={n}
                     onClick={() => pick(n)}
+                    aria-pressed={season === n}
                     className={
-                      "min-w-[38px] rounded-lg px-2 py-1.5 text-sm font-bold transition " +
+                      "min-w-[28px] shrink-0 rounded-lg px-1.5 py-1.5 text-xs font-bold tabular-nums transition sm:min-w-[36px] sm:px-2 sm:text-sm " +
                       (season === n
                         ? "bg-primary text-primary-foreground shadow-[0_4px_18px_-4px_var(--primary)]"
                         : "text-muted-foreground hover:bg-accent hover:text-foreground")
@@ -111,28 +117,33 @@ function MainPage() {
                 ))}
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-2 sm:flex">
+            <div className="grid grid-cols-3 gap-1.5 sm:flex sm:justify-end sm:gap-2">
               <Link
                 to="/season/$season/title"
                 params={{ season: String(season) }}
-                className="rounded-lg border border-border bg-background/60 px-4 py-2 text-center text-[11px] font-bold uppercase tracking-[0.15em] text-foreground/80 transition hover:border-primary/60 hover:bg-primary/10 hover:text-foreground"
+                className={ACTION_CLS}
               >
-                🏆 Title Race
+                🏆
+                <span className="truncate">
+                  Title<span className="hidden sm:inline"> Race</span>
+                </span>
               </Link>
               <Link
                 to="/records"
-                className="rounded-lg border border-border bg-background/60 px-4 py-2 text-center text-[11px] font-bold uppercase tracking-[0.15em] text-foreground/80 transition hover:border-primary/60 hover:bg-primary/10 hover:text-foreground"
+                className={ACTION_CLS}
               >
-                ⏱️ Records
+                ⏱️
+                <span className="truncate">Records</span>
               </Link>
+              <ShareButton season={season} stats={stats} />
             </div>
           </div>
-          <div className="mt-3 border-t border-border pt-3">
+          <div className="mt-2.5 border-t border-border pt-2.5 sm:mt-3 sm:pt-3">
             <UploadPanel season={season} />
           </div>
         </section>
 
-        <StatsBar stats={stats} season={season} />
+        <StatsBar stats={stats} />
 
 
         <div className="mb-3 flex items-center justify-between">
@@ -149,7 +160,7 @@ function MainPage() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
           {trackGroups.map((g) => (
             <TrackCard
               key={`${trackSlug(g.track)}::${g.category}`}
@@ -191,9 +202,7 @@ function UploadPanel({ season }: { season: number }) {
   );
 }
 
-function StatsBar({ stats, season }: { stats: ReturnType<typeof seasonStats>; season: number }) {
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
+function StatsBar({ stats }: { stats: ReturnType<typeof seasonStats> }) {
   const items = [
     { label: "GP Wins", value: stats.raceWins, icon: "🏆" },
     { label: "Sprint Wins", value: stats.sprintWins, icon: "🏁" },
@@ -202,6 +211,29 @@ function StatsBar({ stats, season }: { stats: ReturnType<typeof seasonStats>; se
     { label: "Fastest Laps", value: stats.fastestLaps, icon: "💜" },
     { label: "DNFs", value: stats.dnfs, icon: "💥" },
   ];
+  return (
+    <div className="mb-5 grid grid-cols-3 gap-1.5 sm:mb-6 sm:grid-cols-6 sm:gap-2">
+      {items.map((it) => (
+        <div
+          key={it.label}
+          className="min-w-0 rounded-lg border border-white/10 bg-white/[0.03] px-2 py-2 transition hover:border-white/20 sm:px-3 sm:py-3"
+        >
+          <div className="truncate text-[9px] uppercase tracking-[0.1em] text-white/50 sm:text-[10px] sm:tracking-widest">
+            {it.label}
+          </div>
+          <div className="mt-0.5 flex items-baseline gap-1 font-black sm:mt-1">
+            <span className="shrink-0 text-sm sm:text-base">{it.icon}</span>
+            <span className="truncate text-base tabular-nums sm:text-xl">{it.value}</span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ShareButton({ season, stats }: { season: number; stats: ReturnType<typeof seasonStats> }) {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
   const onShare = async () => {
     setBusy(true);
     setMsg(null);
@@ -216,27 +248,26 @@ function StatsBar({ stats, season }: { stats: ReturnType<typeof seasonStats>; se
     }
   };
   return (
-    <div className="mb-6">
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-        {items.map((it) => (
-          <div key={it.label} className="rounded-md border border-white/10 bg-white/[0.03] px-3 py-3">
-            <div className="text-[10px] uppercase tracking-widest text-white/50">{it.label}</div>
-            <div className="mt-1 text-lg font-black sm:text-xl">{it.icon} {it.value}</div>
-          </div>
-        ))}
-      </div>
-      <div className="mt-2 flex items-center justify-end gap-2">
-        {msg && <span className="text-[11px] text-white/50">{msg}</span>}
-        <button
-          onClick={onShare}
-          disabled={busy}
-          className="rounded-md border border-white/15 px-3 py-1.5 text-[11px] font-bold uppercase tracking-widest text-white/70 transition hover:border-red-500/60 hover:text-white disabled:opacity-50"
-        >
-          {busy ? "Creating…" : "📤 Share season card"}
-        </button>
-      </div>
-    </div>
-
+    <>
+      <button
+        onClick={onShare}
+        disabled={busy}
+        className={ACTION_CLS + " disabled:cursor-not-allowed disabled:opacity-50"}
+      >
+        📤
+        <span className="truncate">
+          {busy ? "Creating…" : "Share"}
+          <span className="hidden sm:inline">{" "}season card</span>
+        </span>
+      </button>
+      {msg && (
+        <div className="pointer-events-none fixed inset-x-0 bottom-5 z-50 flex justify-center px-4">
+          <span className="rounded-full border border-border bg-card/95 px-4 py-2 text-xs font-semibold shadow-[0_10px_30px_-10px_rgba(0,0,0,0.9)] backdrop-blur">
+            {msg}
+          </span>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -266,7 +297,7 @@ function TrackCard({ season, track, category, sessions }: { season: number; trac
       to="/season/$season/track/$track"
       params={{ season: String(season), track: trackSlug(track) }}
       search={{ cat: category }}
-      className="group relative isolate flex min-h-[220px] flex-col justify-end overflow-hidden rounded-xl border border-white/10 bg-[#0c0c10] shadow-[0_8px_24px_-12px_rgba(0,0,0,0.8)] transition duration-300 hover:-translate-y-1 hover:border-red-500/50 hover:shadow-[0_14px_36px_-12px_rgba(239,68,68,0.4)] sm:min-h-[260px]"
+      className="group relative isolate flex min-h-[190px] flex-col justify-end overflow-hidden rounded-xl border border-white/10 bg-[#0c0c10] shadow-[0_8px_24px_-12px_rgba(0,0,0,0.8)] transition duration-300 hover:-translate-y-1 hover:border-red-500/50 hover:shadow-[0_14px_36px_-12px_rgba(239,68,68,0.4)] sm:min-h-[260px]"
     >
       {/* Track map as a large, faded background layer */}
       {imgOk ? (
@@ -311,17 +342,17 @@ function TrackCard({ season, track, category, sessions }: { season: number; trac
         </span>
       </div>
 
-      <div className="flex flex-col gap-2 px-4 pb-4 pt-16">
+      <div className="flex flex-col gap-1.5 px-4 pb-3.5 pt-14 sm:gap-2 sm:pb-4 sm:pt-16">
         <div className="flex items-center gap-2">
           <span className="text-xl leading-none">{trackFlag(track)}</span>
-          <span className="truncate text-2xl font-black uppercase italic tracking-tight drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]">{display}</span>
+          <span className="truncate text-xl font-black uppercase italic tracking-tight drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)] sm:text-2xl">{display}</span>
         </div>
         {fin ? (
           <div className="flex items-end justify-between">
             <div className="flex items-baseline gap-2 font-mono">
               {start && <span className="text-sm text-white/45">P{start}</span>}
               {start && <span className="text-white/30">→</span>}
-              <span className={"text-4xl font-black leading-none " + (fin === 1 ? "text-yellow-400" : fin <= 3 ? "text-orange-300" : "text-white")}>
+              <span className={"text-3xl font-black leading-none sm:text-4xl " + (fin === 1 ? "text-yellow-400" : fin <= 3 ? "text-orange-300" : "text-white")}>
                 P{fin}
               </span>
             </div>
