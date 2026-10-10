@@ -149,7 +149,7 @@ function MainPage() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
           {trackGroups.map((g) => (
             <TrackCard
               key={`${trackSlug(g.track)}::${g.category}`}
@@ -266,7 +266,7 @@ function TrackCard({ season, track, category, sessions }: { season: number; trac
       to="/season/$season/track/$track"
       params={{ season: String(season), track: trackSlug(track) }}
       search={{ cat: category }}
-      className="group relative isolate flex min-h-[220px] flex-col justify-end overflow-hidden rounded-xl border border-white/10 bg-[#0c0c10] shadow-[0_8px_24px_-12px_rgba(0,0,0,0.8)] transition duration-300 hover:-translate-y-1 hover:border-red-500/50 hover:shadow-[0_14px_36px_-12px_rgba(239,68,68,0.4)] sm:min-h-[260px]"
+      className="group relative isolate flex min-h-[190px] flex-col justify-end overflow-hidden rounded-xl border border-white/10 bg-[#0c0c10] shadow-[0_8px_24px_-12px_rgba(0,0,0,0.8)] transition duration-300 hover:-translate-y-1 hover:border-red-500/50 hover:shadow-[0_14px_36px_-12px_rgba(239,68,68,0.4)] sm:min-h-[260px]"
     >
       {/* Track map as a large, faded background layer */}
       {imgOk ? (
@@ -311,17 +311,17 @@ function TrackCard({ season, track, category, sessions }: { season: number; trac
         </span>
       </div>
 
-      <div className="flex flex-col gap-2 px-4 pb-4 pt-16">
+      <div className="flex flex-col gap-1.5 px-4 pb-3.5 pt-14 sm:gap-2 sm:pb-4 sm:pt-16">
         <div className="flex items-center gap-2">
           <span className="text-xl leading-none">{trackFlag(track)}</span>
-          <span className="truncate text-2xl font-black uppercase italic tracking-tight drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]">{display}</span>
+          <span className="truncate text-xl font-black uppercase italic tracking-tight drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)] sm:text-2xl">{display}</span>
         </div>
         {fin ? (
           <div className="flex items-end justify-between">
             <div className="flex items-baseline gap-2 font-mono">
               {start && <span className="text-sm text-white/45">P{start}</span>}
               {start && <span className="text-white/30">→</span>}
-              <span className={"text-4xl font-black leading-none " + (fin === 1 ? "text-yellow-400" : fin <= 3 ? "text-orange-300" : "text-white")}>
+              <span className={"text-3xl font-black leading-none sm:text-4xl " + (fin === 1 ? "text-yellow-400" : fin <= 3 ? "text-orange-300" : "text-white")}>
                 P{fin}
               </span>
             </div>
