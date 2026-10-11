@@ -18,6 +18,11 @@ import { supabase } from "@/lib/supabase";
 import { ShellHeader, ShellPage } from "@/components/f1/ShellHeader";
 
 export const Route = createFileRoute("/season/$season/track/$track/")({
+  head: ({ params }) => {
+    const title = `${titleCaseTrack(params.track)} · Season ${params.season} · F1 Telemetry`;
+    const description = `Qualifying, lap simulations, race analysis and telemetry for ${titleCaseTrack(params.track)} in Season ${params.season}.`;
+    return { meta: [{ title }, { name: "description", content: description }, { property: "og:title", content: title }, { property: "og:description", content: description }, { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" }] };
+  },
   component: TrackPage,
 });
 
@@ -43,6 +48,7 @@ const OPTIONS: Opt[] = [
     desc: "Points & position by round, drivers and teams",
   },
   { view: "quali-results", label: "Qualifying", icon: "⏱️", desc: "Q1–Q3 / shootout times" },
+  { view: "quali-simulation", label: "Qualifying Simulation", icon: "🏎️", desc: "Your lap versus P1, or P2 from pole" },
   { view: "grid", label: "Starting Grid", icon: "🚦", desc: "Pole to the back row, weekend lineup" },
   { view: "assignments", label: "Teams", icon: "🏎️", desc: "Driver / constructor pairings" },
   {
@@ -80,6 +86,7 @@ const ACCENTS: Record<string, string> = {
   records: "#cf9bff",
   progress: "#5cb0ff",
   "quali-results": "#4bf09a",
+  "quali-simulation": "var(--replay-rival)",
   grid: "#ff4646",
   assignments: "#ff9c4f",
   "race-story": "#a78bfa",
