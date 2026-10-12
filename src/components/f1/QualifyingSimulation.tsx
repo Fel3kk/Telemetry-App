@@ -136,12 +136,6 @@ export function QualifyingSimulation({ season, track, cat }: { season: number; t
         {editing && visibleLine.length > 0 && <><polyline points={visibleLine.map((p) => `${p.x * 1080},${p.y * 608}`).join(" ")} fill="none" stroke="currentColor" strokeWidth="3" className="text-replay-rival" />
           {visibleLine.map((p,i) => <circle key={i} cx={p.x*1080} cy={p.y*608} r={i === 0 ? 8 : 4} fill="currentColor" className={i === 0 ? "text-replay-player" : "text-replay-rival"}/>)}</>}
         {!editing && line.length >= 3 && <polyline points={[...line, line[0]].map((p) => `${p.x * 1080},${p.y * 608}`).join(" ")} fill="none" stroke="currentColor" strokeOpacity="0.18" strokeWidth="2" strokeDasharray="6 6" className="text-foreground" />}
-        {!editing && line.length >= 3 && [0, 1 / 3, 2 / 3].map((f, i) => { const m = pointOnLine(line, f); return <g key={f} transform={`translate(${m.x*1080} ${m.y*608})`} className="text-muted-foreground"><rect x="-14" y="-10" width="28" height="20" rx="4" fill="var(--background)" stroke="currentColor" strokeWidth="1.5"/><text y="5" textAnchor="middle" fontSize="12" fontWeight="700" fill="currentColor">{i === 0 ? "S/F" : `S${i + 1}`}</text></g>; })}
-        {!editing && line.length >= 3 && dots.map((d) => {
-          const prog = lapProgress(elapsed, d.lap, d.sectors);
-          const trail = Array.from({ length: 12 }, (_, i) => pointOnLine(line, Math.max(0, prog - (i + 1) * 0.004)));
-          return <g key={d.role + "trail"} className={d.className}>{trail.map((t, i) => <circle key={i} cx={t.x*1080} cy={t.y*608} r={8 - i * 0.55} fill="currentColor" opacity={0.35 - i * 0.028} />)}</g>;
-        })}
         {!editing && line.length >= 3 && dots.map((d) => {
           const p = pointOnLine(line, lapProgress(elapsed,d.lap,d.sectors));
           return <g key={d.role} className={d.className} transform={`translate(${p.x*1080} ${p.y*608})`}>
