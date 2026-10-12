@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Pause, Play, RotateCcw, Pencil, Check, Undo2, X } from "lucide-react";
+import { Pause, Play, RotateCcw, Pencil, Check, Undo2, X, Minus, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabase";
 import { getActiveCareer } from "@/lib/career";
@@ -149,9 +149,13 @@ export function QualifyingSimulation({ season, track, cat }: { season: number; t
       <div className="flex items-center gap-2">
         <Button size="icon" aria-label={playing ? "Pause simulation" : "Play simulation"} title={playing ? "Pause" : "Play"} disabled={!pair || line.length < 3 || editing || imageFailed} onClick={() => { if (elapsed >= duration) setElapsed(0); setPlaying((p) => !p); }}>{playing ? <Pause/> : <Play/>}</Button>
         <Button variant="outline" size="icon" title="Restart" aria-label="Restart simulation" disabled={!pair} onClick={() => {setPlaying(false);setElapsed(0);}}><RotateCcw/></Button>
-        <select aria-label="Playback speed" value={speed} onChange={(e) => setSpeed(Number(e.target.value))} className="h-9 rounded-md border border-input bg-background px-2 text-sm">
-          {[0.5,1,2,4,8].map((n) => <option key={n} value={n}>{n}×</option>)}
-        </select>
+        <div className="flex items-center gap-2" role="group" aria-label="Playback speed">
+          <span className="text-xs text-muted-foreground">Speed</span>
+          <input type="range" aria-label="Playback speed" min="0.25" max="8" step="0.25" value={speed} onChange={(e) => setSpeed(Number(e.target.value))} className="h-1.5 w-24 sm:w-32 accent-primary" />
+          <span className="w-12 font-mono text-xs tabular-nums" aria-live="polite">{speed}×</span>
+          <Button variant="ghost" size="icon" aria-label="Slow down playback" title="Slower" disabled={speed <= 0.25} onClick={() => setSpeed((s) => Math.max(0.25, Math.round((s - 0.25) * 100) / 100))}><Minus/></Button>
+          <Button variant="ghost" size="icon" aria-label="Speed up playback" title="Faster" disabled={speed >= 8} onClick={() => setSpeed((s) => Math.min(8, Math.round((s + 0.25) * 100) / 100))}><Plus/></Button>
+        </div>
         <span className="font-mono text-sm tabular-nums">{format(elapsed)}</span>
         {pair && elapsed > 0 && (() => { const g = liveGap(elapsed, pair.player, pair.rival); return <span className={`rounded px-2 py-0.5 font-mono text-xs font-bold tabular-nums ${g > 0 ? "bg-destructive/15 text-destructive" : "bg-primary/15 text-primary"}`} title="Live gap to the other driver">{g > 0 ? "+" : "−"}{Math.abs(g).toFixed(3)}</span>; })()}
       </div>
