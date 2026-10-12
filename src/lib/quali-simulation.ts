@@ -18,10 +18,10 @@ function sectorsFor(r: QualiResult, lap: number): [number, number, number] | und
 }
 
 export function replayPair(results: QualiResult[], playerName: string): { player: ReplayDriver; rival: ReplayDriver } | null {
-  const rows = results.map((r) => {
+  const rows: ReplayDriver[] = results.map((r): ReplayDriver => {
     const lap = seconds(r.best_lap || r.q3 || r.q2 || r.q1);
     return { name: r.name, position: Number(r.position), lap: lap ?? 0, sectors: lap ? sectorsFor(r, lap) : undefined };
-  }).filter((r): r is ReplayDriver => !!r.name && r.lap >= 30 && r.lap <= 200 && r.position > 0);
+  }).filter((r: ReplayDriver) => !!r.name && r.lap >= 30 && r.lap <= 200 && r.position > 0);
   const player = rows.find((r) => r.name.trim().toLowerCase() === playerName.trim().toLowerCase());
   if (!player) return null;
   const rival = rows.find((r) => r.position === (player.position === 1 ? 2 : 1));
