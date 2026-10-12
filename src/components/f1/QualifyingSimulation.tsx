@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabase";
 import { getActiveCareer } from "@/lib/career";
 import { trackMapUrl, trackMapFallbackUrl, trackSlug } from "@/lib/f1-shell";
-import { replayPair, lapProgress, pointOnLine, ZANDVOORT_LINE, type Point, type QualiResult } from "@/lib/quali-simulation";
+import { replayPair, lapProgress, liveGap, pointOnLine, ZANDVOORT_LINE, type Point, type QualiResult } from "@/lib/quali-simulation";
 
 type QualiSession = { id: string; driver_name: string; track_name: string; category: string; session_type: string; results: QualiResult[] };
 const format = (t: number) => `${Math.floor(t / 60)}:${(t % 60).toFixed(3).padStart(6, "0")}`;
@@ -89,6 +89,19 @@ export function QualifyingSimulation({ season, track, cat }: { season: number; t
     return () => document.removeEventListener("visibilitychange", pause);
   }, []);
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code !== "Space" || editing || !pair || line.length < 3) return;
+      const t = e.target as HTMLElement;
+      if (/INPUT|SELECT|TEXTAREA|BUTTON/.test(t.tagName)) return;
+      e.preventDefault();
+      if (elapsed >= duration) setElapsed(0);
+      setPlaying((p) => !p);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [editing, pair, line.length, elapsed, duration]);
+
   function saveLine() {
     if (draft.length < 3) return;
     setLine(draft);
@@ -107,7 +120,7 @@ export function QualifyingSimulation({ season, track, cat }: { season: number; t
       <div className="flex flex-wrap gap-2" role="group" aria-label="Qualifying sessions">
         {sessions.map((s) => <Button key={s.id} variant={selected === s.id ? "default" : "outline"} onClick={() => setSelected(s.id)} aria-pressed={selected === s.id}>{s.session_type || s.category}</Button>)}
       </div>
-      <span className="text-xs text-muted-foreground">Estimated pace · lap-time based</span>
+      <span className="text-xs text-muted-foreground">{pair?.player.sectors && pair?.rival.sectors ? "Sector-paced estimate · Space to play" : "Estimated pace · lap-time based · Space to play"}</span>
     </div>
     {status && <p className="mb-4 text-sm text-muted-foreground" role="status">{status}</p>}
     {!status && !pair && <p className="mb-4 text-sm text-muted-foreground">A valid player lap and {session?.results?.some((r) => r.name === session.driver_name && Number(r.position) === 1) ? "P2" : "P1"} lap are needed for this session.</p>}
@@ -122,8 +135,15 @@ export function QualifyingSimulation({ season, track, cat }: { season: number; t
       }}>
         {editing && visibleLine.length > 0 && <><polyline points={visibleLine.map((p) => `${p.x * 1080},${p.y * 608}`).join(" ")} fill="none" stroke="currentColor" strokeWidth="3" className="text-replay-rival" />
           {visibleLine.map((p,i) => <circle key={i} cx={p.x*1080} cy={p.y*608} r={i === 0 ? 8 : 4} fill="currentColor" className={i === 0 ? "text-replay-player" : "text-replay-rival"}/>)}</>}
+        {!editing && line.length >= 3 && <polyline points={[...line, line[0]].map((p) => `${p.x * 1080},${p.y * 608}`).join(" ")} fill="none" stroke="currentColor" strokeOpacity="0.18" strokeWidth="2" strokeDasharray="6 6" className="text-foreground" />}
+        {!editing && line.length >= 3 && [0, 1 / 3, 2 / 3].map((f, i) => { const m = pointOnLine(line, f); return <g key={f} transform={`translate(${m.x*1080} ${m.y*608})`} className="text-muted-foreground"><rect x="-14" y="-10" width="28" height="20" rx="4" fill="var(--background)" stroke="currentColor" strokeWidth="1.5"/><text y="5" textAnchor="middle" fontSize="12" fontWeight="700" fill="currentColor">{i === 0 ? "S/F" : `S${i + 1}`}</text></g>; })}
         {!editing && line.length >= 3 && dots.map((d) => {
-          const p = pointOnLine(line, lapProgress(elapsed,d.lap));
+          const prog = lapProgress(elapsed, d.lap, d.sectors);
+          const trail = Array.from({ length: 12 }, (_, i) => pointOnLine(line, Math.max(0, prog - (i + 1) * 0.004)));
+          return <g key={d.role + "trail"} className={d.className}>{trail.map((t, i) => <circle key={i} cx={t.x*1080} cy={t.y*608} r={8 - i * 0.55} fill="currentColor" opacity={0.35 - i * 0.028} />)}</g>;
+        })}
+        {!editing && line.length >= 3 && dots.map((d) => {
+          const p = pointOnLine(line, lapProgress(elapsed,d.lap,d.sectors));
           return <g key={d.role} className={d.className} transform={`translate(${p.x*1080} ${p.y*608})`}>
             <circle r="11" fill="currentColor" stroke="var(--background)" strokeWidth="3" />
             <text y={d.role === "You" ? -19 : 29} textAnchor="middle" fill="currentColor" fontSize="18" fontWeight="700">{d.role}</text>
@@ -139,6 +159,7 @@ export function QualifyingSimulation({ season, track, cat }: { season: number; t
           {[0.5,1,2,4,8].map((n) => <option key={n} value={n}>{n}×</option>)}
         </select>
         <span className="font-mono text-sm tabular-nums">{format(elapsed)}</span>
+        {pair && elapsed > 0 && (() => { const g = liveGap(elapsed, pair.player, pair.rival); return <span className={`rounded px-2 py-0.5 font-mono text-xs font-bold tabular-nums ${g > 0 ? "bg-destructive/15 text-destructive" : "bg-primary/15 text-primary"}`} title="Live gap to the other driver">{g > 0 ? "+" : "−"}{Math.abs(g).toFixed(3)}</span>; })()}
       </div>
       {!editing ? <Button variant="ghost" disabled={imageFailed} onClick={() => {setDraft([]);setEditing(true);setPlaying(false);}}><Pencil/>Set racing line</Button> : <div className="flex items-center gap-1">
         <Button variant="ghost" size="icon" aria-label="Undo point" title="Undo point" disabled={!draft.length} onClick={() => setDraft((p) => p.slice(0,-1))}><Undo2/></Button>
@@ -153,7 +174,7 @@ export function QualifyingSimulation({ season, track, cat }: { season: number; t
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
       {dots.map((d) => <div key={d.role} className="flex min-w-0 items-center justify-between gap-3 border-b border-border pb-3">
         <div className="flex min-w-0 items-center gap-2"><span className={`h-2.5 w-2.5 shrink-0 rounded-full bg-current ${d.className}`}/><div className="min-w-0"><div className="truncate text-sm font-bold">{d.name}</div><div className="text-xs text-muted-foreground">{d.role} · P{d.position}{elapsed >= d.lap ? " · Finished" : ""}</div></div></div>
-        <span className="shrink-0 font-mono text-sm tabular-nums">{format(d.lap)}</span>
+        <div className="shrink-0 text-right"><div className="font-mono text-sm tabular-nums">{format(d.lap)}</div>{d.sectors && <div className="font-mono text-[11px] text-muted-foreground tabular-nums">{d.sectors.map((x) => x.toFixed(3)).join(" · ")}</div>}</div>
       </div>)}
     </div>
     {pair && <div className="mt-4 flex flex-wrap justify-between gap-2 text-sm"><span className="text-muted-foreground">Lap-time difference</span><span className="font-mono">{pair.player.lap >= pair.rival.lap ? "+" : "−"}{Math.abs(pair.player.lap-pair.rival.lap).toFixed(3)}s</span></div>}
