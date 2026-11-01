@@ -100,7 +100,7 @@ export async function shareSeasonStats(stats: SeasonSummary): Promise<"shared" |
     ["Q2 APPEARANCES", String(stats.q2Apps), `of ${stats.q1Apps}`],
     ["Q1 EXITS", String(Math.max(0, stats.q1Apps - stats.q2Apps))],
     ["AVG QUALI", fmtPos(stats.avgQuali)],
-    ["AVG GRID", fmtPos(stats.avgGrid)],
+    ["PODIUM RATE", stats.starts ? `${Math.round((stats.podiums / stats.starts) * 100)}%` : "—"],
     ["STARTS", String(stats.starts)],
     ["LAPS", String(stats.lapsCompleted)],
   ];
