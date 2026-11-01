@@ -299,10 +299,11 @@ export type SeasonSummary = {
   avgQuali: number | null;
 };
 
-const QUALI_STAGE: Record<string, number> = { q1: 1, q2: 2, q3: 3 };
-function qualiStage(s: Session): number {
+// 1-3 for Q1/Q2/Q3 ("Qualifying 2", "Q2", …); 4 for one-session formats.
+export function qualiStage(s: Pick<Session, "session_type">): number {
   const st = String(s.session_type || "").toLowerCase().replace(/\s+/g, "");
-  return QUALI_STAGE[st] ?? (/(^|[^a-z])q?3$|qualifying3/.test(st) ? 3 : /qualifying2|q2/.test(st) ? 2 : /qualifying1|q1/.test(st) ? 1 : 4);
+  const m = st.match(/^(?:q|qualifying)([123])$/);
+  return m ? Number(m[1]) : 4;
 }
 function isGpQuali(s: Session): boolean {
   const txt = `${s.category} ${s.session_type ?? ""}`.toLowerCase();
