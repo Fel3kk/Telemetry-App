@@ -926,19 +926,27 @@ async function handleFileUpload(e) {
       data = sanitizeDeep(data);
       const playerData = processTelemetryData(data);
       if (playerData && playerData.length > 0) {
-        const session = playerData[0];
-        session.category = category;
-        session.season = currentSeason;
-        if (session.track_name === "Unknown" || !session.track_name) {
-          const parts = filename.replace(".json", "").split(/[_-]/);
-          const trackGuess = parts.find((p) => !["race", "sprint", "quali", "qualifying"].includes(p));
-          if (trackGuess) session.track_name = trackGuess;
-        }
-        sessionsToPersist.push(session);
+        // Pre-made summaries (e.g. the race/quali templates) can hold several
+        // sessions in one file — save each one with its own category.
+        const isSummary = Array.isArray(data) && data[0] && data[0].lap_history;
+        const list = isSummary ? playerData.filter((s) => s && typeof s === "object") : [playerData[0]];
+        const labels = [];
+        list.forEach((session) => {
+          session.category = (isSummary && session.category) || category;
+          session.season = currentSeason;
+          if (session.track_name === "Unknown" || !session.track_name) {
+            const parts = filename.replace(".json", "").split(/[_-]/);
+            const trackGuess = parts.find((p) => !["race", "sprint", "quali", "qualifying"].includes(p));
+            if (trackGuess) session.track_name = trackGuess;
+          }
+          sessionsToPersist.push(session);
+          lastProcessedSession = session;
+          labels.push(session.session_type || session.category);
+        });
         sessionRow.push(row);
-        lastProcessedSession = session;
+        const first = list[0];
         row.status = "working";
-        row.msg = `${category} · ${session.track_name || "Unknown track"} — ready to save`;
+        row.msg = `${list.length > 1 ? labels.join(", ") : first.category} · ${first.track_name || "Unknown track"} — ready to save`;
       } else {
         row.status = "error";
         row.msg = "No player driver found (is-player: true). Make sure this is your own session file.";
