@@ -16,10 +16,14 @@ import {
   badgesFor,
   racePosition,
   appEmbedUrl,
+  isRaceResultSession,
+  roundOrder,
   type Session,
 } from "@/lib/f1-shell";
 import { ShellHeader, ShellPage } from "@/components/f1/ShellHeader";
+import { TemplateExamples } from "@/components/f1/TemplateExamples";
 import { shareSeasonStats } from "@/lib/share-stats";
+import { seasonSummary } from "@/lib/f1-stats";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -28,6 +32,8 @@ export const Route = createFileRoute("/")({
       { name: "description", content: "Season standings, race stories, and telemetry from your F1 uploads." },
       { property: "og:title", content: "F1 Telemetry Analyzer" },
       { property: "og:description", content: "Season standings, race stories, and telemetry from your F1 uploads." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: MainPage,
@@ -85,7 +91,17 @@ function MainPage() {
     [sessions, season],
   );
   const stats = useMemo(() => seasonStats(seasonSessions), [seasonSessions]);
-  const trackGroups = useMemo(() => groupByTrack(seasonSessions), [seasonSessions]);
+  // Rounds follow the order tracks were first driven, so modded tracks slot in naturally.
+  const rounds = useMemo(() => roundOrder(seasonSessions), [seasonSessions]);
+  const trackGroups = useMemo(
+    () =>
+      groupByTrack(seasonSessions).sort(
+        (a, b) =>
+          (rounds.get(trackSlug(a.track)) ?? 999) - (rounds.get(trackSlug(b.track)) ?? 999) ||
+          (a.category === "Sprint" ? -1 : 0) - (b.category === "Sprint" ? -1 : 0),
+      ),
+    [seasonSessions, rounds],
+  );
 
   const pick = (n: number) => { setSeason(n); setSavedSeason(n); };
 
@@ -135,11 +151,14 @@ function MainPage() {
                 ⏱️
                 <span className="truncate">Records</span>
               </Link>
-              <ShareButton season={season} stats={stats} />
+              <ShareButton season={season} sessions={seasonSessions} />
             </div>
           </div>
           <div className="mt-2.5 border-t border-border pt-2.5 sm:mt-3 sm:pt-3">
             <UploadPanel season={season} />
+            <div className="mt-1 flex justify-end">
+              <TemplateExamples />
+            </div>
           </div>
         </section>
 
@@ -168,6 +187,7 @@ function MainPage() {
               track={g.track}
               category={g.category}
               sessions={g.sessions}
+              round={rounds.get(trackSlug(g.track)) ?? null}
             />
           ))}
         </div>
@@ -231,14 +251,14 @@ function StatsBar({ stats }: { stats: ReturnType<typeof seasonStats> }) {
   );
 }
 
-function ShareButton({ season, stats }: { season: number; stats: ReturnType<typeof seasonStats> }) {
+function ShareButton({ season, sessions }: { season: number; sessions: Session[] }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const onShare = async () => {
     setBusy(true);
     setMsg(null);
     try {
-      const res = await shareSeasonStats({ season, ...stats });
+      const res = await shareSeasonStats(seasonSummary(sessions, season));
       setMsg(res === "shared" ? "Shared ✓" : "Image saved ✓");
     } catch {
       setMsg("Could not create the image");
@@ -271,7 +291,7 @@ function ShareButton({ season, stats }: { season: number; stats: ReturnType<type
   );
 }
 
-function TrackCard({ season, track, category, sessions }: { season: number; track: string; category: string; sessions: Session[] }) {
+function TrackCard({ season, track, category, sessions, round }: { season: number; track: string; category: string; sessions: Session[]; round: number | null }) {
   const badgeAgg: Record<string, boolean> = {};
   sessions.forEach((s) => {
     const b = badgesFor(s);
@@ -292,6 +312,15 @@ function TrackCard({ season, track, category, sessions }: { season: number; trac
   const fin = main ? racePosition(main) : null;
   const start = main?.starting_position ?? null;
   const gained = fin && start ? start - fin : null;
+  // Retired with no classified finish: show the grid slot and the DNF instead of "no result".
+  const dnfSession = !main ? sessions.find((s) => isRaceResultSession(s) && badgesFor(s).dnf) : undefined;
+  const dnfStart = dnfSession?.starting_position ?? null;
+  const dnfLaps = (() => {
+    if (!dnfSession) return null;
+    const me = String(dnfSession.race_story?.player_name || dnfSession.driver_name || "").toUpperCase();
+    const row = (dnfSession.race_story?.classification ?? []).find((e: any) => String(e?.name || "").toUpperCase() === me);
+    return Number(row?.laps) || null;
+  })();
   return (
     <Link
       to="/season/$season/track/$track"
@@ -329,6 +358,11 @@ function TrackCard({ season, track, category, sessions }: { season: number; trac
         {badgeAgg.dnf && <Tag color="#ef4444">DNF</Tag>}
       </div>
       <div className="absolute left-4 top-3 flex items-center gap-1.5">
+        {round != null && (
+          <span className="rounded bg-black/50 px-1.5 py-0.5 font-mono text-[10px] font-black text-white/80 backdrop-blur-sm">
+            R{round}
+          </span>
+        )}
         <span
           className={
             "rounded px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.15em] " +
@@ -359,6 +393,19 @@ function TrackCard({ season, track, category, sessions }: { season: number; trac
             {gained !== null && gained !== 0 && (
               <span className={"rounded px-1.5 py-0.5 font-mono text-xs font-bold " + (gained > 0 ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400")}>
                 {gained > 0 ? `▲ +${gained}` : `▼ ${gained}`}
+              </span>
+            )}
+          </div>
+        ) : dnfSession ? (
+          <div className="flex items-end justify-between">
+            <div className="flex items-baseline gap-2 font-mono">
+              {dnfStart && <span className="text-sm text-white/45">P{dnfStart}</span>}
+              {dnfStart && <span className="text-white/30">→</span>}
+              <span className="text-3xl font-black leading-none text-red-400 sm:text-4xl">DNF</span>
+            </div>
+            {dnfLaps && (
+              <span className="rounded bg-red-500/15 px-1.5 py-0.5 font-mono text-xs font-bold text-red-400">
+                Lap {dnfLaps}
               </span>
             )}
           </div>
