@@ -1,7 +1,7 @@
 // Shared season computations for the React shell (title race, records wall).
 // Reuses the same classification data the legacy app uses for standings.
 
-import { isRaceResultSession, trackSlug, type Session } from "./f1-shell";
+import { badgesFor, isRaceResultSession, racePosition, roundOrder, trackSlug, type Session } from "./f1-shell";
 
 export const RACE_POINTS = [0, 25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
 export const SPRINT_POINTS = [0, 8, 7, 6, 5, 4, 3, 2, 1];
@@ -140,16 +140,116 @@ export function saveExcludedTracks(excluded: Set<string>, season?: number) {
   }
 }
 
+// Max points one driver can still take per weekend type.
+export const GP_MAX_POINTS = 26; // win + fastest lap
+export const SPRINT_MAX_POINTS = SPRINT_POINTS[1]; // sprint win
+
+// Real 2026 sprint weekends — used as the starting list for a new season.
+export const DEFAULT_SPRINT_WEEKENDS = ["shanghai", "miami", "montreal", "silverstone", "zandvoort", "singapore"];
+
+function loadSlugSet(key: string, fallback: string[]): Set<string> {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw == null) return new Set(fallback);
+    const arr = JSON.parse(raw);
+    return new Set<string>(Array.isArray(arr) ? arr.map(String) : []);
+  } catch {
+    return new Set(fallback);
+  }
+}
+function saveSlugSet(key: string, set: Set<string>) {
+  try {
+    localStorage.setItem(key, JSON.stringify(Array.from(set)));
+  } catch {
+    /* ignore */
+  }
+}
+
+// Which weekends of a season have a sprint, saved per season on this device.
+export const loadSprintWeekends = (season: number) =>
+  loadSlugSet(`f1_sprint_weekends_s${season}`, DEFAULT_SPRINT_WEEKENDS);
+export const saveSprintWeekends = (set: Set<string>, season: number) =>
+  saveSlugSet(`f1_sprint_weekends_s${season}`, set);
+
+// Modded / extra tracks the user added to a season's calendar.
+export const loadExtraTracks = (season: number) => loadSlugSet(`f1_extra_tracks_s${season}`, []);
+export const saveExtraTracks = (set: Set<string>, season: number) =>
+  saveSlugSet(`f1_extra_tracks_s${season}`, set);
+
+export type CalendarRound = {
+  slug: string;
+  name: string;
+  done: boolean; // Grand Prix result uploaded
+  sprint: boolean; // sprint weekend
+  sprintDone: boolean;
+  round: number | null; // order driven (first session date), null if not driven yet
+};
+
+function prettyTrack(name: string): string {
+  return String(name || "")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+export type TitleOptions = {
+  excluded?: Set<string>;
+  sprints?: Set<string>;
+  extras?: Set<string>;
+  extraNames?: Record<string, string>;
+};
+
 export function computeTitleMath(
   sessions: Session[],
   season: number,
-  excluded: Set<string> = new Set(),
-): TitleMath {
+  excludedOrOpts: Set<string> | TitleOptions = new Set(),
+): TitleMath & { rounds: CalendarRound[]; sprintsLeft: number } {
+  const opts: TitleOptions = excludedOrOpts instanceof Set ? { excluded: excludedOrOpts } : excludedOrOpts;
+  const excluded = opts.excluded ?? new Set<string>();
+  const sprints = opts.sprints ?? new Set<string>();
+  const extras = opts.extras ?? new Set<string>();
   const seasonSessions = sessions.filter((s) => Number(s.season) === season);
   const standings = computeStandings(seasonSessions);
   const races = seasonSessions.filter((s) => isRaceResultSession(s) === "Race");
+  const sprintRaces = seasonSessions.filter((s) => isRaceResultSession(s) === "Sprint");
   const racedSlugs = new Set(races.map((s) => trackSlug(s.track_name)));
-  const remaining = SEASON_CALENDAR.filter((t) => !racedSlugs.has(t.slug) && !excluded.has(t.slug));
+  const sprintedSlugs = new Set(sprintRaces.map((s) => trackSlug(s.track_name)));
+  const order = roundOrder(seasonSessions);
+
+  // Calendar = official tracks + user-added extras + any track already driven
+  // (mods appear automatically). Driven rounds come first, in the order they
+  // were driven; the rest keep calendar order.
+  const names = new Map<string, string>(SEASON_CALENDAR.map((t) => [t.slug, t.name]));
+  for (const slug of extras) if (!names.has(slug)) names.set(slug, opts.extraNames?.[slug] ?? prettyTrack(slug));
+  for (const s of seasonSessions) {
+    const slug = trackSlug(s.track_name);
+    if (slug && !names.has(slug)) names.set(slug, opts.extraNames?.[slug] ?? prettyTrack(s.track_name));
+  }
+  const calIndex = (slug: string) => {
+    const i = SEASON_CALENDAR.findIndex((t) => t.slug === slug);
+    return i === -1 ? 1000 : i;
+  };
+  const rounds: CalendarRound[] = [...names.entries()]
+    .map(([slug, name]) => ({
+      slug,
+      name,
+      done: racedSlugs.has(slug),
+      sprint: sprints.has(slug) || sprintedSlugs.has(slug),
+      sprintDone: sprintedSlugs.has(slug),
+      round: order.get(slug) ?? null,
+    }))
+    .sort((a, b) => {
+      if (a.round != null && b.round != null) return a.round - b.round;
+      if (a.round != null) return -1;
+      if (b.round != null) return 1;
+      return calIndex(a.slug) - calIndex(b.slug) || a.name.localeCompare(b.name);
+    });
+
+  const remaining = rounds
+    .filter((r) => !r.done && !excluded.has(r.slug))
+    .map((r) => ({ slug: r.slug, name: r.name }));
+  const sprintsLeft = rounds.filter(
+    (r) => r.sprint && !r.sprintDone && !r.done && !excluded.has(r.slug),
+  ).length;
   const playerName = playerNameOf(seasonSessions[seasonSessions.length - 1] ?? ({} as Session));
   const player = standings.find((d) => d.name === playerName) ?? null;
   const leader = standings[0] ?? null;
@@ -162,7 +262,139 @@ export function computeTitleMath(
     racedSlugs,
     remaining,
     racesLeft,
-    maxPointsLeft: racesLeft * 26,
+    sprintsLeft,
+    rounds,
+    maxPointsLeft: racesLeft * GP_MAX_POINTS + sprintsLeft * SPRINT_MAX_POINTS,
+  };
+}
+
+// ---------------------------------------------------------------
+// Season summary (share card)
+// ---------------------------------------------------------------
+export type SeasonSummary = {
+  season: number;
+  championshipPos: number | null;
+  totalPoints: number;
+  avgPoints: number | null; // per race start (GP + sprint)
+  starts: number; // GP + sprint starts
+  gpStarts: number;
+  sprintStarts: number;
+  wins: number;
+  sprintWins: number;
+  podiums: number;
+  pointsFinishes: number;
+  poles: number;
+  sprintPoles: number;
+  fastestLaps: number;
+  dnfs: number;
+  finishRate: number | null; // % of starts finished
+  avgFinish: number | null;
+  avgGrid: number | null;
+  bestFinish: number | null;
+  positionsGained: number; // net, finished races only
+  lapsCompleted: number;
+  q3: number;
+  q2Exits: number;
+  q1Exits: number;
+  avgQuali: number | null;
+};
+
+const QUALI_STAGE: Record<string, number> = { q1: 1, q2: 2, q3: 3 };
+function qualiStage(s: Session): number {
+  const st = String(s.session_type || "").toLowerCase().replace(/\s+/g, "");
+  return QUALI_STAGE[st] ?? (/(^|[^a-z])q?3$|qualifying3/.test(st) ? 3 : /qualifying2|q2/.test(st) ? 2 : /qualifying1|q1/.test(st) ? 1 : 4);
+}
+function isGpQuali(s: Session): boolean {
+  const txt = `${s.category} ${s.session_type ?? ""}`.toLowerCase();
+  return /quali/.test(txt) && !/sprint|shootout/.test(txt);
+}
+const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
+
+export function seasonSummary(sessions: Session[], season: number): SeasonSummary {
+  const seasonSessions = sessions.filter((s) => Number(s.season) === season);
+  const standings = computeStandings(seasonSessions);
+  const scoring = seasonSessions.filter((s) => isRaceResultSession(s));
+  const playerName = playerNameOf(seasonSessions[0] ?? ({} as Session));
+  const standingIdx = standings.findIndex((d) => d.name === playerName);
+
+  let wins = 0, sprintWins = 0, podiums = 0, pointsFinishes = 0, poles = 0, sprintPoles = 0;
+  let fastestLaps = 0, dnfs = 0, gpStarts = 0, sprintStarts = 0, positionsGained = 0, laps = 0;
+  const finishes: number[] = [];
+  const grids: number[] = [];
+  for (const s of scoring) {
+    const kind = isRaceResultSession(s);
+    const b = badgesFor(s);
+    if (kind === "Sprint") sprintStarts += 1;
+    else gpStarts += 1;
+    if (b.win) kind === "Sprint" ? sprintWins++ : wins++;
+    if (b.pole) kind === "Sprint" ? sprintPoles++ : poles++;
+    if (b.podium) podiums += 1;
+    if (b.fl) fastestLaps += 1;
+    const me = classificationOf(s).find((e: any) => String(e?.name || "").toUpperCase() === playerNameOf(s));
+    laps += Number(me?.laps) || 0;
+    const gridEntry = Array.isArray(s.race_story?.starting_grid)
+      ? s.race_story.starting_grid.find((e: any) => String(e?.name || "").toUpperCase() === playerNameOf(s))
+      : null;
+    const grid = Number(gridEntry?.position || s.starting_position) || 0;
+    if (kind === "Race" && grid > 0) grids.push(grid);
+    if (b.dnf) {
+      dnfs += 1;
+      continue;
+    }
+    const fin = racePosition(s);
+    if (!fin) continue;
+    finishes.push(fin);
+    if (fin <= (kind === "Sprint" ? 8 : 10)) pointsFinishes += 1;
+    if (grid > 0) positionsGained += grid - fin;
+  }
+
+  // Furthest qualifying stage per GP weekend, from the deepest session uploaded.
+  const byTrack = new Map<string, Session[]>();
+  for (const s of seasonSessions.filter(isGpQuali)) {
+    const slug = trackSlug(s.track_name);
+    byTrack.set(slug, [...(byTrack.get(slug) ?? []), s]);
+  }
+  let q3 = 0, q2Exits = 0, q1Exits = 0;
+  const qualiPositions: number[] = [];
+  for (const list of byTrack.values()) {
+    const deepest = [...list].sort((a, b) => qualiStage(b) - qualiStage(a))[0];
+    const stage = qualiStage(deepest);
+    const pos = Number(deepest.finishing_position) || 0;
+    if (pos <= 0) continue;
+    qualiPositions.push(pos);
+    if (stage === 3 || (stage === 4 && pos <= 10)) q3 += 1;
+    else if (stage === 2 || (stage === 4 && pos <= 16)) q2Exits += 1;
+    else q1Exits += 1;
+  }
+
+  const starts = gpStarts + sprintStarts;
+  const totalPoints = standingIdx >= 0 ? standings[standingIdx].points : 0;
+  return {
+    season,
+    championshipPos: standingIdx >= 0 ? standingIdx + 1 : null,
+    totalPoints,
+    avgPoints: starts ? totalPoints / starts : null,
+    starts,
+    gpStarts,
+    sprintStarts,
+    wins,
+    sprintWins,
+    podiums,
+    pointsFinishes,
+    poles,
+    sprintPoles,
+    fastestLaps,
+    dnfs,
+    finishRate: starts ? ((starts - dnfs) / starts) * 100 : null,
+    avgFinish: avg(finishes),
+    avgGrid: avg(grids),
+    bestFinish: finishes.length ? Math.min(...finishes) : null,
+    positionsGained,
+    lapsCompleted: laps,
+    q3,
+    q2Exits,
+    q1Exits,
+    avgQuali: avg(qualiPositions),
   };
 }
 
