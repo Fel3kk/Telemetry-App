@@ -293,9 +293,9 @@ export type SeasonSummary = {
   bestFinish: number | null;
   positionsGained: number; // net, finished races only
   lapsCompleted: number;
-  q3: number;
-  q2Exits: number;
-  q1Exits: number;
+  q1Apps: number; // GP weekends with qualifying uploaded
+  q2Apps: number; // reached Q2 (includes Q3)
+  q3Apps: number; // reached Q3
   avgQuali: number | null;
 };
 
@@ -355,17 +355,19 @@ export function seasonSummary(sessions: Session[], season: number): SeasonSummar
     const slug = trackSlug(s.track_name);
     byTrack.set(slug, [...(byTrack.get(slug) ?? []), s]);
   }
-  let q3 = 0, q2Exits = 0, q1Exits = 0;
+  // Appearances are cumulative: reaching Q3 also counts as a Q2 and Q1 appearance.
+  let q1Apps = 0, q2Apps = 0, q3Apps = 0;
   const qualiPositions: number[] = [];
   for (const list of byTrack.values()) {
-    const deepest = [...list].sort((a, b) => qualiStage(b) - qualiStage(a))[0];
-    const stage = qualiStage(deepest);
-    const pos = Number(deepest.finishing_position) || 0;
-    if (pos <= 0) continue;
-    qualiPositions.push(pos);
-    if (stage === 3 || (stage === 4 && pos <= 10)) q3 += 1;
-    else if (stage === 2 || (stage === 4 && pos <= 16)) q2Exits += 1;
-    else q1Exits += 1;
+    const pos = (stage: number) => Number(list.find((s) => qualiStage(s) === stage)?.finishing_position) || 0;
+    const p1 = pos(1), p2 = pos(2), p3 = pos(3), single = pos(4);
+    const final = p3 || p2 || p1 || single;
+    if (final > 0) qualiPositions.push(final);
+    const reachedQ3 = p3 > 0 || (p2 > 0 && p2 <= 10) || (single > 0 && single <= 10);
+    const reachedQ2 = reachedQ3 || p2 > 0 || (p1 > 0 && p1 <= 16) || (single > 0 && single <= 16);
+    q1Apps += 1;
+    if (reachedQ2) q2Apps += 1;
+    if (reachedQ3) q3Apps += 1;
   }
 
   const starts = gpStarts + sprintStarts;
@@ -392,9 +394,9 @@ export function seasonSummary(sessions: Session[], season: number): SeasonSummar
     bestFinish: finishes.length ? Math.min(...finishes) : null,
     positionsGained,
     lapsCompleted: laps,
-    q3,
-    q2Exits,
-    q1Exits,
+    q1Apps,
+    q2Apps,
+    q3Apps,
     avgQuali: avg(qualiPositions),
   };
 }
