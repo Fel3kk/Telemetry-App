@@ -265,6 +265,9 @@ const TRACK_FLAGS: Record<string, string> = {
   brazil: "🇧🇷", las_vegas: "🇺🇸", lasvegas: "🇺🇸", "las vegas": "🇺🇸",
   vegas: "🇺🇸", losail: "🇶🇦", qatar: "🇶🇦", abu_dhabi: "🇦🇪",
   yas_marina: "🇦🇪", abu: "🇦🇪", "abu dhabi": "🇦🇪",
+  india: "🇮🇳", hockenheim: "🇩🇪", nurburgring: "🇩🇪", istanbul: "🇹🇷",
+  portimao: "🇵🇹", sepang: "🇲🇾", sochi: "🇷🇺", paul_ricard: "🇫🇷", mugello: "🇮🇹",
+  yeongam: "🇰🇷", kyalami: "🇿🇦", valencia: "🇪🇸", fuji: "🇯🇵",
 };
 export function trackFlag(name: string) {
   return TRACK_FLAGS[trackSlug(name)] || "🏁";
