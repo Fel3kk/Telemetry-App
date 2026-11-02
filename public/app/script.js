@@ -1359,7 +1359,7 @@ function normalizeSessionSummary(o) {
   const category = o.category || o.session_type || null;
   const isRaceLike = /race|sprint/i.test(String(category || "")) && !/shootout|quali/i.test(String(category || ""));
   const baseStory = o.race_story && typeof o.race_story === "object" ? o.race_story : {};
-  const race_story = isRaceLike || classification.length
+  const race_story = isRaceLike
     ? {
         position_history: [],
         podium: [],
