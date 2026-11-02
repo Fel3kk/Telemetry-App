@@ -124,7 +124,8 @@ export function QualifyingSimulation({ season, track, cat }: { season: number; t
     </div>
     {status && <p className="mb-4 text-sm text-muted-foreground" role="status">{status}</p>}
     {!status && !pair && <p className="mb-4 text-sm text-muted-foreground">A valid player lap and {session?.results?.some((r) => r.name === session.driver_name && Number(r.position) === 1) ? "P2" : "P1"} lap are needed for this session.</p>}
-    <div className="relative aspect-[1080/608] w-full overflow-hidden bg-background">
+    <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,340px)] lg:items-start">
+    <div className="relative aspect-[1080/608] w-full min-w-0 overflow-hidden rounded-md border border-border bg-background">
       {!imageFailed && <img src={image} alt={`${track} circuit`} className="absolute inset-0 h-full w-full object-fill" onError={() => {
         if (image !== trackMapFallbackUrl(track)) setImage(trackMapFallbackUrl(track)); else setImageFailed(true);
       }} />}
@@ -145,36 +146,53 @@ export function QualifyingSimulation({ season, track, cat }: { season: number; t
         })}
       </svg>}
     </div>
-    <div className="flex flex-wrap items-center justify-between gap-3 border-y border-border py-3">
-      <div className="flex items-center gap-2">
-        <Button size="icon" aria-label={playing ? "Pause simulation" : "Play simulation"} title={playing ? "Pause" : "Play"} disabled={!pair || line.length < 3 || editing || imageFailed} onClick={() => { if (elapsed >= duration) setElapsed(0); setPlaying((p) => !p); }}>{playing ? <Pause/> : <Play/>}</Button>
-        <Button variant="outline" size="icon" title="Restart" aria-label="Restart simulation" disabled={!pair} onClick={() => {setPlaying(false);setElapsed(0);}}><RotateCcw/></Button>
-        <div className="flex items-center gap-2" role="group" aria-label="Playback speed">
-          <span className="text-xs text-muted-foreground">Speed</span>
-          <input type="range" aria-label="Playback speed" min="0.25" max="8" step="0.25" value={speed} onChange={(e) => setSpeed(Number(e.target.value))} className="h-1.5 w-24 sm:w-32 accent-primary" />
-          <span className="w-12 font-mono text-xs tabular-nums" aria-live="polite">{speed}×</span>
+
+    <aside className="flex min-w-0 flex-col gap-3 rounded-md border border-border bg-card/40 p-3" aria-label="Simulation controls">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Button size="icon" aria-label={playing ? "Pause simulation" : "Play simulation"} title={playing ? "Pause" : "Play"} disabled={!pair || line.length < 3 || editing || imageFailed} onClick={() => { if (elapsed >= duration) setElapsed(0); setPlaying((p) => !p); }}>{playing ? <Pause/> : <Play/>}</Button>
+          <Button variant="outline" size="icon" title="Restart" aria-label="Restart simulation" disabled={!pair} onClick={() => {setPlaying(false);setElapsed(0);}}><RotateCcw/></Button>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-sm tabular-nums">{format(elapsed)}</span>
+          {pair && elapsed > 0 && (() => { const g = liveGap(elapsed, pair.player, pair.rival); return <span className={`rounded px-2 py-0.5 font-mono text-xs font-bold tabular-nums ${g > 0 ? "bg-destructive/15 text-destructive" : "bg-primary/15 text-primary"}`} title="Live gap to the other driver">{g > 0 ? "+" : "−"}{Math.abs(g).toFixed(3)}</span>; })()}
+        </div>
+      </div>
+
+      <label className="block">
+        <span className="mb-1 block text-[11px] uppercase tracking-wider text-muted-foreground">Lap position</span>
+        <input type="range" aria-label="Lap playback position" min="0" max={duration || 1} step="0.01" value={elapsed} disabled={!pair || editing} onChange={(e) => {setPlaying(false);setElapsed(Number(e.target.value));}} className="w-full accent-primary"/>
+      </label>
+
+      <div role="group" aria-label="Playback speed">
+        <div className="mb-1 flex items-center justify-between">
+          <span className="text-[11px] uppercase tracking-wider text-muted-foreground">Speed</span>
+          <span className="font-mono text-xs tabular-nums" aria-live="polite">{speed}×</span>
+        </div>
+        <div className="flex items-center gap-1">
           <Button variant="ghost" size="icon" aria-label="Slow down playback" title="Slower" disabled={speed <= 0.25} onClick={() => setSpeed((s) => Math.max(0.25, Math.round((s - 0.25) * 100) / 100))}><Minus/></Button>
+          <input type="range" aria-label="Playback speed" min="0.25" max="8" step="0.25" value={speed} onChange={(e) => setSpeed(Number(e.target.value))} className="h-1.5 min-w-0 flex-1 accent-primary" />
           <Button variant="ghost" size="icon" aria-label="Speed up playback" title="Faster" disabled={speed >= 8} onClick={() => setSpeed((s) => Math.min(8, Math.round((s + 0.25) * 100) / 100))}><Plus/></Button>
         </div>
-        <span className="font-mono text-sm tabular-nums">{format(elapsed)}</span>
-        {pair && elapsed > 0 && (() => { const g = liveGap(elapsed, pair.player, pair.rival); return <span className={`rounded px-2 py-0.5 font-mono text-xs font-bold tabular-nums ${g > 0 ? "bg-destructive/15 text-destructive" : "bg-primary/15 text-primary"}`} title="Live gap to the other driver">{g > 0 ? "+" : "−"}{Math.abs(g).toFixed(3)}</span>; })()}
       </div>
-      {!editing ? <Button variant="ghost" disabled={imageFailed} onClick={() => {setDraft([]);setEditing(true);setPlaying(false);}}><Pencil/>Set racing line</Button> : <div className="flex items-center gap-1">
+
+      <div className="flex flex-col gap-2 border-y border-border py-3">
+        {dots.map((d) => <div key={d.role} className="flex min-w-0 items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2"><span className={`h-2.5 w-2.5 shrink-0 rounded-full bg-current ${d.className}`}/><div className="min-w-0"><div className="truncate text-sm font-bold">{d.name}</div><div className="text-xs text-muted-foreground">{d.role} · P{d.position}{elapsed >= d.lap ? " · Finished" : ""}</div></div></div>
+          <div className="shrink-0 text-right"><div className="font-mono text-sm tabular-nums">{format(d.lap)}</div>{d.sectors && <div className="font-mono text-[11px] text-muted-foreground tabular-nums">{d.sectors.map((x) => x.toFixed(3)).join(" · ")}</div>}</div>
+        </div>)}
+        {pair && <div className="flex flex-wrap justify-between gap-2 text-sm"><span className="text-muted-foreground">Lap-time difference</span><span className="font-mono">{pair.player.lap >= pair.rival.lap ? "+" : "−"}{Math.abs(pair.player.lap-pair.rival.lap).toFixed(3)}s</span></div>}
+      </div>
+
+      {!editing ? <Button variant="outline" className="w-full" disabled={imageFailed} onClick={() => {setDraft([]);setEditing(true);setPlaying(false);}}><Pencil/>Set racing line</Button> : <div className="flex items-center gap-1">
         <Button variant="ghost" size="icon" aria-label="Undo point" title="Undo point" disabled={!draft.length} onClick={() => setDraft((p) => p.slice(0,-1))}><Undo2/></Button>
-        <Button variant="outline" disabled={draft.length < 3} onClick={saveLine}><Check/>Save line</Button>
+        <Button variant="outline" className="flex-1" disabled={draft.length < 3} onClick={saveLine}><Check/>Save line</Button>
         <Button variant="ghost" size="icon" aria-label="Cancel line editing" title="Cancel" onClick={() => setEditing(false)}><X/></Button>
       </div>}
+      {editing && <p className="text-sm text-muted-foreground">Start at the finish line, then tap around the circuit in driving order. {draft.length} points.</p>}
+      {!editing && line.length < 3 && !imageFailed && <p className="text-sm text-muted-foreground">This track needs a racing line before playback is available.</p>}
+      {storageError && <p role="alert" className="text-sm text-destructive">{storageError}</p>}
+    </aside>
     </div>
-    {editing && <p className="mt-3 text-sm text-muted-foreground">Start at the finish line, then tap around the circuit in driving order. {draft.length} points.</p>}
-    {!editing && line.length < 3 && !imageFailed && <p className="mt-3 text-sm text-muted-foreground">This track needs a racing line before playback is available.</p>}
-    {storageError && <p role="alert" className="mt-3 text-sm text-destructive">{storageError}</p>}
-    <input type="range" aria-label="Lap playback position" min="0" max={duration || 1} step="0.01" value={elapsed} disabled={!pair || editing} onChange={(e) => {setPlaying(false);setElapsed(Number(e.target.value));}} className="my-4 w-full accent-primary"/>
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-      {dots.map((d) => <div key={d.role} className="flex min-w-0 items-center justify-between gap-3 border-b border-border pb-3">
-        <div className="flex min-w-0 items-center gap-2"><span className={`h-2.5 w-2.5 shrink-0 rounded-full bg-current ${d.className}`}/><div className="min-w-0"><div className="truncate text-sm font-bold">{d.name}</div><div className="text-xs text-muted-foreground">{d.role} · P{d.position}{elapsed >= d.lap ? " · Finished" : ""}</div></div></div>
-        <div className="shrink-0 text-right"><div className="font-mono text-sm tabular-nums">{format(d.lap)}</div>{d.sectors && <div className="font-mono text-[11px] text-muted-foreground tabular-nums">{d.sectors.map((x) => x.toFixed(3)).join(" · ")}</div>}</div>
-      </div>)}
-    </div>
-    {pair && <div className="mt-4 flex flex-wrap justify-between gap-2 text-sm"><span className="text-muted-foreground">Lap-time difference</span><span className="font-mono">{pair.player.lap >= pair.rival.lap ? "+" : "−"}{Math.abs(pair.player.lap-pair.rival.lap).toFixed(3)}s</span></div>}
   </section>;
 }

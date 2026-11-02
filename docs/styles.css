@@ -447,7 +447,7 @@ body.light-theme::before { display: none; }
 }
 
 /* ---------- Charts ---------- */
-.charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-bottom: 36px; }
+.charts-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px; margin-bottom: 36px; }
 .chart-container {
   background: #111114;
   border: 1px solid rgba(255,255,255,0.045);
@@ -457,6 +457,8 @@ body.light-theme::before { display: none; }
   height: 440px;
   box-shadow: none;
   transition: border-color 0.2s, box-shadow 0.2s;
+  width: 100%;
+  min-width: 0;
 }
 .chart-container:hover { border-color: rgba(255,255,255,0.10); }
 .chart-container.full-width { grid-column: 1 / -1; height: 560px; }
@@ -468,6 +470,19 @@ body.light-theme::before { display: none; }
   display: flex; align-items: center; gap: 10px;
 }
 .chart-title::before { display: none; }
+.chart-collapse-toggle {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+}
+.chart-collapse-toggle:focus-visible { outline: 2px solid var(--f1-red); outline-offset: 3px; }
+.chart-collapse-icon { color: var(--secondary-text); transition: transform 0.18s ease; }
+.chart-container.chart-collapsed { height: auto !important; min-height: 0 !important; }
+.chart-container.chart-collapsed canvas { display: none !important; }
 
 /* ---------- Tables ---------- */
 table {
