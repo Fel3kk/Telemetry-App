@@ -582,6 +582,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
   renderSeasonSelector();
   initCollapsibleSections();
+  initChartCollapseControls();
   _embedApplyView();
 
   // Load sessions then attempt to auto-load driver teams for the selected season.
@@ -797,8 +798,26 @@ function getTrackCalendarIndex(trackName) {
   return index === -1 ? 999 : index;
 }
 
+// Round order = the order each track was first driven in that season, so
+// modded tracks (India, Hockenheim, …) slot in where they were raced.
+// Tracks with no dated session fall back to the official calendar order.
+function trackFirstDriven(season, trackName) {
+  const key = normalizeTrackName(trackName);
+  let first = Infinity;
+  for (const s of (typeof allSessions !== "undefined" && allSessions) || []) {
+    if ((s.season || 1) !== season || normalizeTrackName(s.track_name) !== key) continue;
+    const t = Date.parse(s.created_at || s.session_date || "");
+    if (!isNaN(t) && t < first) first = t;
+  }
+  return first;
+}
+
 function sortSessionsByCalendar(a, b) {
   if ((a.season || 1) !== (b.season || 1)) return (a.season || 1) - (b.season || 1);
+  const season = a.season || 1;
+  const fa = trackFirstDriven(season, a.track_name);
+  const fb = trackFirstDriven(season, b.track_name);
+  if (fa !== fb && (isFinite(fa) || isFinite(fb))) return fa - fb;
   const calendarDiff = getTrackCalendarIndex(a.track_name) - getTrackCalendarIndex(b.track_name);
   if (calendarDiff !== 0) return calendarDiff;
   const categoryOrder = { Sprint: 0, Race: 1 };
@@ -925,19 +944,27 @@ async function handleFileUpload(e) {
       data = sanitizeDeep(data);
       const playerData = processTelemetryData(data);
       if (playerData && playerData.length > 0) {
-        const session = playerData[0];
-        session.category = category;
-        session.season = currentSeason;
-        if (session.track_name === "Unknown" || !session.track_name) {
-          const parts = filename.replace(".json", "").split(/[_-]/);
-          const trackGuess = parts.find((p) => !["race", "sprint", "quali", "qualifying"].includes(p));
-          if (trackGuess) session.track_name = trackGuess;
-        }
-        sessionsToPersist.push(session);
+        // Pre-made summaries (e.g. the race/quali templates) can hold several
+        // sessions in one file — save each one with its own category.
+        const isSummary = isSessionSummary(data) || (Array.isArray(data) && data.length > 0 && data.every(isSessionSummary));
+        const list = isSummary ? playerData.filter((s) => s && typeof s === "object") : [playerData[0]];
+        const labels = [];
+        list.forEach((session) => {
+          session.category = (isSummary && session.category) || category;
+          session.season = currentSeason;
+          if (session.track_name === "Unknown" || !session.track_name) {
+            const parts = filename.replace(".json", "").split(/[_-]/);
+            const trackGuess = parts.find((p) => !["race", "sprint", "quali", "qualifying"].includes(p));
+            if (trackGuess) session.track_name = trackGuess;
+          }
+          sessionsToPersist.push(session);
+          lastProcessedSession = session;
+          labels.push(session.session_type || session.category);
+        });
         sessionRow.push(row);
-        lastProcessedSession = session;
+        const first = list[0];
         row.status = "working";
-        row.msg = `${category} · ${session.track_name || "Unknown track"} — ready to save`;
+        row.msg = `${list.length > 1 ? labels.join(", ") : first.category} · ${first.track_name || "Unknown track"} — ready to save`;
       } else {
         row.status = "error";
         row.msg = "No player driver found (is-player: true). Make sure this is your own session file.";
@@ -1285,12 +1312,115 @@ function buildRaceStory(rootData, playerName, playerTeam, classification_data) {
   };
 }
 
-function processTelemetryData(data) {
-  // Check if data is already processed summary from get_data.py
-  if (Array.isArray(data) && data.length > 0 && data[0].lap_history) {
-    console.log("Loading pre-processed telemetry summary");
-    return data;
+// A hand-made or exported summary: one session per object with track_name
+// plus a result (classification / results / finishing position). These have
+// no raw game packets, so lap-by-lap charts stay empty but results count.
+function isSessionSummary(o) {
+  return !!o && typeof o === "object" && !Array.isArray(o) && !!o.track_name &&
+    !o["session-info"] &&
+    (Array.isArray(o.lap_history) || Array.isArray(o.classification) ||
+      Array.isArray(o.results) || o.finishing_position != null ||
+      (o.race_story && Array.isArray(o.race_story.classification)));
+}
+
+function normalizeSessionSummary(o) {
+  const up = (v) => String(v || "").trim().toUpperCase();
+  const num = (v) => (v === null || v === undefined || v === "" || isNaN(Number(v)) ? null : Number(v));
+  const rawCls = Array.isArray(o.classification)
+    ? o.classification
+    : Array.isArray(o.race_story?.classification) ? o.race_story.classification : [];
+  const classification = rawCls
+    .filter((e) => e && (e.name || e.driver_name || e["driver-name"]))
+    .map((e) => {
+      const status = String(e.status || e["result-status"] || "").toUpperCase();
+      const is_dnf = e.is_dnf === true || (!!status && !/FINISHED|ACTIVE/.test(status));
+      return {
+        ...e,
+        position: num(e.position),
+        name: up(e.name || e.driver_name || e["driver-name"]),
+        team: e.team || e["team-name"] || "",
+        status: status || (is_dnf ? "DNF" : "FINISHED"),
+        points: num(e.points) || 0,
+        is_dnf,
+        is_player: e.is_player === true || e["is-player"] === true || undefined,
+      };
+    })
+    .sort((a, b) => (a.position || 99) - (b.position || 99));
+
+  // Find the player: explicit is_player flag, else match driver_name
+  // ("Piotr FELEDZIAK" → "FELEDZIAK") against the classification.
+  const fullName = up(o.driver_name);
+  let me = classification.find((e) => e.is_player);
+  if (!me && fullName) {
+    me = classification.find((e) => e.name === fullName) ||
+      classification.find((e) => fullName.split(/\s+/).includes(e.name));
   }
+  const playerName = me?.name || up(o.race_story?.player_name) || fullName;
+
+  const results = Array.isArray(o.results) && o.results.length
+    ? o.results.map((r) => ({ ...r, name: up(r.name || r.driver_name) }))
+    : classification.map((e) => ({
+        name: e.name,
+        team: e.team,
+        position: e.position,
+        best_lap: e.best_lap || e.best_lap_time || e.best_lap_str || "N/A",
+        q1: e.q1 || "",
+        q2: e.q2 || "",
+        q3: e.q3 || "",
+      }));
+
+  const gridFrom = classification
+    .map((e) => ({ position: num(e.grid_position ?? e.starting_position ?? e.grid), name: e.name, team: e.team }))
+    .filter((e) => e.position > 0);
+  const gridValid = gridFrom.length > 2 && new Set(gridFrom.map((e) => e.position)).size === gridFrom.length;
+
+  const category = o.category || o.session_type || null;
+  const isRaceLike = /race|sprint/i.test(String(category || "")) && !/shootout|quali/i.test(String(category || ""));
+  const baseStory = o.race_story && typeof o.race_story === "object" ? o.race_story : {};
+  const race_story = isRaceLike
+    ? {
+        position_history: [],
+        podium: [],
+        overtakes_made: [],
+        overtakes_suffered: [],
+        pace_delta: [],
+        speed_traps: [],
+        fastest_lap: null,
+        driver_of_the_day: null,
+        driver_lap_times: [],
+        starting_grid: gridValid ? gridFrom.sort((a, b) => a.position - b.position) : [],
+        ...baseStory,
+        player_name: playerName,
+        player_team: baseStory.player_team || me?.team || "",
+        classification: classification.length ? classification : (baseStory.classification || []),
+      }
+    : o.race_story || null;
+
+  return {
+    ...o,
+    driver_name: playerName,
+    category,
+    session_type: o.session_type || category,
+    created_at: o.created_at || new Date().toISOString(),
+    starting_position: num(o.starting_position ?? me?.grid_position),
+    finishing_position: num(o.finishing_position ?? me?.position),
+    starting_fuel: num(o.starting_fuel),
+    stints: Array.isArray(o.stints) ? o.stints : [],
+    lap_history: Array.isArray(o.lap_history) ? o.lap_history : [],
+    results,
+    race_story,
+  };
+}
+
+function processTelemetryData(data) {
+  // Already-processed summaries (get_data.py, the templates, or result-only
+  // files with just a classification). A single object is accepted too.
+  if (isSessionSummary(data)) data = [data];
+  if (Array.isArray(data) && data.length > 0 && data.every(isSessionSummary)) {
+    console.log("Loading pre-processed telemetry summary");
+    return data.map(normalizeSessionSummary);
+  }
+
 
 
   const results = [];
@@ -2759,10 +2889,8 @@ function renderSessionInfo() {
   const totalFuelConsumed = Math.max(0, startFuel - lastFuel);
   const avgFuelPerLap = laps.length > 0 ? totalFuelConsumed / laps.length : 0;
 
-  // Consistency rating: STINT-SEPARATED weighted CV across clean racing laps.
-  // Each stint is measured on its own (accounts for fuel burn, tyre compound,
-  // and track evolution), then combined by clean-lap weight into a Total CV.
-  // Rating = max(0, min(100, 100 − Total CV × 2500)).
+  // Consistency uses robust, stint-separated lap-time variation so a single
+  // unusually slow lap cannot dominate the session score.
   const pitLapNumbers = new Set(
     laps
       .filter((l) => Number(l.pit_status || 0) === 1)
@@ -2811,7 +2939,15 @@ function renderSessionInfo() {
     if (cur.length) stintGroups.push(cur);
   }
 
-  // Per-stint CV, with >107% of stint median trimmed as outliers.
+  const medianOf = (values) => {
+    const sorted = [...values].sort((a, b) => a - b);
+    const middle = Math.floor(sorted.length / 2);
+    return sorted.length % 2
+      ? sorted[middle]
+      : (sorted[middle - 1] + sorted[middle]) / 2;
+  };
+
+  // Cap extreme deviations symmetrically, then combine stint CVs by lap.
   const stintStats = [];
   let totalCleanLaps = 0;
   stintGroups.forEach((group) => {
@@ -2820,17 +2956,19 @@ function renderSessionInfo() {
       .map((l) => timeStringToSeconds(l.lap_time))
       .filter((t) => typeof t === "number" && t > 0);
     if (times.length < 3) return;
-    const sorted = [...times].sort((a, b) => a - b);
-    const median = sorted[Math.floor(sorted.length / 2)];
-    const trimmed = times.filter((t) => t <= median * 1.07);
-    const sample = trimmed.length >= 3 ? trimmed : times;
+    const median = medianOf(times);
+    const mad = medianOf(times.map((t) => Math.abs(t - median)));
+    const deviationLimit = Math.max(mad * 3, median * 0.005);
+    const sample = times.map((t) =>
+      median + Math.max(-deviationLimit, Math.min(deviationLimit, t - median)),
+    );
     const mean = sample.reduce((a, b) => a + b, 0) / sample.length;
     const variance =
       sample.reduce((a, b) => a + (b - mean) * (b - mean), 0) / sample.length;
     const stddev = Math.sqrt(variance);
-    const cv = mean > 0 ? stddev / mean : 0;
-    stintStats.push({ cv, cleanLaps: sample.length });
-    totalCleanLaps += sample.length;
+    const cv = median > 0 ? stddev / median : 0;
+    stintStats.push({ cv, cleanLaps: times.length });
+    totalCleanLaps += times.length;
   });
 
   let consistencyHtml = "—";
@@ -2841,15 +2979,15 @@ function renderSessionInfo() {
       (acc, s) => acc + s.cv * (s.cleanLaps / totalCleanLaps),
       0,
     );
-    const rating = Math.max(0, Math.min(100, 100 - totalCV * 2500));
+    const rating = Math.max(0, Math.min(100, 100 - totalCV * 1200));
     const tier =
       rating >= 92 ? "elite" : rating >= 82 ? "good" : rating >= 68 ? "mid" : "low";
     consistencyHtml = `<span class="consistency-pill consistency-${tier}">${rating.toFixed(1)}<span class="consistency-unit">/100</span></span>`;
     const perStint = stintStats
-      .map((s, i) => `S${i + 1}: CV ${(s.cv * 100).toFixed(2)}% (${s.cleanLaps} laps)`)
+      .map((s, i) => `S${i + 1}: robust CV ${(s.cv * 100).toFixed(2)}% (${s.cleanLaps} laps)`)
       .join(" · ");
     consistencyTitle =
-      `Weighted Total CV ${(totalCV * 100).toFixed(3)}% across ${stintStats.length} stint${stintStats.length > 1 ? "s" : ""} · ${totalCleanLaps} clean laps · ${perStint}`;
+      `Weighted robust CV ${(totalCV * 100).toFixed(3)}% across ${stintStats.length} stint${stintStats.length > 1 ? "s" : ""} · ${totalCleanLaps} clean laps · Score = 100 − CV × 1200 · ${perStint}`;
   }
 
   const statusCounts = laps.reduce(
@@ -2923,7 +3061,7 @@ function renderSessionInfo() {
             <div class="info-value">${avgFuelPerLap.toFixed(3)} kg</div>
         </div>
         <div class="info-item" title="${consistencyTitle.replace(/"/g, "&quot;")}">
-            <div class="info-label" style="display:flex;align-items:center;gap:6px;">Consistency Rating<span class="hint-icon" data-tooltip="Stint-Separated Weighted CV. For each stint: filter clean laps (excl. lap 1, in/out laps, SC/VSC/Red, >107% of stint median), compute Stint CV = σ/mean. Total CV = Σ [Stint CV × (stint clean laps / total clean laps)]. Rating = max(0, min(100, 100 − Total CV × 2500)).">?</span></div>
+            <div class="info-label" style="display:flex;align-items:center;gap:6px;">Consistency Rating<span class="hint-icon" data-tooltip="Stint-separated robust pace variation. Excludes lap 1, pit/in-out laps, and SC/VSC/Red laps. Extreme deviations are symmetrically capped at 3×MAD or 0.5% of median lap time. Stint CVs are weighted by clean laps; score = clamp(100 − weighted CV × 1200, 0, 100).">?</span></div>
             <div class="info-value">${consistencyHtml}</div>
         </div>
     `;
@@ -3350,7 +3488,7 @@ function renderCharts() {
       validLapTimes.reduce((acc, v) => acc + Math.pow(v - mean, 2), 0) /
       validLapTimes.length;
     const stddev = Math.sqrt(variance);
-    const padding = Math.max(3, stddev * 1.5, 5); // seconds padding
+    const padding = Math.max(0.5, stddev * 1.5); // tighter focus around typical pace
     yMinForAvg = Math.max(0, mean - padding);
     yMaxForAvg = mean + padding;
   }
@@ -3389,7 +3527,7 @@ function renderCharts() {
         {
           ticks: {
             maxTicksLimit: 6,
-            stepSize: 0.5,
+            stepSize: 0.1,
           },
         },
         yMinForAvg !== null && yMaxForAvg !== null
@@ -3519,6 +3657,18 @@ function renderCharts() {
     })(),
   );
 
+  // Tire wear by wheel, plus the average across all four wheels.
+  const averageWear = laps.map((lap) => {
+    const values = [lap.tyre_wear.FL, lap.tyre_wear.FR, lap.tyre_wear.RL, lap.tyre_wear.RR]
+      .map(Number)
+      .filter(Number.isFinite);
+    return values.length
+      ? values.reduce((sum, value) => sum + value, 0) / values.length
+      : null;
+  });
+  const wearColor = (value, baseColor) =>
+    Number(value) >= 80 ? "#ff4545" : Number(value) >= 60 ? "#ff9f43" : baseColor;
+
   // Tire Wear Charts - Combined
   createChart(
     "tireWearChart",
@@ -3534,6 +3684,8 @@ function renderCharts() {
           tension: 0.4,
           fill: false,
           borderWidth: 2,
+          segment: { borderColor: (context) => wearColor(context.p1.parsed.y, "#51cf66") },
+          pointBackgroundColor: (context) => wearColor(context.parsed.y, "#51cf66"),
         },
         {
           label: "FR",
@@ -3543,6 +3695,8 @@ function renderCharts() {
           tension: 0.4,
           fill: false,
           borderWidth: 2,
+          segment: { borderColor: (context) => wearColor(context.p1.parsed.y, "#ffd43b") },
+          pointBackgroundColor: (context) => wearColor(context.parsed.y, "#ffd43b"),
         },
         {
           label: "RL",
@@ -3552,6 +3706,8 @@ function renderCharts() {
           tension: 0.4,
           fill: false,
           borderWidth: 2,
+          segment: { borderColor: (context) => wearColor(context.p1.parsed.y, "#a78bfa") },
+          pointBackgroundColor: (context) => wearColor(context.parsed.y, "#a78bfa"),
         },
         {
           label: "RR",
@@ -3561,6 +3717,20 @@ function renderCharts() {
           tension: 0.4,
           fill: false,
           borderWidth: 2,
+          segment: { borderColor: (context) => wearColor(context.p1.parsed.y, "#ff922b") },
+          pointBackgroundColor: (context) => wearColor(context.parsed.y, "#ff922b"),
+        },
+        {
+          label: "Average",
+          data: averageWear,
+          borderColor: "#f4f4f5",
+          backgroundColor: "rgba(244, 244, 245, 0.1)",
+          tension: 0.4,
+          fill: false,
+          borderWidth: 2,
+          borderDash: [6, 4],
+          segment: { borderColor: (context) => wearColor(context.p1.parsed.y, "#f4f4f5") },
+          pointBackgroundColor: (context) => wearColor(context.parsed.y, "#f4f4f5"),
         },
       ],
     },
@@ -3568,6 +3738,12 @@ function renderCharts() {
     {
       fastestLapSeconds,
       fastestLapLap,
+      xAxisTitle: "Lap",
+      yAxis: {
+        min: 0,
+        ticks: { stepSize: 20 },
+        title: { display: true, text: "Wear %" },
+      },
     },
   );
 
@@ -3669,7 +3845,7 @@ function renderCharts() {
   // ERS Chart
   createChart(
     "ersChart",
-    "line",
+    "bar",
     {
       labels: lapNumbers,
       datasets: [
@@ -3677,18 +3853,15 @@ function renderCharts() {
           label: "Deployed",
           data: laps.map((l) => l.ers_deployed_j / 1000000),
           borderColor: "#667eea",
-          backgroundColor: "rgba(102, 126, 234, 0.1)",
-          tension: 0.4,
-          fill: true,
+          backgroundColor: "rgba(102, 126, 234, 0.75)",
+          borderWidth: 1,
         },
         {
           label: "Remaining",
           data: laps.map((l) => l.ers_remaining_j / 1000000),
           borderColor: "#ff6b6b",
-          backgroundColor: "rgba(255, 107, 107, 0.1)",
-          tension: 0.4,
-          fill: true,
-          borderDash: [5, 5],
+          backgroundColor: "rgba(255, 107, 107, 0.75)",
+          borderWidth: 1,
         },
       ],
     },
@@ -4147,6 +4320,9 @@ function createChart(
       },
       scales: {
         x: {
+          title: extraOptions.xAxisTitle
+            ? { display: true, text: extraOptions.xAxisTitle }
+            : undefined,
           ticks: {
             font: {
               size: isMobile ? 9 : 11,
@@ -5266,6 +5442,52 @@ function renderNotesGrid() {
   });
 
   if (!trackNotesLoaded) loadTrackNotes();
+}
+
+const CHART_COLLAPSED_KEY = "f1.chartCollapsed.v1";
+
+function initChartCollapseControls() {
+  let collapsedIds = new Set();
+  try {
+    const stored = JSON.parse(localStorage.getItem(CHART_COLLAPSED_KEY) || "[]");
+    if (Array.isArray(stored)) collapsedIds = new Set(stored.map(String));
+  } catch {}
+
+  document.querySelectorAll(".chart-container").forEach((container) => {
+    const canvas = container.querySelector("canvas[id]");
+    const title = container.querySelector(".chart-title");
+    if (!canvas || !title || title.matches("button")) return;
+
+    const toggle = document.createElement("button");
+    const icon = document.createElement("span");
+    const collapsed = collapsedIds.has(canvas.id);
+    toggle.type = "button";
+    toggle.className = "chart-title chart-collapse-toggle";
+    toggle.setAttribute("aria-controls", canvas.id);
+    toggle.setAttribute("aria-expanded", String(!collapsed));
+    toggle.textContent = title.textContent.trim();
+    icon.className = "chart-collapse-icon";
+    icon.setAttribute("aria-hidden", "true");
+    icon.textContent = collapsed ? "▸" : "▾";
+    toggle.appendChild(icon);
+    title.replaceWith(toggle);
+    container.classList.toggle("chart-collapsed", collapsed);
+
+    toggle.addEventListener("click", () => {
+      const nextCollapsed = !container.classList.contains("chart-collapsed");
+      container.classList.toggle("chart-collapsed", nextCollapsed);
+      toggle.setAttribute("aria-expanded", String(!nextCollapsed));
+      icon.textContent = nextCollapsed ? "▸" : "▾";
+      try {
+        const stored = JSON.parse(localStorage.getItem(CHART_COLLAPSED_KEY) || "[]");
+        const saved = new Set(Array.isArray(stored) ? stored.map(String) : []);
+        if (nextCollapsed) saved.add(canvas.id);
+        else saved.delete(canvas.id);
+        localStorage.setItem(CHART_COLLAPSED_KEY, JSON.stringify([...saved]));
+      } catch {}
+      if (!nextCollapsed && charts[canvas.id]) charts[canvas.id].resize();
+    });
+  });
 }
 
 function initCollapsibleSections() {
