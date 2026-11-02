@@ -798,8 +798,26 @@ function getTrackCalendarIndex(trackName) {
   return index === -1 ? 999 : index;
 }
 
+// Round order = the order each track was first driven in that season, so
+// modded tracks (India, Hockenheim, …) slot in where they were raced.
+// Tracks with no dated session fall back to the official calendar order.
+function trackFirstDriven(season, trackName) {
+  const key = normalizeTrackName(trackName);
+  let first = Infinity;
+  for (const s of (typeof allSessions !== "undefined" && allSessions) || []) {
+    if ((s.season || 1) !== season || normalizeTrackName(s.track_name) !== key) continue;
+    const t = Date.parse(s.created_at || s.session_date || "");
+    if (!isNaN(t) && t < first) first = t;
+  }
+  return first;
+}
+
 function sortSessionsByCalendar(a, b) {
   if ((a.season || 1) !== (b.season || 1)) return (a.season || 1) - (b.season || 1);
+  const season = a.season || 1;
+  const fa = trackFirstDriven(season, a.track_name);
+  const fb = trackFirstDriven(season, b.track_name);
+  if (fa !== fb && (isFinite(fa) || isFinite(fb))) return fa - fb;
   const calendarDiff = getTrackCalendarIndex(a.track_name) - getTrackCalendarIndex(b.track_name);
   if (calendarDiff !== 0) return calendarDiff;
   const categoryOrder = { Sprint: 0, Race: 1 };
