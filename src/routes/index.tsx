@@ -93,15 +93,27 @@ function MainPage() {
   const stats = useMemo(() => seasonStats(seasonSessions), [seasonSessions]);
   // Rounds follow the order tracks were first driven, so modded tracks slot in naturally.
   const rounds = useMemo(() => roundOrder(seasonSessions), [seasonSessions]);
-  const trackGroups = useMemo(
-    () =>
-      groupByTrack(seasonSessions).sort(
-        (a, b) =>
-          (rounds.get(trackSlug(a.track)) ?? 999) - (rounds.get(trackSlug(b.track)) ?? 999) ||
-          (a.category === "Sprint" ? -1 : 0) - (b.category === "Sprint" ? -1 : 0),
-      ),
-    [seasonSessions, rounds],
-  );
+  const [sortBy, setSortBy] = useState<SortKey>("round");
+  useEffect(() => {
+    const v = localStorage.getItem("f1.cards.sort") as SortKey | null;
+    if (v && SORTS.some((o) => o.key === v)) setSortBy(v);
+  }, []);
+  const changeSort = (k: SortKey) => { setSortBy(k); localStorage.setItem("f1.cards.sort", k); };
+  const trackGroups = useMemo(() => {
+    const byRound = (a: any, b: any) =>
+      (rounds.get(trackSlug(a.track)) ?? 999) - (rounds.get(trackSlug(b.track)) ?? 999) ||
+      (a.category === "Sprint" ? -1 : 0) - (b.category === "Sprint" ? -1 : 0);
+    const newest = (g: any) => Math.max(0, ...g.sessions.map((s: Session) => Date.parse(s.created_at || "") || 0));
+    const best = (g: any) => Math.min(99, ...g.sessions.map((s: Session) => racePosition(s) ?? 99));
+    const cmp: Record<SortKey, (a: any, b: any) => number> = {
+      round: byRound,
+      newest: (a, b) => newest(b) - newest(a) || byRound(a, b),
+      oldest: (a, b) => newest(a) - newest(b) || byRound(a, b),
+      best: (a, b) => best(a) - best(b) || byRound(a, b),
+      name: (a, b) => String(a.track).localeCompare(String(b.track)) || byRound(a, b),
+    };
+    return groupByTrack(seasonSessions).sort(cmp[sortBy]);
+  }, [seasonSessions, rounds, sortBy]);
 
   const pick = (n: number) => { setSeason(n); setSavedSeason(n); };
 
@@ -169,6 +181,16 @@ function MainPage() {
           <h2 className="text-sm font-bold uppercase tracking-widest text-white/60">
             Tracks · Season {season}
           </h2>
+          <label className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
+            Sort
+            <select
+              value={sortBy}
+              onChange={(e) => changeSort(e.target.value as SortKey)}
+              className="rounded-md border border-border bg-background px-2 py-1 text-xs font-semibold normal-case tracking-normal text-foreground"
+            >
+              {SORTS.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
+            </select>
+          </label>
         </div>
 
         {loading && <div className="text-white/50">Loading sessions…</div>}
@@ -195,6 +217,15 @@ function MainPage() {
     </>
   );
 }
+
+type SortKey = "round" | "newest" | "oldest" | "best" | "name";
+const SORTS: { key: SortKey; label: string }[] = [
+  { key: "round", label: "Round order" },
+  { key: "newest", label: "Newest first" },
+  { key: "oldest", label: "Oldest first" },
+  { key: "best", label: "Best finish" },
+  { key: "name", label: "Track A–Z" },
+];
 
 function UploadPanel({ season }: { season: number }) {
   const src = appEmbedUrl({ season, track: "", view: "upload" });
