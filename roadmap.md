@@ -14,3 +14,5 @@
 - [x] 5. Quali sim: map left, controls right on wide screens; stacked on phones
 - [x] 6. Share card: total/avg points, avg finish/grid, positions gained, podiums, wins, poles, DNFs, finish rate, Q1/Q2/Q3, FL, laps
 - [x] Upload accepts result-only summary files (track_name + classification, no lap data)
+- [x] Records: collapsible track cards (remembered), Expand/Collapse all, sort menu (remembered)
+- [x] Title Race: no fastest-lap point — 25 max per Grand Prix
