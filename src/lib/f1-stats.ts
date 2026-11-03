@@ -419,6 +419,8 @@ export type TrackRecord = {
   secondBestMs: number | null;
   attempts: number;
   seasons: SeasonBest[];
+  firstAt: number; // earliest session upload time (ms epoch)
+  lastAt: number; // latest session upload time (ms epoch)
 };
 
 function cleanTeam(t: unknown): string {
@@ -428,7 +430,7 @@ function cleanTeam(t: unknown): string {
 
 // Player's best lap per track across every uploaded season, with per-season bests.
 export function personalRecords(sessions: Session[]): TrackRecord[] {
-  type Lap = { ms: number; season: number; category: string; team: string };
+  type Lap = { ms: number; season: number; category: string; team: string; at: number };
   const byTrack = new Map<string, { track: string; laps: Lap[] }>();
   for (const s of sessions) {
     const player = playerNameOf(s);
@@ -442,7 +444,7 @@ export function personalRecords(sessions: Session[]): TrackRecord[] {
     if (!slug) continue;
     const team = cleanTeam(entry?.team || (s as any).race_story?.player_team || (s as any).team);
     const bucket = byTrack.get(slug) ?? { track: s.track_name, laps: [] };
-    bucket.laps.push({ ms, season: Number(s.season) || 1, category: s.category || "Race", team });
+    bucket.laps.push({ ms, season: Number(s.season) || 1, category: s.category || "Race", team, at: Date.parse(s.created_at || "") || 0 });
     byTrack.set(slug, bucket);
   }
   const out: TrackRecord[] = [];
@@ -476,10 +478,35 @@ export function personalRecords(sessions: Session[]): TrackRecord[] {
       secondBestMs: sorted.length > 1 ? sorted[1].ms : null,
       attempts: bucket.laps.length,
       seasons,
+      firstAt: Math.min(...bucket.laps.map((l) => l.at)),
+      lastAt: Math.max(...bucket.laps.map((l) => l.at)),
     });
   }
   return out.sort((a, b) => a.track.localeCompare(b.track));
 }
+
+export type RecordSortKey = "round" | "newest" | "oldest" | "best" | "name";
+
+// Order records like the home page: calendar order first (modded tracks after,
+// in the order they were first driven), or by upload time / improvement / name.
+export function sortRecords(records: TrackRecord[], key: RecordSortKey): TrackRecord[] {
+  const cal = (slug: string) => {
+    const i = SEASON_CALENDAR.findIndex((t) => t.slug === slug);
+    return i === -1 ? 1000 : i;
+  };
+  const byRound = (a: TrackRecord, b: TrackRecord) =>
+    cal(a.slug) - cal(b.slug) || a.firstAt - b.firstAt || a.track.localeCompare(b.track);
+  const gain = (r: TrackRecord) => (r.secondBestMs ? r.secondBestMs - r.bestMs : -1);
+  const cmp: Record<RecordSortKey, (a: TrackRecord, b: TrackRecord) => number> = {
+    round: byRound,
+    newest: (a, b) => b.lastAt - a.lastAt || byRound(a, b),
+    oldest: (a, b) => a.firstAt - b.firstAt || byRound(a, b),
+    best: (a, b) => gain(b) - gain(a) || byRound(a, b),
+    name: (a, b) => titleSort(a.track).localeCompare(titleSort(b.track)) || byRound(a, b),
+  };
+  return [...records].sort(cmp[key]);
+}
+const titleSort = (t: string) => String(t || "").toLowerCase();
 
 export function formatLapMs(ms: number): string {
   if (!Number.isFinite(ms) || ms <= 0) return "—";
