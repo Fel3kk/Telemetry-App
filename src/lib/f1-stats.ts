@@ -99,7 +99,7 @@ export type TitleMath = {
   racedSlugs: Set<string>;
   remaining: { slug: string; name: string }[];
   racesLeft: number;
-  maxPointsLeft: number; // racesLeft * 26 (win + fastest lap)
+  maxPointsLeft: number; // racesLeft * 25 (race win) + sprints left * 8
 };
 
 // Tracks the user has removed from their calendar, persisted locally.
@@ -141,7 +141,7 @@ export function saveExcludedTracks(excluded: Set<string>, season?: number) {
 }
 
 // Max points one driver can still take per weekend type.
-export const GP_MAX_POINTS = 26; // win + fastest lap
+export const GP_MAX_POINTS = RACE_POINTS[1]; // race win (no fastest-lap point)
 export const SPRINT_MAX_POINTS = SPRINT_POINTS[1]; // sprint win
 
 // Real 2026 sprint weekends — used as the starting list for a new season.

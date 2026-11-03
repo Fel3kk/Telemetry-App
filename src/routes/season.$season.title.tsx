@@ -336,7 +336,7 @@ function TitlePage() {
               )}
               <p className="mt-3 text-[11px] leading-relaxed text-white/40">
                 “Needs / race” is the average points per remaining race required to pass the leader.
-                Max available assumes 26 per Grand Prix (win + fastest lap) plus 8 per sprint weekend still to run.
+                Max available assumes 25 per Grand Prix (win, no fastest-lap point) plus 8 per sprint weekend still to run.
                 Modded tracks you drive join the calendar automatically, numbered in the order you raced them.
               </p>
             </div>
