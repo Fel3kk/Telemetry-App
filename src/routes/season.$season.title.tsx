@@ -154,9 +154,11 @@ function TitlePage() {
               />
               <HeroStat
                 label={isPlayerLeader ? "Magic number" : "Verdict"}
-                value={isPlayerLeader ? (magicNumber != null && magicNumber > 0 ? String(magicNumber) : "Clinched 🏆") : canStillWin ? "Alive 💪" : "Eliminated"}
+                value={!player ? "—" : isPlayerLeader ? (magicNumber != null && magicNumber > 0 ? String(magicNumber) : "Clinched 🏆") : canStillWin ? "Alive 💪" : "Eliminated"}
                 sub={
-                  isPlayerLeader
+                  !player
+                    ? "you're not in the results yet"
+                    : isPlayerLeader
                     ? magicNumber != null && magicNumber > 0
                       ? "pts to secure the title"
                       : "title is yours"
@@ -164,7 +166,7 @@ function TitlePage() {
                       ? "you can still win"
                       : "out of contention"
                 }
-                accent={isPlayerLeader ? "text-emerald-400" : canStillWin ? "text-amber-300" : "text-red-400"}
+                accent={!player ? "text-white/60" : isPlayerLeader ? "text-emerald-400" : canStillWin ? "text-amber-300" : "text-red-400"}
               />
             </div>
 
