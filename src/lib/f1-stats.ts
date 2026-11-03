@@ -38,7 +38,31 @@ export const SEASON_CALENDAR: { slug: string; name: string }[] = [
 ];
 
 export function playerNameOf(s: Session): string {
-  return String(s.race_story?.player_name || s.driver_name || "").toUpperCase();
+  const direct = String(s?.race_story?.player_name || s?.driver_name || "").trim().toUpperCase();
+  if (direct) return direct;
+  const flagged = (Array.isArray(s?.race_story?.classification) ? s.race_story.classification : []).find(
+    (e: any) => e?.is_player === true || e?.["is-player"] === true,
+  );
+  return String(flagged?.name || "").trim().toUpperCase();
+}
+
+// The player's name for a whole season: the most common name across the
+// season's race results (falls back to any session). One odd session (e.g. a
+// practice file with no driver name) can no longer hide you from the standings.
+export function seasonPlayerName(sessions: Session[]): string {
+  const votes = new Map<string, number>();
+  const tally = (list: Session[]) => {
+    for (const s of list) {
+      const n = playerNameOf(s);
+      if (n) votes.set(n, (votes.get(n) ?? 0) + 1);
+    }
+  };
+  tally(sessions.filter((s) => isRaceResultSession(s)));
+  if (votes.size === 0) tally(sessions);
+  let best = "";
+  let bestN = 0;
+  for (const [n, c] of votes) if (c > bestN) { best = n; bestN = c; }
+  return best;
 }
 
 function classificationOf(s: Session): any[] {
@@ -250,7 +274,7 @@ export function computeTitleMath(
   const sprintsLeft = rounds.filter(
     (r) => r.sprint && !r.sprintDone && !r.done && !excluded.has(r.slug),
   ).length;
-  const playerName = playerNameOf(seasonSessions[seasonSessions.length - 1] ?? ({} as Session));
+  const playerName = seasonPlayerName(seasonSessions);
   const player = standings.find((d) => d.name === playerName) ?? null;
   const leader = standings[0] ?? null;
   const racesLeft = remaining.length;
@@ -315,7 +339,7 @@ export function seasonSummary(sessions: Session[], season: number): SeasonSummar
   const seasonSessions = sessions.filter((s) => Number(s.season) === season);
   const standings = computeStandings(seasonSessions);
   const scoring = seasonSessions.filter((s) => isRaceResultSession(s));
-  const playerName = playerNameOf(seasonSessions[0] ?? ({} as Session));
+  const playerName = seasonPlayerName(seasonSessions);
   const standingIdx = standings.findIndex((d) => d.name === playerName);
 
   let wins = 0, sprintWins = 0, podiums = 0, pointsFinishes = 0, poles = 0, sprintPoles = 0;

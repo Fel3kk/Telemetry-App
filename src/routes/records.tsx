@@ -127,7 +127,7 @@ function RecordsPage() {
             return (
               <div
                 key={r.slug}
-                className={`rounded-lg border bg-white/[0.03] transition ${isOpen ? "border-purple-400/40" : "border-white/10 hover:border-purple-400/40"}`}
+                className={`rounded-lg border bg-white/[0.03] transition-colors duration-300 ${isOpen ? "border-purple-400/40" : "border-white/10 hover:border-purple-400/40"}`}
               >
                 <button
                   type="button"
@@ -150,12 +150,17 @@ function RecordsPage() {
                   </span>
                   <span
                     aria-hidden
-                    className={`shrink-0 text-xs text-white/50 transition-transform ${isOpen ? "rotate-180" : ""}`}
+                    className={`shrink-0 text-xs text-white/50 transition-transform duration-300 ease-out ${isOpen ? "rotate-180" : ""}`}
                   >
                     ▾
                   </span>
                 </button>
-                {isOpen && (
+                <div
+                  className={`grid transition-[grid-template-rows,opacity] duration-300 ease-out motion-reduce:transition-none ${isOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}
+                  aria-hidden={!isOpen}
+                  inert={!isOpen}
+                >
+                  <div className="min-h-0 overflow-hidden">
                   <div className="border-t border-white/10 px-3 pb-3 pt-2">
                     <div className="mb-2 flex flex-wrap items-center justify-between gap-1 text-[11px] text-white/50">
                       <span>
@@ -196,7 +201,8 @@ function RecordsPage() {
                       ))}
                     </ul>
                   </div>
-                )}
+                  </div>
+                </div>
               </div>
             );
           })}
