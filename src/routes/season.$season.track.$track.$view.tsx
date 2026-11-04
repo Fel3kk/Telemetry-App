@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { appEmbedUrl, titleCaseTrack } from "@/lib/f1-shell";
 import { ShellHeader, ShellPage } from "@/components/f1/ShellHeader";
 import { QualifyingSimulation } from "@/components/f1/QualifyingSimulation";
+import { ErsMapEditor } from "@/components/f1/ErsMapEditor";
+import { AiDebrief } from "@/components/f1/AiDebrief";
 
 export const Route = createFileRoute("/season/$season/track/$track/$view")({
   head: ({ params }) => {
@@ -19,6 +21,8 @@ const LABELS: Record<string, string> = {
   progress: "Season Progress",
   "quali-results": "Qualifying",
   "quali-simulation": "Qualifying Simulation",
+  "ers-map": "ERS Map",
+  "ai-debrief": "AI Race Engineer",
   grid: "Starting Grid",
   assignments: "Teams",
   "race-story": "Race Story",
@@ -27,6 +31,8 @@ const LABELS: Record<string, string> = {
   data: "Laps",
   practice: "Practice",
 };
+
+const NATIVE_VIEWS = new Set(["quali-simulation", "ers-map", "ai-debrief"]);
 
 function ViewPage() {
   const { season, track, view } = Route.useParams();
@@ -38,7 +44,7 @@ function ViewPage() {
   const [slow, setSlow] = useState(false);
 
   useEffect(() => {
-    if (view === "quali-simulation") return;
+    if (NATIVE_VIEWS.has(view)) return;
     setLoading(true);
     setSlow(false);
     const t = setTimeout(() => setSlow(true), 4000);
@@ -75,7 +81,7 @@ function ViewPage() {
             ← Back to {trackDisplay}
           </Link>
         </div>
-        {view === "quali-simulation" ? <QualifyingSimulation season={Number(season)} track={track} cat={cat} /> : <div className="relative overflow-hidden rounded-lg border border-white/10 bg-black/30">
+        {view === "quali-simulation" ? <QualifyingSimulation season={Number(season)} track={track} cat={cat} /> : view === "ers-map" ? <ErsMapEditor season={Number(season)} track={track} cat={cat} /> : view === "ai-debrief" ? <AiDebrief season={Number(season)} track={track} cat={cat} /> : <div className="relative overflow-hidden rounded-lg border border-white/10 bg-black/30">
           {loading && (
             <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-[#0a0a0f]/90 backdrop-blur-sm">
               <div className="h-10 w-10 animate-spin rounded-full border-2 border-white/15 border-t-red-500" />
