@@ -111,8 +111,10 @@ export function raceConsistency(laps: DebriefLap[]): Consistency {
   const candidates = sorted.filter(isClean);
   const best = Math.min(...candidates.map((l) => lapSeconds(l.lap_time)!));
   const clean = new Set(candidates.filter((l) => {
-    const ok = lapSeconds(l.lap_time)! <= best * 1.07;
-    if (!ok) excluded.push({ lap: l.lap, reason: "Over 107% of best lap" });
+    // Only clearly non-racing laps (e.g. an unflagged red flag) are dropped;
+    // ordinary slow laps stay in and are capped, so they still cost points.
+    const ok = lapSeconds(l.lap_time)! <= best * 1.3;
+    if (!ok) excluded.push({ lap: l.lap, reason: "Over 130% of best lap" });
     return ok;
   }).map((l) => l.lap));
 
