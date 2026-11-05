@@ -11,7 +11,7 @@ type QA = { q: string; a: string };
 
 const cacheKey = (id: string) => `f1.debrief.v1.${id}`;
 
-export function AiDebrief({ season, track, cat }: { season: number; track: string; cat: string }) {
+export function AiDebrief({ season, track, cat = "Race" }: { season: number; track: string; cat?: string }) {
   const run = useServerFn(generateDebrief);
   const [sessions, setSessions] = useState<Row[]>([]);
   const [selected, setSelected] = useState("");
