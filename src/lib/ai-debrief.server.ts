@@ -2,7 +2,7 @@
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./f1-shell";
 
 // Tried in order; demand spikes return 503, so fall through to the next one.
-const MODELS = ["gemini-3.5-flash", "gemini-flash-latest", "gemini-3.8-flash", "gemini-2.5-flash-lite"];
+const MODELS = ["gemini-flash-latest", "gemini-2.5-flash", "gemini-flash-lite-latest"];
 
 /** Confirms the bearer token belongs to a signed-in user of the app. */
 export async function verifyUser(authHeader: string | undefined): Promise<string | null> {
@@ -27,6 +27,7 @@ export async function callGemini(prompt: string, schema: object, system: string)
     try {
       res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
         method: "POST",
+        signal: AbortSignal.timeout(30_000),
         headers: { "content-type": "application/json", "x-goog-api-key": key },
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: system }] },
