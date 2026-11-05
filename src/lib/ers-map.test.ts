@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import { coverage, projectOnLine, segmentSpan, sliceLine, nudge } from "./ers-map";
 
 // A square on a 1080x608 map scaled so every side has equal real length.
