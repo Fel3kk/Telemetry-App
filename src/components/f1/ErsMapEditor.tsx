@@ -77,6 +77,15 @@ export function ErsMapEditor({ season, track, cat }: { season: number; track: st
     setImageFailed(false);
   }, [track]);
 
+  // Keep in sync with the qualifying simulator's racing line (same saved line).
+  useEffect(() => {
+    const refresh = () => setLine(loadLine(track));
+    window.addEventListener("storage", refresh);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => { window.removeEventListener("storage", refresh); window.removeEventListener("focus", refresh); document.removeEventListener("visibilitychange", refresh); };
+  }, [track]);
+
   // Load slots for this track + mode.
   useEffect(() => {
     const s = loadSlots(slug, mode);
@@ -241,7 +250,10 @@ export function ErsMapEditor({ season, track, cat }: { season: number; track: st
             </Button>
           ))}
         </div>
-        <span className="text-xs text-muted-foreground">Saved on this device for every season at this track</span>
+        <span className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+          Saved on this device for every season at this track
+          <Link to="/season/$season/track/$track/$view" params={{ season: String(season), track, view: "quali-simulation" }} search={{ cat }} className="font-semibold text-primary underline-offset-2 hover:underline">Edit racing line (shared with Qualifying)</Link>
+        </span>
       </div>
 
       <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(300px,360px)] lg:items-start">
