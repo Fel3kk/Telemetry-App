@@ -16,3 +16,7 @@
 - [x] Upload accepts result-only summary files (track_name + classification, no lap data)
 - [x] Records: collapsible track cards (remembered), Expand/Collapse all, sort menu (remembered)
 - [x] Title Race: no fastest-lap point — 25 max per Grand Prix
+
+## Debrief loading follow-up
+- [x] Fix saved-session loading in AI Race Engineer and verify the query against saved-session fields (live query accepted; eight tests pass; signed-in debrief remains unverified).
+- [x] Confirm where the shared qualifying/ERS racing line is saved: per track in browser localStorage, shared across seasons/career slots on the same origin/device.

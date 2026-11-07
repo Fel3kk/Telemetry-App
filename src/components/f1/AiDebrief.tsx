@@ -2,11 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/lib/supabase";
 import { getActiveCareer } from "@/lib/career";
-import { trackSlug } from "@/lib/f1-shell";
-import { buildDebriefFacts, type DebriefSession } from "@/lib/race-debrief";
+import { buildDebriefFacts } from "@/lib/race-debrief";
+import { fetchDebriefSessions, type DebriefSessionRow } from "@/lib/debrief-sessions";
+import { Button } from "@/components/ui/button";
 import { generateDebrief, type Debrief } from "@/lib/ai-debrief.functions";
 
-type Row = DebriefSession & { id: string; created_at?: string };
+type Row = DebriefSessionRow;
 type QA = { q: string; a: string };
 
 const cacheKey = (id: string) => `f1.debrief.v1.${id}`;
@@ -16,6 +17,8 @@ export function AiDebrief({ season, track, cat = "Race" }: { season: number; tra
   const [sessions, setSessions] = useState<Row[]>([]);
   const [selected, setSelected] = useState("");
   const [status, setStatus] = useState("Loading sessions…");
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [reload, setReload] = useState(0);
   const [debrief, setDebrief] = useState<Debrief | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -24,27 +27,26 @@ export function AiDebrief({ season, track, cat = "Race" }: { season: number; tra
 
   useEffect(() => {
     let active = true;
+    setStatus("Loading sessions…");
+    setLoadFailed(false);
+    setSessions([]);
+    setSelected("");
     (async () => {
       try {
-        let q = supabase.from("telemetry_sessions").select("id,driver_name,track_name,category,session_type,starting_position,finishing_position,lap_history,race_story,results,created_at").eq("season", season);
-        const career = getActiveCareer();
-        if (career) q = q.eq("career_slot", career);
-        const { data, error } = await q;
-        if (error) throw error;
+        const rows = await fetchDebriefSessions(supabase, { season, track, cat, career: getActiveCareer() });
         if (!active) return;
-        const rows = ((data ?? []) as Row[]).filter((s) => trackSlug(s.track_name) === trackSlug(track) &&
-          (cat === "Sprint" ? /sprint|shootout/i.test(`${s.category} ${s.session_type}`) : !/sprint|shootout/i.test(`${s.category} ${s.session_type}`)));
-        const rank = (s: Row) => /race/i.test(s.category) ? 0 : /quali/i.test(s.category) ? 1 : 2;
-        rows.sort((a, b) => rank(a) - rank(b));
         setSessions(rows);
         setSelected(rows[0]?.id ?? "");
         setStatus(rows.length ? "" : "No sessions uploaded for this weekend yet.");
       } catch {
-        if (active) setStatus("Sessions could not load. Check your connection and reload.");
+        if (active) {
+          setLoadFailed(true);
+          setStatus("Saved sessions couldn't be loaded. Check your connection and try again.");
+        }
       }
     })();
     return () => { active = false; };
-  }, [season, track, cat]);
+  }, [season, track, cat, reload]);
 
   const session = sessions.find((s) => s.id === selected);
   const facts = useMemo(() => (session ? buildDebriefFacts(session) : null), [session]);
@@ -93,6 +95,7 @@ export function AiDebrief({ season, track, cat = "Race" }: { season: number; tra
   return (
     <div className="space-y-4">
       {status && <p className="text-sm text-muted-foreground">{status}</p>}
+      {loadFailed && <Button variant="outline" onClick={() => setReload((value) => value + 1)}>Retry loading sessions</Button>}
       {sessions.length > 0 && (
         <div className="flex flex-wrap items-center gap-2">
           <select value={selected} onChange={(e) => setSelected(e.target.value)} className="rounded-md border border-border bg-card px-3 py-2 text-sm">

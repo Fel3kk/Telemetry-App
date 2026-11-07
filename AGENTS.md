@@ -11,3 +11,4 @@
 
 - Keep qualifying playback in the native React shell with pure timing helpers; summary uploads contain lap times, not measured movement coordinates.
 - Keep racing-line points normalized to the map, calibrated and stored per track on the device; replacement circuit artwork requires independent calibration.
+- Load AI debrief sessions through the tested browser query helper with explicit database-column aliases, so stored position names cannot diverge from analysis fields.
