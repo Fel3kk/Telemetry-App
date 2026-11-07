@@ -10,5 +10,5 @@
 <!-- LOVABLE:END -->
 
 - Keep qualifying playback in the native React shell with pure timing helpers; summary uploads contain lap times, not measured movement coordinates.
-- Keep racing-line points normalized to the map, calibrated and stored per track on the device; replacement circuit artwork requires independent calibration.
+- Keep racing-line points normalized and calibrated per track in one owner-published site collection shared by Qualifying and ERS; device storage is export-only and replacement artwork requires independent calibration.
 - Load AI debrief sessions through the tested browser query helper with explicit database-column aliases, so stored position names cannot diverge from analysis fields.
