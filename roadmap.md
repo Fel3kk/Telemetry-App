@@ -20,3 +20,8 @@
 ## Debrief loading follow-up
 - [x] Fix saved-session loading in AI Race Engineer and verify the query against saved-session fields (live query accepted; eight tests pass; signed-in debrief remains unverified).
 - [x] Confirm where the shared qualifying/ERS racing line is saved: per track in browser localStorage, shared across seasons/career slots on the same origin/device.
+
+## Owner-published racing lines
+- [ ] Use one published collection for Qualifying and ERS on every device, without user line creation.
+- [ ] Add a bulk export of old device-saved lines so the owner can submit them here.
+- [ ] Publish the owner's full collection (waiting for the uploaded collection).
