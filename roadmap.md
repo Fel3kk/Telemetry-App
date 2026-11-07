@@ -18,5 +18,5 @@
 - [x] Title Race: no fastest-lap point — 25 max per Grand Prix
 
 ## Debrief loading follow-up
-- [ ] Fix saved-session loading in AI Race Engineer and verify the query against saved-session fields.
-- [ ] Confirm where the shared qualifying/ERS racing line is saved.
+- [x] Fix saved-session loading in AI Race Engineer and verify the query against saved-session fields (live query accepted; eight tests pass; signed-in debrief remains unverified).
+- [x] Confirm where the shared qualifying/ERS racing line is saved: per track in browser localStorage, shared across seasons/career slots on the same origin/device.
