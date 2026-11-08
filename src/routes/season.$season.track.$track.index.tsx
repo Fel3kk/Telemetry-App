@@ -49,6 +49,8 @@ const OPTIONS: Opt[] = [
   },
   { view: "quali-results", label: "Qualifying", icon: "⏱️", desc: "Q1–Q3 / shootout times" },
   { view: "quali-simulation", label: "Qualifying Simulation", icon: "🏎️", desc: "Your lap versus P1, or P2 from pole" },
+  { view: "ers-map", label: "ERS Map", icon: "⚡", desc: "Paint your race and quali battery plan on the track" },
+  { view: "ai-debrief", label: "AI Race Engineer", icon: "🎧", desc: "Debrief, consistency score and coaching notes" },
   { view: "grid", label: "Starting Grid", icon: "🚦", desc: "Pole to the back row, weekend lineup" },
   { view: "assignments", label: "Teams", icon: "🏎️", desc: "Driver / constructor pairings" },
   {
@@ -87,6 +89,8 @@ const ACCENTS: Record<string, string> = {
   progress: "#5cb0ff",
   "quali-results": "#4bf09a",
   "quali-simulation": "var(--replay-rival)",
+  "ers-map": "#22c55e",
+  "ai-debrief": "#5ad1ff",
   grid: "#ff4646",
   assignments: "#ff9c4f",
   "race-story": "#a78bfa",

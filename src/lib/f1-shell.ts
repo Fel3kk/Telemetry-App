@@ -166,10 +166,72 @@ const TRACK_SLUG_ALIASES: Record<string, string> = {
   "silverstone_reverse": "silverstone_reverse",
   "britain_reverse": "silverstone_reverse",
   "reverse_britain": "silverstone_reverse",
+  "madring": "madrid",
+  // Modded / legacy circuits — their place in a season is decided by when
+  // they were first driven, not by a fixed calendar.
+  "buddh": "india",
+  "buddh_international": "india",
+  "buddh_international_circuit": "india",
+  "hockenheimring": "hockenheim",
+  "germany": "hockenheim",
+  "istanbul_park": "istanbul",
+  "turkey": "istanbul",
+  "emilia_romagna": "imola",
+  "portugal": "portimao",
+  "algarve": "portimao",
+  "portimão": "portimao",
+  "nürburgring": "nurburgring",
+  "eifel": "nurburgring",
+  "malaysia": "sepang",
+  "russia": "sochi",
+  "france": "paul_ricard",
+  "le_castellet": "paul_ricard",
+  "tuscany": "mugello",
+  "korea": "yeongam",
+  "south_africa": "kyalami",
+  "valencia_street": "valencia",
+  "europe": "valencia",
 };
 export function trackSlug(name: string) {
-  const base = (name || "").toLowerCase().trim().replace(/\s+/g, "_");
+  const base = (name || "")
+    .toLowerCase()
+    .trim()
+    .replace(/[\s-]+/g, "_")
+    .replace(/_?\(reverse\)$/, "_reverse");
   return TRACK_SLUG_ALIASES[base] || base;
+}
+
+// Modded / legacy circuits users may add to a season calendar.
+export const EXTRA_TRACKS: { slug: string; name: string }[] = [
+  { slug: "india", name: "India (Buddh)" },
+  { slug: "hockenheim", name: "Germany (Hockenheim)" },
+  { slug: "nurburgring", name: "Nürburgring" },
+  { slug: "istanbul", name: "Turkey (Istanbul)" },
+  { slug: "imola", name: "Imola" },
+  { slug: "portimao", name: "Portugal (Portimão)" },
+  { slug: "sepang", name: "Malaysia (Sepang)" },
+  { slug: "sochi", name: "Russia (Sochi)" },
+  { slug: "paul_ricard", name: "France (Paul Ricard)" },
+  { slug: "mugello", name: "Mugello" },
+  { slug: "yeongam", name: "Korea (Yeongam)" },
+  { slug: "kyalami", name: "South Africa (Kyalami)" },
+  { slug: "valencia", name: "Valencia" },
+  { slug: "fuji", name: "Japan (Fuji)" },
+];
+
+// Round number per track, ordered by the first session driven there
+// (earliest session date wins). Works for any track, including mods.
+export function roundOrder(sessions: Session[]): Map<string, number> {
+  const first = new Map<string, number>();
+  for (const s of sessions) {
+    const slug = trackSlug(s.track_name);
+    if (!slug) continue;
+    const t = Date.parse(s.created_at || "") || 0;
+    const cur = first.get(slug);
+    if (cur === undefined || t < cur) first.set(slug, t);
+  }
+  const ordered = [...first.entries()].sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0]));
+  return new Map(ordered.map(([slug], i) => [slug, i + 1]));
 }
 
 const BASE = (import.meta.env.BASE_URL || "/").replace(/\/+$/, "") + "/";
@@ -203,6 +265,9 @@ const TRACK_FLAGS: Record<string, string> = {
   brazil: "🇧🇷", las_vegas: "🇺🇸", lasvegas: "🇺🇸", "las vegas": "🇺🇸",
   vegas: "🇺🇸", losail: "🇶🇦", qatar: "🇶🇦", abu_dhabi: "🇦🇪",
   yas_marina: "🇦🇪", abu: "🇦🇪", "abu dhabi": "🇦🇪",
+  india: "🇮🇳", hockenheim: "🇩🇪", nurburgring: "🇩🇪", istanbul: "🇹🇷",
+  portimao: "🇵🇹", sepang: "🇲🇾", sochi: "🇷🇺", paul_ricard: "🇫🇷", mugello: "🇮🇹",
+  yeongam: "🇰🇷", kyalami: "🇿🇦", valencia: "🇪🇸", fuji: "🇯🇵",
 };
 export function trackFlag(name: string) {
   return TRACK_FLAGS[trackSlug(name)] || "🏁";

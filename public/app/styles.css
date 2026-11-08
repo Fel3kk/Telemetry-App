@@ -710,31 +710,6 @@ button:hover, .download-btn:hover {
   .quali-table.is-sectors .col-gap { width: 66px; }
 }
 
-<<<<<<< HEAD
-=======
-/* Quali grid */
-.quali-segments-grid { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
-/* Qualifying table: fixed column widths so the Gap column always fits,
-   in both Best Lap and S1/S2/S3 modes, on any screen width. */
-.quali-table { width: 100%; table-layout: fixed; min-width: 0 !important; font-size: 0.9em; }
-.quali-table th, .quali-table td { overflow: hidden; text-overflow: ellipsis; padding: 8px 6px !important; letter-spacing: 0.05em; }
-.quali-table .col-pos { width: 30px; text-align: center; }
-.quali-table .col-time { width: 84px; white-space: nowrap; }
-.quali-table .col-gap { width: 78px; white-space: nowrap; }
-.quali-table.is-sectors .col-sec { width: 56px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.quali-table.is-sectors .col-gap { width: 62px; }
-.quali-table td.sector-best { color: #b14aed; font-weight: 700; }
-.quali-toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
-@media (max-width: 640px) {
-  .quali-table { font-size: 0.8em; }
-  .quali-table th, .quali-table td { padding: 7px 4px !important; }
-  .quali-table .col-pos { width: 26px; }
-  .quali-table .col-time { width: 74px; }
-  .quali-table .col-gap { width: 66px; }
-  .quali-table.is-sectors .col-sec { width: 48px; }
-  .quali-table.is-sectors .col-gap { width: 56px; }
-}
->>>>>>> 1499589cad588d6abc3a08ff12a2d3ad4ad909fa
 
 
 /* Practice fuel calc */
