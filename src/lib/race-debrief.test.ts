@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { raceConsistency, scoreFromSpread, buildDebriefFacts, type DebriefLap } from "./race-debrief";
+import { raceConsistency, scoreFromSpread, buildDebriefFacts, splitStints, verifiedPitLaps, classifyQualifyingLaps, type DebriefLap } from "./race-debrief";
 
 const fmt = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toFixed(3).padStart(6, "0")}`;
 function laps(times: number[], extra: (i: number) => Partial<DebriefLap> = () => ({})): DebriefLap[] {
@@ -42,6 +42,22 @@ describe("race consistency", () => {
 });
 
 describe("debrief facts", () => {
+  it("accepts exactly 108% as push pace, not slower cooldown laps", () => {
+    expect(classifyQualifyingLaps(laps([100, 108, 108.001])).map((l) => l.role)).toEqual(["push", "push", "cooldown/recharge"]);
+  });
+  it("uses pit evidence for in/out laps and does not evaluate invalid laps", () => {
+    expect(classifyQualifyingLaps(laps([120, 115, 100, 105], (n) => ({ pit_status: n === 1 ? 2 : 0, invalid: n === 4 }))).map((l) => l.role)).toEqual(["in-lap", "out-lap", "push", "invalid"]);
+  });
+  it("ignores the Melbourne single-lap Hard artifact", () => {
+    const data = laps([90, 90, 90, 90, 90], (n) => ({ current_tyre_compound: n === 3 ? "Hard" : "Medium" }));
+    expect(splitStints(data)).toHaveLength(1);
+    expect(verifiedPitLaps(data)).toEqual([]);
+    expect(buildDebriefFacts({ track_name: "Melbourne", category: "Race", lap_history: data }).stints[0].compound).toBe("Medium");
+  });
+  it("accepts sustained compound changes and recorded pit_status > 0", () => {
+    expect(verifiedPitLaps(laps([90, 90, 90, 90], (n) => ({ current_tyre_compound: n >= 3 ? "Hard" : "Medium" })))).toEqual([2]);
+    expect(verifiedPitLaps(laps([90, 90, 90], (n) => ({ pit_status: n === 2 ? 2 : 0 })))).toEqual([2]);
+  });
   it("summarises quali gaps to pole by sector", () => {
     const f = buildDebriefFacts({
       track_name: "Spa", category: "Qualifying", session_type: "Q3", driver_name: "FELEDZIAK",
