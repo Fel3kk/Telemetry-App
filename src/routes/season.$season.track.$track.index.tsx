@@ -6,8 +6,6 @@ import {
   cacheIsFresh,
   trackSlug,
   trackFlag,
-  trackMapUrl,
-  trackMapFallbackUrl,
   titleCaseTrack,
   badgesFor,
   racePosition,
@@ -18,10 +16,23 @@ import { supabase } from "@/lib/supabase";
 import { ShellHeader, ShellPage } from "@/components/f1/ShellHeader";
 
 export const Route = createFileRoute("/season/$season/track/$track/")({
+  head: ({ params }) => {
+    const title = `${titleCaseTrack(params.track)} · Season ${params.season} · F1 Telemetry`;
+    const description = `Qualifying, lap simulations, race analysis and telemetry for ${titleCaseTrack(params.track)} in Season ${params.season}.`;
+    return { meta: [{ title }, { name: "description", content: description }, { property: "og:title", content: title }, { property: "og:description", content: description }, { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" }] };
+  },
   component: TrackPage,
 });
 
 type Opt = { view: string; label: string; icon: string; desc: string };
+
+const GROUPS = [
+  { id: "race", label: "Race Telemetry & Analysis", views: ["race-story", "compare", "graphs", "data", "practice", "strategies", "ai-debrief"] },
+  { id: "quali", label: "Qualifying & Setup", views: ["quali-results", "quali-simulation", "ers-map", "grid"] },
+  { id: "season", label: "Championship & Season", views: ["standings", "records", "progress", "assignments", "teammate"] },
+] as const;
+type GroupId = (typeof GROUPS)[number]["id"];
+const GROUP_KEY = "f1.sectionsGroup";
 
 const OPTIONS: Opt[] = [
   {
@@ -43,6 +54,9 @@ const OPTIONS: Opt[] = [
     desc: "Points & position by round, drivers and teams",
   },
   { view: "quali-results", label: "Qualifying", icon: "⏱️", desc: "Q1–Q3 / shootout times" },
+  { view: "quali-simulation", label: "Qualifying Simulation", icon: "🏎️", desc: "Your lap versus P1, or P2 from pole" },
+  { view: "ers-map", label: "ERS Map", icon: "⚡", desc: "Paint your race and quali battery plan on the track" },
+  { view: "ai-debrief", label: "AI Race Engineer", icon: "🎧", desc: "Debrief, consistency score and coaching notes" },
   { view: "grid", label: "Starting Grid", icon: "🚦", desc: "Pole to the back row, weekend lineup" },
   { view: "assignments", label: "Teams", icon: "🏎️", desc: "Driver / constructor pairings" },
   {
@@ -80,6 +94,9 @@ const ACCENTS: Record<string, string> = {
   records: "#cf9bff",
   progress: "#5cb0ff",
   "quali-results": "#4bf09a",
+  "quali-simulation": "var(--replay-rival)",
+  "ers-map": "#22c55e",
+  "ai-debrief": "#5ad1ff",
   grid: "#ff4646",
   assignments: "#ff9c4f",
   "race-story": "#a78bfa",
@@ -109,6 +126,15 @@ function TrackPage() {
   const [notes, setNotes] = useState("");
   const [order, setOrder] = useState<string[]>(OPTIONS.map((o) => o.view));
   const [dragging, setDragging] = useState<string | null>(null);
+  const [group, setGroup] = useState<GroupId>("race");
+  useEffect(() => {
+    const g = localStorage.getItem(GROUP_KEY);
+    if (g && GROUPS.some((x) => x.id === g)) setGroup(g as GroupId);
+  }, []);
+  const pickGroup = (g: GroupId) => {
+    setGroup(g);
+    try { localStorage.setItem(GROUP_KEY, g); } catch { /* ignore */ }
+  };
 
   // Load cached sessions after mount to avoid SSR hydration mismatch.
   // Paint navigation (season/round arrows) from cache before the first frame,
@@ -401,15 +427,6 @@ function TrackPage() {
 
   const notesTemplate = `SOFTS:\n\nMEDIUMS:\n\nHARDS:\n\nBATTERY MANAGEMENT:\n`;
 
-  const [imgOk, setImgOk] = useState(true);
-  const [imgSrc, setImgSrc] = useState<string>("");
-  const triedFallback = useMemo(() => ({ v: false }), [canonicalName]);
-  useEffect(() => {
-    setImgSrc(trackMapUrl(canonicalName));
-    setImgOk(true);
-    triedFallback.v = false;
-  }, [canonicalName, triedFallback]);
-
   const orderedOptions = useMemo(() => {
     const byView = new Map(OPTIONS.map((o) => [o.view, o]));
     return order.map((v) => byView.get(v)).filter(Boolean) as Opt[];
@@ -434,7 +451,7 @@ function TrackPage() {
         ]}
       />
       <ShellPage>
-        <section className="mb-8 grid gap-6 lg:grid-cols-[1.4fr_1fr]">
+        <section className="mb-8">
           <div>
             <div className="mb-2 flex items-center gap-3">
               <span className="text-3xl sm:text-4xl">{trackFlag(canonicalName)}</span>
@@ -555,25 +572,6 @@ function TrackPage() {
               className="min-h-[200px] w-full resize-y sm:min-h-[340px] whitespace-pre-wrap rounded-md border border-white/10 bg-white/[0.03] p-3 font-mono text-sm leading-relaxed text-white outline-none focus:border-red-500/60"
             />
           </div>
-          <div className="overflow-hidden rounded-lg border border-white/10 bg-black/40">
-            {imgOk ? (
-              <img
-                src={imgSrc || trackMapUrl(canonicalName)}
-                alt={canonicalName}
-                className="h-full w-full object-contain p-4"
-                onError={() => {
-                  if (!triedFallback.v) {
-                    triedFallback.v = true;
-                    setImgSrc(trackMapFallbackUrl(canonicalName));
-                  } else setImgOk(false);
-                }}
-              />
-            ) : (
-              <div className="flex h-full min-h-[240px] items-center justify-center text-6xl opacity-40">
-                {trackFlag(canonicalName)}
-              </div>
-            )}
-          </div>
         </section>
 
         <UploadedSessions
@@ -593,8 +591,21 @@ function TrackPage() {
           </h2>
           <span className="hidden text-[11px] text-white/40 sm:inline">Drag cards to reorder</span>
         </div>
+        <div className="mb-3 flex flex-wrap gap-2" role="tablist">
+          {GROUPS.map((g) => (
+            <button
+              key={g.id}
+              role="tab"
+              aria-selected={group === g.id}
+              onClick={() => pickGroup(g.id)}
+              className={"rounded-full border px-3 py-1.5 text-xs font-semibold transition " + (group === g.id ? "border-red-500 bg-red-500/20 text-white" : "border-white/10 bg-white/5 text-white/60 hover:text-white")}
+            >
+              {g.label}
+            </button>
+          ))}
+        </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-          {orderedOptions.map((o) => {
+          {orderedOptions.filter((o) => (GROUPS.find((g) => g.id === group)?.views as readonly string[]).includes(o.view)).map((o) => {
             const accent = ACCENTS[o.view] ?? "#ef3340";
             const linkProps =
               o.view === "teammate"

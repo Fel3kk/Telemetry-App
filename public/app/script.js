@@ -55,7 +55,13 @@ function canonicalTeam(t) {
 
 // Team lookup that tolerates casing differences between the
 // telemetry driver names (UPPERCASE) and manually saved keys.
+<<<<<<< HEAD
+function teamForDriver(teams, name, season = currentSeason, sessionTeam = "") {
+  const recordedTeam = canonicalTeam(sessionTeam);
+  if (recordedTeam && recordedTeam.toLowerCase() !== "unassigned") return recordedTeam;
+=======
 function teamForDriver(teams, name) {
+>>>>>>> 1c6d288d5748ccd014853a524b7ead6ffafd2de5
   if (!name) return "";
   const key = String(name).trim().toUpperCase();
   if (teams) {
@@ -65,6 +71,15 @@ function teamForDriver(teams, name) {
     }
   }
   // Fallback: teams recorded inside the uploaded telemetry itself.
+<<<<<<< HEAD
+  return canonicalTeam(teamFromTelemetry(key, season));
+}
+
+// Only the requested season can supply a missing constructor. Rebuild from
+// current rows so replacing a file cannot leave a stale same-length cache.
+function teamFromTelemetry(upperName, season = currentSeason) {
+  const sessions = (typeof allSessions !== "undefined" && allSessions) || [];
+=======
   return canonicalTeam(teamFromTelemetry(key));
 }
 
@@ -75,6 +90,7 @@ let _telemetryTeamCacheSize = -1;
 function teamFromTelemetry(upperName) {
   const sessions = (typeof allSessions !== "undefined" && allSessions) || [];
   if (!_telemetryTeamCache || _telemetryTeamCacheSize !== sessions.length) {
+>>>>>>> 1c6d288d5748ccd014853a524b7ead6ffafd2de5
     const map = {};
     const put = (n, t) => {
       if (!n || !t) return;
@@ -84,6 +100,10 @@ function teamFromTelemetry(upperName) {
       if (!map[k]) map[k] = v;
     };
     sessions.forEach((s) => {
+<<<<<<< HEAD
+      if (Number(s.season) !== Number(season)) return;
+=======
+>>>>>>> 1c6d288d5748ccd014853a524b7ead6ffafd2de5
       (Array.isArray(s.results) ? s.results : []).forEach((r) =>
         put(r && r.name, r && r.team),
       );
@@ -95,10 +115,14 @@ function teamFromTelemetry(upperName) {
         );
       }
     });
+<<<<<<< HEAD
+  return map[upperName] || "";
+=======
     _telemetryTeamCache = map;
     _telemetryTeamCacheSize = sessions.length;
   }
   return _telemetryTeamCache[upperName] || "";
+>>>>>>> 1c6d288d5748ccd014853a524b7ead6ffafd2de5
 }
 
 // Sector times of a driver's best lap (from the packet session history).
@@ -798,8 +822,26 @@ function getTrackCalendarIndex(trackName) {
   return index === -1 ? 999 : index;
 }
 
+// Round order = the order each track was first driven in that season, so
+// modded tracks (India, Hockenheim, …) slot in where they were raced.
+// Tracks with no dated session fall back to the official calendar order.
+function trackFirstDriven(season, trackName) {
+  const key = normalizeTrackName(trackName);
+  let first = Infinity;
+  for (const s of (typeof allSessions !== "undefined" && allSessions) || []) {
+    if ((s.season || 1) !== season || normalizeTrackName(s.track_name) !== key) continue;
+    const t = Date.parse(s.created_at || s.session_date || "");
+    if (!isNaN(t) && t < first) first = t;
+  }
+  return first;
+}
+
 function sortSessionsByCalendar(a, b) {
   if ((a.season || 1) !== (b.season || 1)) return (a.season || 1) - (b.season || 1);
+  const season = a.season || 1;
+  const fa = trackFirstDriven(season, a.track_name);
+  const fb = trackFirstDriven(season, b.track_name);
+  if (fa !== fb && (isFinite(fa) || isFinite(fb))) return fa - fb;
   const calendarDiff = getTrackCalendarIndex(a.track_name) - getTrackCalendarIndex(b.track_name);
   if (calendarDiff !== 0) return calendarDiff;
   const categoryOrder = { Sprint: 0, Race: 1 };
@@ -926,19 +968,27 @@ async function handleFileUpload(e) {
       data = sanitizeDeep(data);
       const playerData = processTelemetryData(data);
       if (playerData && playerData.length > 0) {
-        const session = playerData[0];
-        session.category = category;
-        session.season = currentSeason;
-        if (session.track_name === "Unknown" || !session.track_name) {
-          const parts = filename.replace(".json", "").split(/[_-]/);
-          const trackGuess = parts.find((p) => !["race", "sprint", "quali", "qualifying"].includes(p));
-          if (trackGuess) session.track_name = trackGuess;
-        }
-        sessionsToPersist.push(session);
+        // Pre-made summaries (e.g. the race/quali templates) can hold several
+        // sessions in one file — save each one with its own category.
+        const isSummary = isSessionSummary(data) || (Array.isArray(data) && data.length > 0 && data.every(isSessionSummary));
+        const list = isSummary ? playerData.filter((s) => s && typeof s === "object") : [playerData[0]];
+        const labels = [];
+        list.forEach((session) => {
+          session.category = (isSummary && session.category) || category;
+          session.season = currentSeason;
+          if (session.track_name === "Unknown" || !session.track_name) {
+            const parts = filename.replace(".json", "").split(/[_-]/);
+            const trackGuess = parts.find((p) => !["race", "sprint", "quali", "qualifying"].includes(p));
+            if (trackGuess) session.track_name = trackGuess;
+          }
+          sessionsToPersist.push(session);
+          lastProcessedSession = session;
+          labels.push(session.session_type || session.category);
+        });
         sessionRow.push(row);
-        lastProcessedSession = session;
+        const first = list[0];
         row.status = "working";
-        row.msg = `${category} · ${session.track_name || "Unknown track"} — ready to save`;
+        row.msg = `${list.length > 1 ? labels.join(", ") : first.category} · ${first.track_name || "Unknown track"} — ready to save`;
       } else {
         row.status = "error";
         row.msg = "No player driver found (is-player: true). Make sure this is your own session file.";
@@ -1286,12 +1336,115 @@ function buildRaceStory(rootData, playerName, playerTeam, classification_data) {
   };
 }
 
-function processTelemetryData(data) {
-  // Check if data is already processed summary from get_data.py
-  if (Array.isArray(data) && data.length > 0 && data[0].lap_history) {
-    console.log("Loading pre-processed telemetry summary");
-    return data;
+// A hand-made or exported summary: one session per object with track_name
+// plus a result (classification / results / finishing position). These have
+// no raw game packets, so lap-by-lap charts stay empty but results count.
+function isSessionSummary(o) {
+  return !!o && typeof o === "object" && !Array.isArray(o) && !!o.track_name &&
+    !o["session-info"] &&
+    (Array.isArray(o.lap_history) || Array.isArray(o.classification) ||
+      Array.isArray(o.results) || o.finishing_position != null ||
+      (o.race_story && Array.isArray(o.race_story.classification)));
+}
+
+function normalizeSessionSummary(o) {
+  const up = (v) => String(v || "").trim().toUpperCase();
+  const num = (v) => (v === null || v === undefined || v === "" || isNaN(Number(v)) ? null : Number(v));
+  const rawCls = Array.isArray(o.classification)
+    ? o.classification
+    : Array.isArray(o.race_story?.classification) ? o.race_story.classification : [];
+  const classification = rawCls
+    .filter((e) => e && (e.name || e.driver_name || e["driver-name"]))
+    .map((e) => {
+      const status = String(e.status || e["result-status"] || "").toUpperCase();
+      const is_dnf = e.is_dnf === true || (!!status && !/FINISHED|ACTIVE/.test(status));
+      return {
+        ...e,
+        position: num(e.position),
+        name: up(e.name || e.driver_name || e["driver-name"]),
+        team: e.team || e["team-name"] || "",
+        status: status || (is_dnf ? "DNF" : "FINISHED"),
+        points: num(e.points) || 0,
+        is_dnf,
+        is_player: e.is_player === true || e["is-player"] === true || undefined,
+      };
+    })
+    .sort((a, b) => (a.position || 99) - (b.position || 99));
+
+  // Find the player: explicit is_player flag, else match driver_name
+  // ("Piotr FELEDZIAK" → "FELEDZIAK") against the classification.
+  const fullName = up(o.driver_name);
+  let me = classification.find((e) => e.is_player);
+  if (!me && fullName) {
+    me = classification.find((e) => e.name === fullName) ||
+      classification.find((e) => fullName.split(/\s+/).includes(e.name));
   }
+  const playerName = me?.name || up(o.race_story?.player_name) || fullName;
+
+  const results = Array.isArray(o.results) && o.results.length
+    ? o.results.map((r) => ({ ...r, name: up(r.name || r.driver_name) }))
+    : classification.map((e) => ({
+        name: e.name,
+        team: e.team,
+        position: e.position,
+        best_lap: e.best_lap || e.best_lap_time || e.best_lap_str || "N/A",
+        q1: e.q1 || "",
+        q2: e.q2 || "",
+        q3: e.q3 || "",
+      }));
+
+  const gridFrom = classification
+    .map((e) => ({ position: num(e.grid_position ?? e.starting_position ?? e.grid), name: e.name, team: e.team }))
+    .filter((e) => e.position > 0);
+  const gridValid = gridFrom.length > 2 && new Set(gridFrom.map((e) => e.position)).size === gridFrom.length;
+
+  const category = o.category || o.session_type || null;
+  const isRaceLike = /race|sprint/i.test(String(category || "")) && !/shootout|quali/i.test(String(category || ""));
+  const baseStory = o.race_story && typeof o.race_story === "object" ? o.race_story : {};
+  const race_story = isRaceLike
+    ? {
+        position_history: [],
+        podium: [],
+        overtakes_made: [],
+        overtakes_suffered: [],
+        pace_delta: [],
+        speed_traps: [],
+        fastest_lap: null,
+        driver_of_the_day: null,
+        driver_lap_times: [],
+        starting_grid: gridValid ? gridFrom.sort((a, b) => a.position - b.position) : [],
+        ...baseStory,
+        player_name: playerName,
+        player_team: baseStory.player_team || me?.team || "",
+        classification: classification.length ? classification : (baseStory.classification || []),
+      }
+    : o.race_story || null;
+
+  return {
+    ...o,
+    driver_name: playerName,
+    category,
+    session_type: o.session_type || category,
+    created_at: o.created_at || new Date().toISOString(),
+    starting_position: num(o.starting_position ?? me?.grid_position),
+    finishing_position: num(o.finishing_position ?? me?.position),
+    starting_fuel: num(o.starting_fuel),
+    stints: Array.isArray(o.stints) ? o.stints : [],
+    lap_history: Array.isArray(o.lap_history) ? o.lap_history : [],
+    results,
+    race_story,
+  };
+}
+
+function processTelemetryData(data) {
+  // Already-processed summaries (get_data.py, the templates, or result-only
+  // files with just a classification). A single object is accepted too.
+  if (isSessionSummary(data)) data = [data];
+  if (Array.isArray(data) && data.length > 0 && data.every(isSessionSummary)) {
+    console.log("Loading pre-processed telemetry summary");
+    return data.map(normalizeSessionSummary);
+  }
+
 
 
   const results = [];
@@ -1406,6 +1559,7 @@ function processTelemetryData(data) {
                     name: String(
                       e.name || e.driver_name || "UNKNOWN",
                     ).toUpperCase(),
+                    team: e.team || e["team-name"] || "",
                     position:
                       e["final-classification"]?.["position"] ||
                       e["track-position"] ||
@@ -2594,7 +2748,7 @@ function renderQualiResults() {
   segmentsGridContainer.className = "quali-segments-grid";
   bodyContainer.appendChild(segmentsGridContainer);
 
-  const teamsAssigned = getDriverTeams();
+  const teamsAssigned = getTeamsForSeason(currentData.season);
 
   // Sort segments logically (usually by their session_type name)
   qualiSessions.sort((a, b) =>
@@ -2666,8 +2820,12 @@ function renderQualiResults() {
       else if (lowerTitle.includes("2") && pos > 10) isEliminated = true;
 
       const team =
+<<<<<<< HEAD
+        teamForDriver(teamsAssigned, res.name, session.season, res.team) ||
+=======
         teamForDriver(teamsAssigned, res.name) ||
         canonicalTeam(res.team) ||
+>>>>>>> 1c6d288d5748ccd014853a524b7ead6ffafd2de5
         "Unassigned";
       const teamColor = teamColorFor(team);
 
@@ -4668,7 +4826,7 @@ function renderRecordsTable() {
       driverAgg[name].fastest_laps += s.fastest_laps || 0;
       driverAgg[name].dnfs += s.dnfs || 0;
       driverAgg[name].seasons.add(season);
-      { const _t = teamForDriver(teams, name); if (_t) driverAgg[name].lastTeam = _t; }
+      { const _t = teamForDriver(teams, name, season); if (_t) driverAgg[name].lastTeam = _t; }
     });
 
 
@@ -4683,7 +4841,7 @@ function renderRecordsTable() {
     // Constructor aggregates for this season
     const teamSeason = {};
     Object.entries(standings).forEach(([name, s]) => {
-      const team = teamForDriver(teams, name) || "Unassigned";
+      const team = teamForDriver(teams, name, season) || "Unassigned";
       if (!teamSeason[team]) teamSeason[team] = { points: 0, wins: 0, podiums: 0 };
       teamSeason[team].points += s.points;
       teamSeason[team].wins += s.wins;
@@ -4721,8 +4879,8 @@ function renderRecordsTable() {
       const p1 = posFor(1);
       const p2 = posFor(2);
       if (!p1 || !p2) return;
-      const t1 = teamForDriver(teams, p1.name) || null;
-      const t2 = teamForDriver(teams, p2.name) || null;
+      const t1 = teamForDriver(teams, p1.name, season, p1.team) || null;
+      const t2 = teamForDriver(teams, p2.name, season, p2.team) || null;
       if (!t1 || !t2 || t1 !== t2 || t1 === "Unassigned") return;
       if (!teamAgg[t1]) {
         teamAgg[t1] = { points: 0, wins: 0, podiums: 0, one_twos: 0, front_row_lockouts: 0, titles: 0, seasons: new Set() };
@@ -6587,7 +6745,7 @@ function renderPaceDeltaChart() {
 ---------------------------------------------------------------- */
 function buildStartingGridData() {
   if (!currentData) return [];
-  const teams = typeof getDriverTeams === "function" ? getDriverTeams() : {};
+  const teams = getTeamsForSeason(currentData.season);
   const currentTrack = normalizeTrackName(currentData.track_name);
 
   // Prefer the race (or sprint) file of the same weekend — its lap-0 order is
@@ -6624,7 +6782,11 @@ function buildStartingGridData() {
       .map((e) => ({
         position: Number(e.position),
         name: String(e.name).toUpperCase(),
+<<<<<<< HEAD
+        team: teamForDriver(teams, e.name, currentData.season, e.team) || "Unassigned",
+=======
         team: canonicalTeam(e.team) || teamForDriver(teams, e.name) || "Unassigned",
+>>>>>>> 1c6d288d5748ccd014853a524b7ead6ffafd2de5
         time: e.lap_time_str || "",
         source: "Race start (lap 0)",
       }));
@@ -6654,7 +6816,7 @@ function gridFromQualiFor(session, teamsMap) {
   if (!session) return [];
   const teams =
     teamsMap ||
-    (typeof getDriverTeams === "function" ? getDriverTeams() : {});
+    getTeamsForSeason(session.season);
   const isSprintish =
     session.category === "Sprint" || session.category === "Sprint Shootout";
   const targetCat = isSprintish ? "Sprint Shootout" : "Qualifying";
@@ -6694,7 +6856,7 @@ function gridFromQualiFor(session, teamsMap) {
         byPos.set(r.pos, {
           position: r.pos,
           name,
-          team: teamForDriver(teams, r.name) || teamForDriver(teams, name) || "Unassigned",
+          team: teamForDriver(teams, r.name, qs.season, r.team) || "Unassigned",
           time: r.best_lap && r.best_lap !== "N/A" ? r.best_lap : "",
           source: label,
         });
@@ -6712,7 +6874,6 @@ async function backfillStartingGrids() {
   if (_gridBackfillDone) return;
   _gridBackfillDone = true;
   const db = typeof getSupabaseClient === "function" ? getSupabaseClient() : null;
-  const teams = typeof getDriverTeams === "function" ? getDriverTeams() : {};
   let changed = 0;
 
   for (const s of allSessions || []) {
@@ -6721,7 +6882,7 @@ async function backfillStartingGrids() {
     if (!rs) continue;
     if (Array.isArray(rs.starting_grid) && rs.starting_grid.length) continue;
 
-    const grid = gridFromQualiFor(s, teams)
+    const grid = gridFromQualiFor(s)
       .filter((e) => e.position > 0 && e.name)
       .map((e) => ({ position: e.position, name: e.name, team: e.team }));
     if (grid.length < 3) continue;

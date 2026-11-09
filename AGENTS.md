@@ -8,3 +8,8 @@
 > Commits you push to the connected branch sync back to Lovable and show up in
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
+
+- Keep qualifying playback in the native React shell with pure timing helpers; summary uploads contain lap times, not measured movement coordinates.
+- Keep racing-line points normalized and calibrated per track in one owner-published site collection shared by Qualifying and ERS; device storage is export-only and replacement artwork requires independent calibration.
+- Load AI debrief sessions through the tested browser query helper with explicit database-column aliases, so stored position names cannot diverge from analysis fields.
+- Keep legacy constructor lookup regression tests against the analyzer's actual helper code; explicit session seasons prevent cross-season fallback and grid-backfill contamination.
