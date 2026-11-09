@@ -1,9 +1,10 @@
 # Improvement roadmap
 
 ## Current follow-up
-- [ ] Respect each session file's constructor and prevent cross-season team fallback (Feledziak: Williams in the affected season).
-- [ ] Remove the photo above Notes/Sections on the track hub.
-- [ ] Run team regression tests and check the changed views.
+- [x] Respect each session file's constructor and prevent cross-season team fallback (Feledziak: Williams in the affected season).
+- [x] Remove the photo above Notes/Sections on the track hub.
+- [x] Run team regression tests and check qualifying with a conflicting assignment (15 tests passed; browser shows Williams).
+- [ ] Verify the photo-free hub with saved data (blocked: no available signed-in session; page redirects to sign-in).
 
 - [x] Performance: cache-first loading, single refetch on mount, lazy images/iframes
 - [x] Feature: Title permutations (points needed per remaining race to win championship)
