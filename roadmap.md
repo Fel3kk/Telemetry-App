@@ -1,5 +1,10 @@
 # Improvement roadmap
 
+## Current follow-up
+- [ ] Respect each session file's constructor and prevent cross-season team fallback (Feledziak: Williams in the affected season).
+- [ ] Remove the photo above Notes/Sections on the track hub.
+- [ ] Run team regression tests and check the changed views.
+
 - [x] Performance: cache-first loading, single refetch on mount, lazy images/iframes
 - [x] Feature: Title permutations (points needed per remaining race to win championship)
 - [x] Feature: Personal records wall (best lap per track across all seasons, with deltas)

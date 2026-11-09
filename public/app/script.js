@@ -55,7 +55,9 @@ function canonicalTeam(t) {
 
 // Team lookup that tolerates casing differences between the
 // telemetry driver names (UPPERCASE) and manually saved keys.
-function teamForDriver(teams, name) {
+function teamForDriver(teams, name, season = currentSeason, sessionTeam = "") {
+  const recordedTeam = canonicalTeam(sessionTeam);
+  if (recordedTeam && recordedTeam.toLowerCase() !== "unassigned") return recordedTeam;
   if (!name) return "";
   const key = String(name).trim().toUpperCase();
   if (teams) {
@@ -65,16 +67,13 @@ function teamForDriver(teams, name) {
     }
   }
   // Fallback: teams recorded inside the uploaded telemetry itself.
-  return canonicalTeam(teamFromTelemetry(key));
+  return canonicalTeam(teamFromTelemetry(key, season));
 }
 
-// Name -> team map rebuilt from every saved session's telemetry, so drivers
-// that were never assigned manually still show their real team.
-let _telemetryTeamCache = null;
-let _telemetryTeamCacheSize = -1;
-function teamFromTelemetry(upperName) {
+// Only the requested season can supply a missing constructor. Rebuild from
+// current rows so replacing a file cannot leave a stale same-length cache.
+function teamFromTelemetry(upperName, season = currentSeason) {
   const sessions = (typeof allSessions !== "undefined" && allSessions) || [];
-  if (!_telemetryTeamCache || _telemetryTeamCacheSize !== sessions.length) {
     const map = {};
     const put = (n, t) => {
       if (!n || !t) return;
@@ -84,6 +83,7 @@ function teamFromTelemetry(upperName) {
       if (!map[k]) map[k] = v;
     };
     sessions.forEach((s) => {
+      if (Number(s.season) !== Number(season)) return;
       (Array.isArray(s.results) ? s.results : []).forEach((r) =>
         put(r && r.name, r && r.team),
       );
@@ -95,10 +95,7 @@ function teamFromTelemetry(upperName) {
         );
       }
     });
-    _telemetryTeamCache = map;
-    _telemetryTeamCacheSize = sessions.length;
-  }
-  return _telemetryTeamCache[upperName] || "";
+  return map[upperName] || "";
 }
 
 // Sector times of a driver's best lap (from the packet session history).
@@ -1535,6 +1532,7 @@ function processTelemetryData(data) {
                     name: String(
                       e.name || e.driver_name || "UNKNOWN",
                     ).toUpperCase(),
+                    team: e.team || e["team-name"] || "",
                     position:
                       e["final-classification"]?.["position"] ||
                       e["track-position"] ||
@@ -2795,8 +2793,7 @@ function renderQualiResults() {
       else if (lowerTitle.includes("2") && pos > 10) isEliminated = true;
 
       const team =
-        teamForDriver(teamsAssigned, res.name) ||
-        canonicalTeam(res.team) ||
+        teamForDriver(teamsAssigned, res.name, session.season, res.team) ||
         "Unassigned";
       const teamColor = teamColorFor(team);
 
@@ -6753,7 +6750,7 @@ function buildStartingGridData() {
       .map((e) => ({
         position: Number(e.position),
         name: String(e.name).toUpperCase(),
-        team: canonicalTeam(e.team) || teamForDriver(teams, e.name) || "Unassigned",
+        team: teamForDriver(teams, e.name, currentData.season, e.team) || "Unassigned",
         time: e.lap_time_str || "",
         source: "Race start (lap 0)",
       }));
@@ -6823,7 +6820,7 @@ function gridFromQualiFor(session, teamsMap) {
         byPos.set(r.pos, {
           position: r.pos,
           name,
-          team: teamForDriver(teams, r.name) || teamForDriver(teams, name) || "Unassigned",
+          team: teamForDriver(teams, r.name, qs.season, r.team) || "Unassigned",
           time: r.best_lap && r.best_lap !== "N/A" ? r.best_lap : "",
           source: label,
         });
