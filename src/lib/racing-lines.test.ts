@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { exportDeviceRacingLines, sharedRacingLine, validRacingLine } from "./racing-lines";
+import { exportDeviceRacingLines, racingLineCollectionWith, sharedRacingLine, validGeneratedRacingLine, validRacingLine } from "./racing-lines";
 
 const points = [{ x: 0.1, y: 0.2 }, { x: 0.7, y: 0.3 }, { x: 0.4, y: 0.9 }];
 describe("owner-published racing lines", () => {
@@ -14,6 +14,20 @@ describe("owner-published racing lines", () => {
   it("rejects points outside the normalized map", () => {
     expect(validRacingLine([...points, { x: 1.1, y: 0.5 }])).toBe(false);
     expect(validRacingLine(points.slice(0, 2))).toBe(false);
+  });
+  it("accepts only usable AI drafts within the normalized map", () => {
+    const draft = Array.from({ length: 40 }, (_, i) => ({ x: i / 39, y: 0.5 }));
+    expect(validGeneratedRacingLine(draft)).toBe(true);
+    expect(validGeneratedRacingLine(draft.slice(0, 19))).toBe(false);
+    expect(validGeneratedRacingLine([...draft, ...draft, ...draft, ...draft, ...draft])).toBe(false);
+    expect(validGeneratedRacingLine(draft.map((point) => ({ ...point, x: 1.1 })))).toBe(false);
+  });
+  it("replaces one track in the published collection without dropping other tracks", () => {
+    const updated = racingLineCollectionWith("Yas Marina", points, { version: 1, tracks: { silverstone: points } });
+    expect(updated).toEqual({ version: 1, tracks: { silverstone: points, abu_dhabi: points } });
+  });
+  it("keeps the existing calibrated Zandvoort line in the shared collection", () => {
+    expect(sharedRacingLine("Zandvoort").length).toBeGreaterThan(20);
   });
   it("exports all old track lines together without unrelated device data", () => {
     const entries = new Map([

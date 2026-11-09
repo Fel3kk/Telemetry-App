@@ -4,7 +4,9 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabase";
 import { getActiveCareer } from "@/lib/career";
 import { trackMapUrl, trackMapFallbackUrl, trackSlug } from "@/lib/f1-shell";
-import { replayPair, lapProgress, liveGap, pointOnLine, ZANDVOORT_LINE, type Point, type QualiResult } from "@/lib/quali-simulation";
+import { replayPair, lapProgress, liveGap, pointOnLine, type Point, type QualiResult } from "@/lib/quali-simulation";
+import { RacingLineActions } from "./RacingLineActions";
+import { downloadRacingLineCollection, sharedRacingLine } from "@/lib/racing-lines";
 
 type QualiSession = { id: string; driver_name: string; track_name: string; category: string; session_type: string; results: QualiResult[] };
 const format = (t: number) => `${Math.floor(t / 60)}:${(t % 60).toFixed(3).padStart(6, "0")}`;
@@ -21,9 +23,8 @@ export function QualifyingSimulation({ season, track, cat }: { season: number; t
   const [editing, setEditing] = useState(false);
   const [image, setImage] = useState(trackMapUrl(track));
   const [imageFailed, setImageFailed] = useState(false);
-  const [storageError, setStorageError] = useState("");
+  const [lineMessage, setLineMessage] = useState("");
   const clock = useRef<number | null>(null);
-  const lineKey = `f1.quali.line.v1.${trackSlug(track)}`;
 
   useEffect(() => {
     let active = true;
@@ -54,16 +55,9 @@ export function QualifyingSimulation({ season, track, cat }: { season: number; t
     setImage(trackMapUrl(track));
     setImageFailed(false);
     setEditing(false);
-    let points = trackSlug(track) === "zandvoort" ? ZANDVOORT_LINE : [];
-    try {
-      const raw = localStorage.getItem(lineKey);
-      if (raw) {
-        const saved = JSON.parse(raw);
-        if (Array.isArray(saved) && saved.length >= 3 && saved.every((p) => Number.isFinite(p.x) && Number.isFinite(p.y) && p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1)) points = saved;
-      }
-    } catch {}
-    setLine(points);
-  }, [track, lineKey]);
+    setLine(sharedRacingLine(track));
+    setLineMessage("");
+  }, [track]);
 
   const session = sessions.find((s) => s.id === selected);
   const pair = useMemo(() => session ? replayPair(Array.isArray(session.results) ? session.results : [], session.driver_name) : null, [session]);
@@ -104,10 +98,14 @@ export function QualifyingSimulation({ season, track, cat }: { season: number; t
 
   function saveLine() {
     if (draft.length < 3) return;
-    setLine(draft);
-    setEditing(false);
-    try { localStorage.setItem(lineKey, JSON.stringify(draft)); setStorageError(""); }
-    catch { setStorageError("Racing line is available now, but could not be saved on this device."); }
+    try {
+      downloadRacingLineCollection(track, draft);
+      setLine(draft);
+      setEditing(false);
+      setLineMessage("Collection downloaded. Replace src/data/racing-lines.json and redeploy to publish it for everyone.");
+    } catch (e) {
+      setLineMessage(e instanceof Error ? e.message : "The racing-line collection couldn't be downloaded.");
+    }
   }
   const visibleLine = editing ? draft : line;
   const dots = pair ? [
@@ -186,12 +184,18 @@ export function QualifyingSimulation({ season, track, cat }: { season: number; t
 
       {!editing ? <Button variant="outline" className="w-full" disabled={imageFailed} onClick={() => {setDraft([]);setEditing(true);setPlaying(false);}}><Pencil/>Set racing line</Button> : <div className="flex items-center gap-1">
         <Button variant="ghost" size="icon" aria-label="Undo point" title="Undo point" disabled={!draft.length} onClick={() => setDraft((p) => p.slice(0,-1))}><Undo2/></Button>
-        <Button variant="outline" className="flex-1" disabled={draft.length < 3} onClick={saveLine}><Check/>Save line</Button>
+        <Button variant="outline" className="flex-1" disabled={draft.length < 3} onClick={saveLine}><Check/>Export edited line</Button>
         <Button variant="ghost" size="icon" aria-label="Cancel line editing" title="Cancel" onClick={() => setEditing(false)}><X/></Button>
       </div>}
       {editing && <p className="text-sm text-muted-foreground">Start at the finish line, then tap around the circuit in driving order. {draft.length} points.</p>}
       {!editing && line.length < 3 && !imageFailed && <p className="text-sm text-muted-foreground">This track needs a racing line before playback is available.</p>}
-      {storageError && <p role="alert" className="text-sm text-destructive">{storageError}</p>}
+      <RacingLineActions
+        track={track}
+        mapUrl={image}
+        line={editing ? draft : line}
+        onDraft={(points) => { setLine(points); setDraft([]); setEditing(false); setPlaying(false); setLineMessage(""); }}
+      />
+      {lineMessage && <p role="status" className="text-xs text-muted-foreground">{lineMessage}</p>}
     </aside>
     </div>
   </section>;

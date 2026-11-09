@@ -18,7 +18,12 @@ export async function verifyUser(authHeader: string | undefined): Promise<string
 
 export type GeminiResult = { ok: true; json: unknown; model: string } | { ok: false; error: string };
 
-export async function callGemini(prompt: string, schema: object, system: string): Promise<GeminiResult> {
+export async function callGemini(
+  prompt: string,
+  schema: object,
+  system: string,
+  image?: { mimeType: string; data: string },
+): Promise<GeminiResult> {
   const key = process.env["GEMINI_API_KEY"];
   if (!key) return { ok: false, error: "The Google AI key isn't set up on the server." };
   let lastError = "The AI engineer is unavailable right now. Try again in a minute.";
@@ -31,7 +36,10 @@ export async function callGemini(prompt: string, schema: object, system: string)
         headers: { "content-type": "application/json", "x-goog-api-key": key },
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: system }] },
-          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          contents: [{ role: "user", parts: [
+            { text: prompt },
+            ...(image ? [{ inlineData: { mimeType: image.mimeType, data: image.data } }] : []),
+          ] }],
           generationConfig: { responseMimeType: "application/json", responseSchema: schema, temperature: 0.4 },
         }),
       });

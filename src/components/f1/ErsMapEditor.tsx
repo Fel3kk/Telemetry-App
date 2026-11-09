@@ -4,7 +4,9 @@ import { Copy, Download, Minus, Pencil, Plus, Trash2, Upload, X, Check } from "l
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { trackMapUrl, trackMapFallbackUrl, trackSlug } from "@/lib/f1-shell";
-import { ZANDVOORT_LINE, type Point } from "@/lib/quali-simulation";
+import type { Point } from "@/lib/quali-simulation";
+import { sharedRacingLine } from "@/lib/racing-lines";
+import { RacingLineActions } from "./RacingLineActions";
 import {
   coverage, ersKeys, isValidSegment, lapOrder, nudge, pointAtProgress, projectOnLine, segmentSpan, sliceLine,
   type ErsColor, type ErsMode, type ErsSegment, type ErsSlotMeta,
@@ -28,10 +30,7 @@ function readJson<T>(key: string, fallback: T): T {
 }
 
 function loadLine(track: string): Point[] {
-  const fallback = trackSlug(track) === "zandvoort" ? ZANDVOORT_LINE : [];
-  const saved = readJson<Point[] | null>(`f1.quali.line.v1.${trackSlug(track)}`, null);
-  if (Array.isArray(saved) && saved.length >= 3 && saved.every((p) => Number.isFinite(p.x) && Number.isFinite(p.y))) return saved;
-  return fallback;
+  return sharedRacingLine(track);
 }
 
 function loadSlots(slug: string, mode: ErsMode): ErsSlotMeta[] {
@@ -75,15 +74,6 @@ export function ErsMapEditor({ season, track, cat }: { season: number; track: st
     setLine(loadLine(track));
     setImage(trackMapUrl(track));
     setImageFailed(false);
-  }, [track]);
-
-  // Keep in sync with the qualifying simulator's racing line (same saved line).
-  useEffect(() => {
-    const refresh = () => setLine(loadLine(track));
-    window.addEventListener("storage", refresh);
-    window.addEventListener("focus", refresh);
-    document.addEventListener("visibilitychange", refresh);
-    return () => { window.removeEventListener("storage", refresh); window.removeEventListener("focus", refresh); document.removeEventListener("visibilitychange", refresh); };
   }, [track]);
 
   // Load slots for this track + mode.
@@ -315,6 +305,13 @@ export function ErsMapEditor({ season, track, cat }: { season: number; track: st
         </div>
 
         <aside className="flex min-w-0 flex-col gap-4 rounded-md border border-border bg-card/40 p-3" aria-label="ERS map controls">
+          <RacingLineActions
+            track={track}
+            mapUrl={image}
+            line={line}
+            onDraft={(points) => { setLine(points); setPending(null); setSelectedSeg(null); setHint("AI draft ready. Review the route and start/finish position before exporting."); }}
+          />
+
           {/* Save slots */}
           <div>
             <div className="mb-1.5 text-[11px] uppercase tracking-wider text-muted-foreground">Save slot</div>
