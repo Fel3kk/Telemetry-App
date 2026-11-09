@@ -129,10 +129,6 @@ function RecordsPage() {
                 key={r.slug}
                 className={`rounded-lg border bg-white/[0.03] transition-colors duration-300 ${isOpen ? "border-purple-400/40" : "border-white/10 hover:border-purple-400/40"}`}
               >
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 668deb81cba1959d58d4f043a46270987e9408fd
                 <button
                   type="button"
                   onClick={() => toggle(r.slug)}
@@ -147,31 +143,6 @@ function RecordsPage() {
                       {delta != null && delta > 0 && (
                         <span className="font-mono font-semibold text-emerald-400">−{(delta / 1000).toFixed(3)}</span>
                       )}
-<<<<<<< HEAD
-=======
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex min-w-0 items-center gap-2">
-                    <span className="text-xl">{trackFlag(r.track)}</span>
-                    <span className="truncate text-sm font-bold">{titleCaseTrack(r.track)}</span>
-                  </div>
-                  <span className="shrink-0 rounded-sm border border-white/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-white/50">
-                    {r.attempts} lap{r.attempts === 1 ? "" : "s"}
-                  </span>
-                </div>
-                <div className="mt-3 font-mono text-2xl font-black tracking-tight text-purple-300">
-                  {formatLapMs(r.bestMs)}
-                </div>
-                <div className="mt-1 flex items-center justify-between text-[11px] text-white/50">
-                  <span>
-                    Season {r.bestSeason}
-                    {r.bestTeam ? ` · ${r.bestTeam}` : ""} · {r.bestCategory}
-                  </span>
-                  {delta != null && delta > 0 && (
-                    <span className="font-semibold text-emerald-400">
-                      −{(delta / 1000).toFixed(3)}s vs next best
->>>>>>> 1c6d288d5748ccd014853a524b7ead6ffafd2de5
-=======
->>>>>>> 668deb81cba1959d58d4f043a46270987e9408fd
                     </span>
                   </span>
                   <span className="shrink-0 rounded-sm border border-white/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-white/50">
@@ -200,7 +171,6 @@ function RecordsPage() {
                         {r.attempts} session{r.attempts === 1 ? "" : "s"}
                         {delta != null && delta > 0 ? ` · −${(delta / 1000).toFixed(3)}s vs next best` : ""}
                       </span>
-<<<<<<< HEAD
                     </div>
                     <div className="mb-1 text-[10px] uppercase tracking-widest text-white/40">By season</div>
                     <ul className="space-y-1">
@@ -237,8 +207,6 @@ function RecordsPage() {
                   <div className="mt-3 border-t border-white/10 pt-2">
                     <div className="mb-1 text-[10px] uppercase tracking-widest text-white/40">
                       By season
-=======
->>>>>>> 668deb81cba1959d58d4f043a46270987e9408fd
                     </div>
                     <div className="mb-1 text-[10px] uppercase tracking-widest text-white/40">By season</div>
                     <ul className="space-y-1">

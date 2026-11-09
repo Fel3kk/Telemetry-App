@@ -55,13 +55,9 @@ function canonicalTeam(t) {
 
 // Team lookup that tolerates casing differences between the
 // telemetry driver names (UPPERCASE) and manually saved keys.
-<<<<<<< HEAD
 function teamForDriver(teams, name, season = currentSeason, sessionTeam = "") {
   const recordedTeam = canonicalTeam(sessionTeam);
   if (recordedTeam && recordedTeam.toLowerCase() !== "unassigned") return recordedTeam;
-=======
-function teamForDriver(teams, name) {
->>>>>>> 1c6d288d5748ccd014853a524b7ead6ffafd2de5
   if (!name) return "";
   const key = String(name).trim().toUpperCase();
   if (teams) {
@@ -71,7 +67,6 @@ function teamForDriver(teams, name) {
     }
   }
   // Fallback: teams recorded inside the uploaded telemetry itself.
-<<<<<<< HEAD
   return canonicalTeam(teamFromTelemetry(key, season));
 }
 
@@ -79,18 +74,6 @@ function teamForDriver(teams, name) {
 // current rows so replacing a file cannot leave a stale same-length cache.
 function teamFromTelemetry(upperName, season = currentSeason) {
   const sessions = (typeof allSessions !== "undefined" && allSessions) || [];
-=======
-  return canonicalTeam(teamFromTelemetry(key));
-}
-
-// Name -> team map rebuilt from every saved session's telemetry, so drivers
-// that were never assigned manually still show their real team.
-let _telemetryTeamCache = null;
-let _telemetryTeamCacheSize = -1;
-function teamFromTelemetry(upperName) {
-  const sessions = (typeof allSessions !== "undefined" && allSessions) || [];
-  if (!_telemetryTeamCache || _telemetryTeamCacheSize !== sessions.length) {
->>>>>>> 1c6d288d5748ccd014853a524b7ead6ffafd2de5
     const map = {};
     const put = (n, t) => {
       if (!n || !t) return;
@@ -100,10 +83,7 @@ function teamFromTelemetry(upperName) {
       if (!map[k]) map[k] = v;
     };
     sessions.forEach((s) => {
-<<<<<<< HEAD
       if (Number(s.season) !== Number(season)) return;
-=======
->>>>>>> 1c6d288d5748ccd014853a524b7ead6ffafd2de5
       (Array.isArray(s.results) ? s.results : []).forEach((r) =>
         put(r && r.name, r && r.team),
       );
@@ -115,14 +95,7 @@ function teamFromTelemetry(upperName) {
         );
       }
     });
-<<<<<<< HEAD
   return map[upperName] || "";
-=======
-    _telemetryTeamCache = map;
-    _telemetryTeamCacheSize = sessions.length;
-  }
-  return _telemetryTeamCache[upperName] || "";
->>>>>>> 1c6d288d5748ccd014853a524b7ead6ffafd2de5
 }
 
 // Sector times of a driver's best lap (from the packet session history).
@@ -2820,12 +2793,7 @@ function renderQualiResults() {
       else if (lowerTitle.includes("2") && pos > 10) isEliminated = true;
 
       const team =
-<<<<<<< HEAD
         teamForDriver(teamsAssigned, res.name, session.season, res.team) ||
-=======
-        teamForDriver(teamsAssigned, res.name) ||
-        canonicalTeam(res.team) ||
->>>>>>> 1c6d288d5748ccd014853a524b7ead6ffafd2de5
         "Unassigned";
       const teamColor = teamColorFor(team);
 
@@ -6782,11 +6750,7 @@ function buildStartingGridData() {
       .map((e) => ({
         position: Number(e.position),
         name: String(e.name).toUpperCase(),
-<<<<<<< HEAD
         team: teamForDriver(teams, e.name, currentData.season, e.team) || "Unassigned",
-=======
-        team: canonicalTeam(e.team) || teamForDriver(teams, e.name) || "Unassigned",
->>>>>>> 1c6d288d5748ccd014853a524b7ead6ffafd2de5
         time: e.lap_time_str || "",
         source: "Race start (lap 0)",
       }));

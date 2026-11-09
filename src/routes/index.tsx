@@ -343,10 +343,6 @@ function TrackCard({ season, track, category, sessions, round }: { season: numbe
   const fin = main ? racePosition(main) : null;
   const start = main?.starting_position ?? null;
   const gained = fin && start ? start - fin : null;
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 668deb81cba1959d58d4f043a46270987e9408fd
   // Retired with no classified finish: show the grid slot and the DNF instead of "no result".
   const dnfSession = !main ? sessions.find((s) => isRaceResultSession(s) && badgesFor(s).dnf) : undefined;
   const dnfStart = dnfSession?.starting_position ?? null;
@@ -356,17 +352,11 @@ function TrackCard({ season, track, category, sessions, round }: { season: numbe
     const row = (dnfSession.race_story?.classification ?? []).find((e: any) => String(e?.name || "").toUpperCase() === me);
     return Number(row?.laps) || null;
   })();
-<<<<<<< HEAD
-=======
->>>>>>> 1c6d288d5748ccd014853a524b7ead6ffafd2de5
-=======
->>>>>>> 668deb81cba1959d58d4f043a46270987e9408fd
   return (
     <Link
       to="/season/$season/track/$track"
       params={{ season: String(season), track: trackSlug(track) }}
       search={{ cat: category }}
-<<<<<<< HEAD
       className="group relative isolate flex min-h-[190px] flex-col justify-end overflow-hidden rounded-xl border border-white/10 bg-[#0c0c10] shadow-[0_8px_24px_-12px_rgba(0,0,0,0.8)] transition duration-300 hover:-translate-y-1 hover:border-red-500/50 hover:shadow-[0_14px_36px_-12px_rgba(239,68,68,0.4)] sm:min-h-[260px]"
     >
       {/* Track map as a large, faded background layer */}
@@ -428,86 +418,15 @@ function TrackCard({ season, track, category, sessions, round }: { season: numbe
               {start && <span className="text-sm text-white/45">P{start}</span>}
               {start && <span className="text-white/30">→</span>}
               <span className={"text-3xl font-black leading-none sm:text-4xl " + (fin === 1 ? "text-yellow-400" : fin <= 3 ? "text-orange-300" : "text-white")}>
-=======
-      className="group relative flex flex-col overflow-hidden rounded-xl border border-white/10 bg-[#111114] shadow-[0_8px_24px_-12px_rgba(0,0,0,0.8)] transition duration-200 hover:-translate-y-1 hover:border-red-500/50 hover:shadow-[0_12px_32px_-12px_rgba(239,68,68,0.35)]"
-    >
-      <span className="absolute inset-y-0 left-0 z-10 w-[3px] bg-red-500 opacity-0 transition group-hover:opacity-100" />
-      <div className="relative hidden aspect-[16/9] bg-[radial-gradient(ellipse_at_center,#1a1a20_0%,#0a0a0d_75%)] sm:block">
-        {imgOk ? (
-          <img
-            src={imgSrc}
-            alt={display}
-            loading="lazy"
-            decoding="async"
-            className="h-full w-full object-contain p-4 transition duration-300 group-hover:scale-[1.03]"
-            onError={() => {
-              if (!triedFallback.v) { triedFallback.v = true; setImgSrc(trackMapFallbackUrl(track)); }
-              else setImgOk(false);
-            }}
-          />
-        ) : (
-          <div className="flex h-full items-center justify-center text-5xl opacity-30">{trackFlag(track)}</div>
-        )}
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-[#111114] to-transparent" />
-        <div className="absolute right-2 top-2 flex flex-wrap gap-1">
-          {badgeAgg.gs && <Tag color="#c084fc">GS</Tag>}
-          {badgeAgg.win && <Tag color="#ffd700">W</Tag>}
-          {badgeAgg.fl && <Tag color="#a855f7">FL</Tag>}
-          {!badgeAgg.win && badgeAgg.podium && bestPos && <Tag color="#cd7f32">P{bestPos}</Tag>}
-          {badgeAgg.dnf && <Tag color="#ef4444">DNF</Tag>}
-        </div>
-      </div>
-      <div className="flex flex-1 flex-col gap-2.5 px-4 pb-4 pt-3">
-        <div className="flex items-center gap-2.5">
-          <span className="text-2xl leading-none">{trackFlag(track)}</span>
-          <span className="truncate text-lg font-black tracking-tight">{display}</span>
-        </div>
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span
-            className={
-              "rounded px-2 py-0.5 text-[11px] font-black uppercase tracking-wider " +
-              (isSprint
-                ? "border border-amber-400/70 text-amber-300"
-                : isPractice
-                  ? "bg-slate-500 text-white"
-                  : "bg-red-500 text-white")
-            }
-          >
-            {category}
-          </span>
-          <span className="rounded border border-white/15 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-white/60">
-            {sessions.length} session{sessions.length === 1 ? "" : "s"}
-          </span>
-        </div>
-        {fin && (
-          <div className="mt-auto flex items-center justify-between rounded-lg border border-white/5 bg-white/[0.03] px-3 py-2">
-            <div className="flex items-baseline gap-2 font-mono">
-              {start && <span className="text-sm text-white/45">P{start}</span>}
-              {start && <span className="text-white/30">→</span>}
-              <span className={"text-xl font-black " + (fin === 1 ? "text-yellow-400" : fin <= 3 ? "text-orange-300" : "text-white")}>
->>>>>>> 1c6d288d5748ccd014853a524b7ead6ffafd2de5
                 P{fin}
               </span>
             </div>
             {gained !== null && gained !== 0 && (
-<<<<<<< HEAD
               <span className={"rounded px-1.5 py-0.5 font-mono text-xs font-bold " + (gained > 0 ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400")}>
-=======
-              <span
-                className={
-                  "rounded px-1.5 py-0.5 font-mono text-xs font-bold " +
-                  (gained > 0 ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400")
-                }
-              >
->>>>>>> 1c6d288d5748ccd014853a524b7ead6ffafd2de5
                 {gained > 0 ? `▲ +${gained}` : `▼ ${gained}`}
               </span>
             )}
           </div>
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 668deb81cba1959d58d4f043a46270987e9408fd
         ) : dnfSession ? (
           <div className="flex items-end justify-between">
             <div className="flex items-baseline gap-2 font-mono">
@@ -523,8 +442,6 @@ function TrackCard({ season, track, category, sessions, round }: { season: numbe
           </div>
         ) : (
           <div className="text-xs font-semibold uppercase tracking-wider text-white/35">No race result yet</div>
-=======
->>>>>>> 1c6d288d5748ccd014853a524b7ead6ffafd2de5
         )}
       </div>
     </Link>

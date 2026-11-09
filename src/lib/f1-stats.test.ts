@@ -1,8 +1,4 @@
-<<<<<<< HEAD
 import { describe, test } from "vitest";
-=======
-import { describe, test } from "node:test";
->>>>>>> 668deb81cba1959d58d4f043a46270987e9408fd
 import { strict as assert } from "node:assert";
 import { GP_MAX_POINTS, SPRINT_MAX_POINTS, computeTitleMath } from "./f1-stats";
 

@@ -31,7 +31,6 @@
 - [ ] Use one published collection for Qualifying and ERS on every device, without user line creation.
 - [ ] Add a bulk export of old device-saved lines so the owner can submit them here.
 - [ ] Publish the owner's full collection (waiting for the uploaded collection).
-<<<<<<< HEAD
 
 ## November 8 priorities
 - [ ] Universal driver matching, constructor aliases, and automatic team ingest.
@@ -41,5 +40,3 @@
 - [ ] Upload-triggered debrief generation and cache reuse.
 - [ ] Three remembered weekend navigation categories.
 - [ ] Shared owner-curated racing lines without per-user drafting.
-=======
->>>>>>> 668deb81cba1959d58d4f043a46270987e9408fd

@@ -151,7 +151,6 @@ function TeammatePage() {
           </div>
         )}
 
-<<<<<<< HEAD
         <div className="grid items-start gap-3 lg:grid-cols-2">
           {teamColumns.map((column, index) => (
             <div key={index} className="flex min-w-0 flex-col gap-3">
@@ -159,11 +158,6 @@ function TeammatePage() {
                 <TeamH2H key={team} team={team} drivers={drivers} sessions={sessions} />
               ))}
             </div>
-=======
-        <div className="grid items-start gap-4 lg:grid-cols-2">
-          {teamGroups.map(({ team, drivers }) => (
-            <TeamH2H key={team} team={team} drivers={drivers} sessions={sessions} />
->>>>>>> 1c6d288d5748ccd014853a524b7ead6ffafd2de5
           ))}
         </div>
 
@@ -256,14 +250,7 @@ function TeamH2H({
     (r) => r.raceA || r.raceB || r.qA || r.qB || r.sqA || r.sqB || r.sA || r.sB,
   );
   const aLeads = totals.ptsA >= totals.ptsB;
-<<<<<<< HEAD
   const [collapsed, setCollapsed] = useState(() => loadCollapsed().has(team));
-=======
-  const [collapsed, setCollapsed] = useState(false);
-  useEffect(() => {
-    setCollapsed(loadCollapsed().has(team));
-  }, [team]);
->>>>>>> 1c6d288d5748ccd014853a524b7ead6ffafd2de5
   const toggle = () => {
     const set = loadCollapsed();
     if (collapsed) set.delete(team);
@@ -279,21 +266,13 @@ function TeamH2H({
       <button
         type="button"
         onClick={toggle}
-<<<<<<< HEAD
         className="flex w-full items-center justify-between self-start rounded-md border border-white/[0.06] bg-[#111114] px-2.5 py-2 text-left hover:border-white/15"
-=======
-        className="flex w-full items-center justify-between self-start rounded-lg border border-white/10 bg-white/[0.03] p-3 text-left hover:border-white/25"
->>>>>>> 1c6d288d5748ccd014853a524b7ead6ffafd2de5
       >
         <span className="text-xs font-bold uppercase tracking-widest text-white/60">{team}</span>
         <span className="flex items-center gap-3 text-[11px] text-white/50">
           <span className="flex items-center gap-2 font-mono">
             <span className={aLeads ? "font-bold text-emerald-400" : ""}>{a.split(" ").pop()}</span>
-<<<<<<< HEAD
             <span className="font-semibold text-white/80">{totals.ptsA} – {totals.ptsB}</span>
-=======
-            <span className="rounded bg-white/5 px-2 py-0.5 text-white">{totals.ptsA} – {totals.ptsB}</span>
->>>>>>> 1c6d288d5748ccd014853a524b7ead6ffafd2de5
             <span className={!aLeads ? "font-bold text-emerald-400" : ""}>{b.split(" ").pop()}</span>
           </span>
           <span aria-hidden>▸</span>
@@ -303,13 +282,8 @@ function TeamH2H({
   }
 
   return (
-<<<<<<< HEAD
     <div className="self-start rounded-md border border-white/[0.06] bg-[#111114] p-3">
       <div className="mb-2 flex items-center justify-between">
-=======
-    <div className="self-start rounded-lg border border-white/10 bg-white/[0.03] p-4">
-      <div className="mb-3 flex items-center justify-between">
->>>>>>> 1c6d288d5748ccd014853a524b7ead6ffafd2de5
         <button
           type="button"
           onClick={toggle}
