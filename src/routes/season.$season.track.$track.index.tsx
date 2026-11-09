@@ -26,6 +26,14 @@ export const Route = createFileRoute("/season/$season/track/$track/")({
 
 type Opt = { view: string; label: string; icon: string; desc: string };
 
+const GROUPS = [
+  { id: "race", label: "Race Telemetry & Analysis", views: ["race-story", "compare", "graphs", "data", "practice", "strategies", "ai-debrief"] },
+  { id: "quali", label: "Qualifying & Setup", views: ["quali-results", "quali-simulation", "ers-map", "grid"] },
+  { id: "season", label: "Championship & Season", views: ["standings", "records", "progress", "assignments", "teammate"] },
+] as const;
+type GroupId = (typeof GROUPS)[number]["id"];
+const GROUP_KEY = "f1.sectionsGroup";
+
 const OPTIONS: Opt[] = [
   {
     view: "standings",
@@ -118,6 +126,15 @@ function TrackPage() {
   const [notes, setNotes] = useState("");
   const [order, setOrder] = useState<string[]>(OPTIONS.map((o) => o.view));
   const [dragging, setDragging] = useState<string | null>(null);
+  const [group, setGroup] = useState<GroupId>("race");
+  useEffect(() => {
+    const g = localStorage.getItem(GROUP_KEY);
+    if (g && GROUPS.some((x) => x.id === g)) setGroup(g as GroupId);
+  }, []);
+  const pickGroup = (g: GroupId) => {
+    setGroup(g);
+    try { localStorage.setItem(GROUP_KEY, g); } catch { /* ignore */ }
+  };
 
   // Load cached sessions after mount to avoid SSR hydration mismatch.
   // Paint navigation (season/round arrows) from cache before the first frame,
@@ -574,8 +591,21 @@ function TrackPage() {
           </h2>
           <span className="hidden text-[11px] text-white/40 sm:inline">Drag cards to reorder</span>
         </div>
+        <div className="mb-3 flex flex-wrap gap-2" role="tablist">
+          {GROUPS.map((g) => (
+            <button
+              key={g.id}
+              role="tab"
+              aria-selected={group === g.id}
+              onClick={() => pickGroup(g.id)}
+              className={"rounded-full border px-3 py-1.5 text-xs font-semibold transition " + (group === g.id ? "border-red-500 bg-red-500/20 text-white" : "border-white/10 bg-white/5 text-white/60 hover:text-white")}
+            >
+              {g.label}
+            </button>
+          ))}
+        </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-          {orderedOptions.map((o) => {
+          {orderedOptions.filter((o) => (GROUPS.find((g) => g.id === group)?.views as readonly string[]).includes(o.view)).map((o) => {
             const accent = ACCENTS[o.view] ?? "#ef3340";
             const linkProps =
               o.view === "teammate"
