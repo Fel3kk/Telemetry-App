@@ -1,6 +1,9 @@
 // Pure race/quali pre-processing for the AI Race Engineer debrief and the
 // consistency score. Keeps the prompt small and the numbers deterministic.
+<<<<<<< HEAD
 import { driverMatches } from "./driver-identity";
+=======
+>>>>>>> 668deb81cba1959d58d4f043a46270987e9408fd
 
 export type DebriefLap = {
   lap: number;
@@ -13,10 +16,13 @@ export type DebriefLap = {
   tyre_wear?: { FL?: number; FR?: number; RL?: number; RR?: number };
   ers_deployed_j?: number;
   damage?: Record<string, number | boolean>;
+<<<<<<< HEAD
   is_valid?: boolean;
   invalid?: boolean;
   out_lap?: boolean;
   in_lap?: boolean;
+=======
+>>>>>>> 668deb81cba1959d58d4f043a46270987e9408fd
 };
 
 export function lapSeconds(value: unknown): number | null {
@@ -74,6 +80,7 @@ export function splitStints(laps: DebriefLap[]): DebriefLap[][] {
   const groups: DebriefLap[][] = [];
   let cur: DebriefLap[] = [];
   let compound = laps[0]?.current_tyre_compound;
+<<<<<<< HEAD
   for (const [i, l] of laps.entries()) {
     const nextCompound = l.current_tyre_compound;
     const sustained = nextCompound && nextCompound === laps[i + 1]?.current_tyre_compound;
@@ -84,6 +91,16 @@ export function splitStints(laps: DebriefLap[]): DebriefLap[][] {
     compound = cur.length ? compound : (sustained || Number(l.pit_status || 0) > 0 ? nextCompound : compound || nextCompound);
     cur.push({ ...l, current_tyre_compound: compound });
     if (Number(l.pit_status || 0) > 0) {
+=======
+  for (const l of laps) {
+    if (cur.length && l.current_tyre_compound !== compound) {
+      groups.push(cur);
+      cur = [];
+    }
+    compound = l.current_tyre_compound;
+    cur.push(l);
+    if (Number(l.pit_status || 0) === 1) {
+>>>>>>> 668deb81cba1959d58d4f043a46270987e9408fd
       groups.push(cur);
       cur = [];
       compound = undefined;
@@ -93,6 +110,7 @@ export function splitStints(laps: DebriefLap[]): DebriefLap[][] {
   return groups;
 }
 
+<<<<<<< HEAD
 /** Recorded pit flags or a sustained compound transition, never a one-lap glitch. */
 export function verifiedPitLaps(laps: DebriefLap[]): number[] {
   const recorded = laps.filter((l) => Number(l.pit_status || 0) > 0).map((l) => l.lap);
@@ -120,6 +138,8 @@ export function classifyQualifyingLaps(laps: DebriefLap[]) {
   });
 }
 
+=======
+>>>>>>> 668deb81cba1959d58d4f043a46270987e9408fd
 /**
  * Race consistency: per stint, fit a straight trend through clean laps (this
  * absorbs fuel burn-off and steady tyre wear), then measure how far each lap
@@ -128,7 +148,11 @@ export function classifyQualifyingLaps(laps: DebriefLap[]) {
  */
 export function raceConsistency(laps: DebriefLap[]): Consistency {
   const sorted = [...laps].filter((l) => Number(l.lap) > 0).sort((a, b) => a.lap - b.lap);
+<<<<<<< HEAD
   const pitLaps = new Set(verifiedPitLaps(sorted));
+=======
+  const pitLaps = new Set(sorted.filter((l) => Number(l.pit_status || 0) === 1).map((l) => l.lap));
+>>>>>>> 668deb81cba1959d58d4f043a46270987e9408fd
   const neutralLaps = new Set(sorted.filter((l) => Number(l.sc_status || 0) > 0).map((l) => l.lap));
   const excluded: { lap: number; reason: string }[] = [];
   const isClean = (l: DebriefLap) => {
@@ -143,18 +167,30 @@ export function raceConsistency(laps: DebriefLap[]): Consistency {
     return !why;
   };
   const candidates = sorted.filter(isClean);
+<<<<<<< HEAD
   const best = Math.min(...candidates.map((l) => lapSeconds(l.lap_time) ?? Infinity));
   const clean = new Set(candidates.filter((l) => {
     // Only clearly non-racing laps (e.g. an unflagged red flag) are dropped;
     // ordinary slow laps stay in and are capped, so they still cost points.
     const ok = (lapSeconds(l.lap_time) ?? Infinity) <= best * 1.3;
+=======
+  const best = Math.min(...candidates.map((l) => lapSeconds(l.lap_time)!));
+  const clean = new Set(candidates.filter((l) => {
+    // Only clearly non-racing laps (e.g. an unflagged red flag) are dropped;
+    // ordinary slow laps stay in and are capped, so they still cost points.
+    const ok = lapSeconds(l.lap_time)! <= best * 1.3;
+>>>>>>> 668deb81cba1959d58d4f043a46270987e9408fd
     if (!ok) excluded.push({ lap: l.lap, reason: "Over 130% of best lap" });
     return ok;
   }).map((l) => l.lap));
 
   const stints: StintConsistency[] = [];
   splitStints(sorted).forEach((group, i) => {
+<<<<<<< HEAD
     const pts = group.filter((l) => clean.has(l.lap)).map((l) => ({ x: l.lap, y: lapSeconds(l.lap_time) ?? 0 }));
+=======
+    const pts = group.filter((l) => clean.has(l.lap)).map((l) => ({ x: l.lap, y: lapSeconds(l.lap_time)! }));
+>>>>>>> 668deb81cba1959d58d4f043a46270987e9408fd
     if (pts.length < 3) return;
     const n = pts.length;
     const mx = pts.reduce((a, p) => a + p.x, 0) / n;
@@ -182,7 +218,11 @@ export function raceConsistency(laps: DebriefLap[]): Consistency {
   excluded.sort((a, b) => a.lap - b.lap);
   if (!cleanLaps) return { score: null, spread: null, scaledSpread: null, cleanLaps: 0, stints, mistakeLaps: [], excluded };
   const spread = stints.reduce((a, s) => a + s.spread * (s.cleanLaps / cleanLaps), 0);
+<<<<<<< HEAD
   const ref = median(sorted.filter((l) => clean.has(l.lap)).map((l) => lapSeconds(l.lap_time) ?? 0));
+=======
+  const ref = median([...clean].map((n) => lapSeconds(sorted.find((l) => l.lap === n)!.lap_time)!));
+>>>>>>> 668deb81cba1959d58d4f043a46270987e9408fd
   const scaled = spread * (REFERENCE_LAP_S / ref);
   return {
     score: scoreFromSpread(scaled),
@@ -241,7 +281,11 @@ export function buildDebriefFacts(s: DebriefSession) {
   const story = s.race_story ?? {};
   const player = String(story.player_name || s.driver_name || "").toUpperCase();
   const cls: any[] = Array.isArray(story.classification) ? story.classification : [];
+<<<<<<< HEAD
   const me = cls.find((c) => driverMatches(c.name, player));
+=======
+  const me = cls.find((c) => String(c.name || "").toUpperCase() === player);
+>>>>>>> 668deb81cba1959d58d4f043a46270987e9408fd
   const nearby = me
     ? cls.filter((c) => Math.abs(Number(c.position) - Number(me.position)) <= 2 && c !== me)
         .map((c) => ({ pos: c.position, name: c.name, team: c.team, best_lap: c.best_lap_str, pits: c.pits, status: c.status }))
@@ -255,7 +299,11 @@ export function buildDebriefFacts(s: DebriefSession) {
   let quali: unknown = null;
   if (isQuali && Array.isArray(s.results)) {
     const rows = s.results.map((r) => ({ pos: Number(r.position), name: String(r.name || ""), best: lapSeconds(r.best_lap), s1: lapSeconds(r.s1), s2: lapSeconds(r.s2), s3: lapSeconds(r.s3) }));
+<<<<<<< HEAD
     const mine = rows.find((r) => driverMatches(r.name, s.driver_name));
+=======
+    const mine = rows.find((r) => r.name.toUpperCase() === String(s.driver_name || "").toUpperCase());
+>>>>>>> 668deb81cba1959d58d4f043a46270987e9408fd
     const pole = rows.find((r) => r.pos === 1);
     const ahead = mine ? rows.find((r) => r.pos === mine.pos - 1) : undefined;
     const gap = (a?: number | null, b?: number | null) => (a != null && b != null ? r3(a - b) : null);
@@ -283,9 +331,13 @@ export function buildDebriefFacts(s: DebriefSession) {
     points: me?.points ?? null,
     laps_completed: laps.length,
     best_lap_s: bestLap !== null ? r3(bestLap) : null,
+<<<<<<< HEAD
     pit_laps: verifiedPitLaps(laps),
     qualifying_laps: isQuali ? classifyQualifyingLaps(laps) : null,
     push_lap_times_s: isQuali ? classifyQualifyingLaps(laps).filter((l) => l.role === "push").map((l) => l.time_s) : null,
+=======
+    pit_laps: laps.filter((l) => Number(l.pit_status || 0) === 1).map((l) => l.lap),
+>>>>>>> 668deb81cba1959d58d4f043a46270987e9408fd
     safety_car_laps: laps.filter((l) => Number(l.sc_status || 0) > 0).map((l) => l.lap),
     fuel_used_kg: fuelStart !== null && fuelEnd !== null ? r3(fuelStart - fuelEnd) : null,
     fuel_left_kg: fuelEnd,

@@ -65,10 +65,15 @@
 
 :root {
 <<<<<<< HEAD
+<<<<<<< HEAD
   --replay-player: oklch(0.65 0.23 28);
   --replay-rival: oklch(0.82 0.14 195);
 =======
 >>>>>>> 1c6d288d5748ccd014853a524b7ead6ffafd2de5
+=======
+  --replay-player: oklch(0.65 0.23 28);
+  --replay-rival: oklch(0.82 0.14 195);
+>>>>>>> 668deb81cba1959d58d4f043a46270987e9408fd
   --radius: 0.5rem;
   --background: oklch(0.145 0.004 285);
   --foreground: oklch(0.93 0.004 285);

@@ -471,6 +471,9 @@ body.light-theme::before { display: none; }
 }
 .chart-title::before { display: none; }
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 668deb81cba1959d58d4f043a46270987e9408fd
 .chart-collapse-toggle {
   appearance: none;
   border: 0;
@@ -484,8 +487,11 @@ body.light-theme::before { display: none; }
 .chart-collapse-icon { color: var(--secondary-text); transition: transform 0.18s ease; }
 .chart-container.chart-collapsed { height: auto !important; min-height: 0 !important; }
 .chart-container.chart-collapsed canvas { display: none !important; }
+<<<<<<< HEAD
 =======
 >>>>>>> 1c6d288d5748ccd014853a524b7ead6ffafd2de5
+=======
+>>>>>>> 668deb81cba1959d58d4f043a46270987e9408fd
 
 /* ---------- Tables ---------- */
 table {

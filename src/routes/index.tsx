@@ -344,6 +344,9 @@ function TrackCard({ season, track, category, sessions, round }: { season: numbe
   const start = main?.starting_position ?? null;
   const gained = fin && start ? start - fin : null;
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 668deb81cba1959d58d4f043a46270987e9408fd
   // Retired with no classified finish: show the grid slot and the DNF instead of "no result".
   const dnfSession = !main ? sessions.find((s) => isRaceResultSession(s) && badgesFor(s).dnf) : undefined;
   const dnfStart = dnfSession?.starting_position ?? null;
@@ -353,8 +356,11 @@ function TrackCard({ season, track, category, sessions, round }: { season: numbe
     const row = (dnfSession.race_story?.classification ?? []).find((e: any) => String(e?.name || "").toUpperCase() === me);
     return Number(row?.laps) || null;
   })();
+<<<<<<< HEAD
 =======
 >>>>>>> 1c6d288d5748ccd014853a524b7ead6ffafd2de5
+=======
+>>>>>>> 668deb81cba1959d58d4f043a46270987e9408fd
   return (
     <Link
       to="/season/$season/track/$track"
@@ -499,6 +505,9 @@ function TrackCard({ season, track, category, sessions, round }: { season: numbe
             )}
           </div>
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 668deb81cba1959d58d4f043a46270987e9408fd
         ) : dnfSession ? (
           <div className="flex items-end justify-between">
             <div className="flex items-baseline gap-2 font-mono">

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
+<<<<<<< HEAD
 import { raceConsistency, scoreFromSpread, buildDebriefFacts, splitStints, verifiedPitLaps, classifyQualifyingLaps, type DebriefLap } from "./race-debrief";
+=======
+import { raceConsistency, scoreFromSpread, buildDebriefFacts, type DebriefLap } from "./race-debrief";
+>>>>>>> 668deb81cba1959d58d4f043a46270987e9408fd
 
 const fmt = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toFixed(3).padStart(6, "0")}`;
 function laps(times: number[], extra: (i: number) => Partial<DebriefLap> = () => ({})): DebriefLap[] {
@@ -42,6 +46,7 @@ describe("race consistency", () => {
 });
 
 describe("debrief facts", () => {
+<<<<<<< HEAD
   it("accepts exactly 108% as push pace, not slower cooldown laps", () => {
     expect(classifyQualifyingLaps(laps([100, 108, 108.001])).map((l) => l.role)).toEqual(["push", "push", "cooldown/recharge"]);
   });
@@ -58,6 +63,8 @@ describe("debrief facts", () => {
     expect(verifiedPitLaps(laps([90, 90, 90, 90], (n) => ({ current_tyre_compound: n >= 3 ? "Hard" : "Medium" })))).toEqual([2]);
     expect(verifiedPitLaps(laps([90, 90, 90], (n) => ({ pit_status: n === 2 ? 2 : 0 })))).toEqual([2]);
   });
+=======
+>>>>>>> 668deb81cba1959d58d4f043a46270987e9408fd
   it("summarises quali gaps to pole by sector", () => {
     const f = buildDebriefFacts({
       track_name: "Spa", category: "Qualifying", session_type: "Q3", driver_name: "FELEDZIAK",

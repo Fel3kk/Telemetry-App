@@ -289,6 +289,142 @@ export function computeTitleMath(
     sprintsLeft,
     rounds,
     maxPointsLeft: racesLeft * GP_MAX_POINTS + sprintsLeft * SPRINT_MAX_POINTS,
+<<<<<<< HEAD
+=======
+  };
+}
+
+// ---------------------------------------------------------------
+// Season summary (share card)
+// ---------------------------------------------------------------
+export type SeasonSummary = {
+  season: number;
+  championshipPos: number | null;
+  totalPoints: number;
+  avgPoints: number | null; // per race start (GP + sprint)
+  starts: number; // GP + sprint starts
+  gpStarts: number;
+  sprintStarts: number;
+  wins: number;
+  sprintWins: number;
+  podiums: number;
+  pointsFinishes: number;
+  poles: number;
+  sprintPoles: number;
+  fastestLaps: number;
+  dnfs: number;
+  finishRate: number | null; // % of starts finished
+  avgFinish: number | null;
+  avgGrid: number | null;
+  bestFinish: number | null;
+  positionsGained: number; // net, finished races only
+  lapsCompleted: number;
+  q1Apps: number; // GP weekends with qualifying uploaded
+  q2Apps: number; // reached Q2 (includes Q3)
+  q3Apps: number; // reached Q3
+  avgQuali: number | null;
+};
+
+// 1-3 for Q1/Q2/Q3 ("Qualifying 2", "Q2", …); 4 for one-session formats.
+export function qualiStage(s: Pick<Session, "session_type">): number {
+  const st = String(s.session_type || "").toLowerCase().replace(/\s+/g, "");
+  const m = st.match(/^(?:q|qualifying)([123])$/);
+  return m ? Number(m[1]) : 4;
+}
+function isGpQuali(s: Session): boolean {
+  const txt = `${s.category} ${s.session_type ?? ""}`.toLowerCase();
+  return /quali/.test(txt) && !/sprint|shootout/.test(txt);
+}
+const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
+
+export function seasonSummary(sessions: Session[], season: number): SeasonSummary {
+  const seasonSessions = sessions.filter((s) => Number(s.season) === season);
+  const standings = computeStandings(seasonSessions);
+  const scoring = seasonSessions.filter((s) => isRaceResultSession(s));
+  const playerName = seasonPlayerName(seasonSessions);
+  const standingIdx = standings.findIndex((d) => d.name === playerName);
+
+  let wins = 0, sprintWins = 0, podiums = 0, pointsFinishes = 0, poles = 0, sprintPoles = 0;
+  let fastestLaps = 0, dnfs = 0, gpStarts = 0, sprintStarts = 0, positionsGained = 0, laps = 0;
+  const finishes: number[] = [];
+  const grids: number[] = [];
+  for (const s of scoring) {
+    const kind = isRaceResultSession(s);
+    const b = badgesFor(s);
+    if (kind === "Sprint") sprintStarts += 1;
+    else gpStarts += 1;
+    if (b.win) kind === "Sprint" ? sprintWins++ : wins++;
+    if (b.pole) kind === "Sprint" ? sprintPoles++ : poles++;
+    if (b.podium) podiums += 1;
+    if (b.fl) fastestLaps += 1;
+    const me = classificationOf(s).find((e: any) => String(e?.name || "").toUpperCase() === playerNameOf(s));
+    laps += Number(me?.laps) || 0;
+    const gridEntry = Array.isArray(s.race_story?.starting_grid)
+      ? s.race_story.starting_grid.find((e: any) => String(e?.name || "").toUpperCase() === playerNameOf(s))
+      : null;
+    const grid = Number(gridEntry?.position || s.starting_position) || 0;
+    if (kind === "Race" && grid > 0) grids.push(grid);
+    if (b.dnf) {
+      dnfs += 1;
+      continue;
+    }
+    const fin = racePosition(s);
+    if (!fin) continue;
+    finishes.push(fin);
+    if (fin <= (kind === "Sprint" ? 8 : 10)) pointsFinishes += 1;
+    if (grid > 0) positionsGained += grid - fin;
+  }
+
+  // Furthest qualifying stage per GP weekend, from the deepest session uploaded.
+  const byTrack = new Map<string, Session[]>();
+  for (const s of seasonSessions.filter(isGpQuali)) {
+    const slug = trackSlug(s.track_name);
+    byTrack.set(slug, [...(byTrack.get(slug) ?? []), s]);
+  }
+  // Appearances are cumulative: reaching Q3 also counts as a Q2 and Q1 appearance.
+  let q1Apps = 0, q2Apps = 0, q3Apps = 0;
+  const qualiPositions: number[] = [];
+  for (const list of byTrack.values()) {
+    const pos = (stage: number) => Number(list.find((s) => qualiStage(s) === stage)?.finishing_position) || 0;
+    const p1 = pos(1), p2 = pos(2), p3 = pos(3), single = pos(4);
+    const final = p3 || p2 || p1 || single;
+    if (final > 0) qualiPositions.push(final);
+    const reachedQ3 = p3 > 0 || (p2 > 0 && p2 <= 10) || (single > 0 && single <= 10);
+    const reachedQ2 = reachedQ3 || p2 > 0 || (p1 > 0 && p1 <= 16) || (single > 0 && single <= 16);
+    q1Apps += 1;
+    if (reachedQ2) q2Apps += 1;
+    if (reachedQ3) q3Apps += 1;
+  }
+
+  const starts = gpStarts + sprintStarts;
+  const totalPoints = standingIdx >= 0 ? standings[standingIdx].points : 0;
+  return {
+    season,
+    championshipPos: standingIdx >= 0 ? standingIdx + 1 : null,
+    totalPoints,
+    avgPoints: starts ? totalPoints / starts : null,
+    starts,
+    gpStarts,
+    sprintStarts,
+    wins,
+    sprintWins,
+    podiums,
+    pointsFinishes,
+    poles,
+    sprintPoles,
+    fastestLaps,
+    dnfs,
+    finishRate: starts ? ((starts - dnfs) / starts) * 100 : null,
+    avgFinish: avg(finishes),
+    avgGrid: avg(grids),
+    bestFinish: finishes.length ? Math.min(...finishes) : null,
+    positionsGained,
+    lapsCompleted: laps,
+    q1Apps,
+    q2Apps,
+    q3Apps,
+    avgQuali: avg(qualiPositions),
+>>>>>>> 668deb81cba1959d58d4f043a46270987e9408fd
   };
 }
 
@@ -447,10 +583,15 @@ export type TrackRecord = {
   attempts: number;
   seasons: SeasonBest[];
 <<<<<<< HEAD
+<<<<<<< HEAD
   firstAt: number; // earliest session upload time (ms epoch)
   lastAt: number; // latest session upload time (ms epoch)
 =======
 >>>>>>> 1c6d288d5748ccd014853a524b7ead6ffafd2de5
+=======
+  firstAt: number; // earliest session upload time (ms epoch)
+  lastAt: number; // latest session upload time (ms epoch)
+>>>>>>> 668deb81cba1959d58d4f043a46270987e9408fd
 };
 
 function cleanTeam(t: unknown): string {
@@ -461,10 +602,14 @@ function cleanTeam(t: unknown): string {
 // Player's best lap per track across every uploaded season, with per-season bests.
 export function personalRecords(sessions: Session[]): TrackRecord[] {
 <<<<<<< HEAD
+<<<<<<< HEAD
   type Lap = { ms: number; season: number; category: string; team: string; at: number };
 =======
   type Lap = { ms: number; season: number; category: string; team: string };
 >>>>>>> 1c6d288d5748ccd014853a524b7ead6ffafd2de5
+=======
+  type Lap = { ms: number; season: number; category: string; team: string; at: number };
+>>>>>>> 668deb81cba1959d58d4f043a46270987e9408fd
   const byTrack = new Map<string, { track: string; laps: Lap[] }>();
   for (const s of sessions) {
     const player = playerNameOf(s);
@@ -479,10 +624,14 @@ export function personalRecords(sessions: Session[]): TrackRecord[] {
     const team = cleanTeam(entry?.team || (s as any).race_story?.player_team || (s as any).team);
     const bucket = byTrack.get(slug) ?? { track: s.track_name, laps: [] };
 <<<<<<< HEAD
+<<<<<<< HEAD
     bucket.laps.push({ ms, season: Number(s.season) || 1, category: s.category || "Race", team, at: Date.parse(s.created_at || "") || 0 });
 =======
     bucket.laps.push({ ms, season: Number(s.season) || 1, category: s.category || "Race", team });
 >>>>>>> 1c6d288d5748ccd014853a524b7ead6ffafd2de5
+=======
+    bucket.laps.push({ ms, season: Number(s.season) || 1, category: s.category || "Race", team, at: Date.parse(s.created_at || "") || 0 });
+>>>>>>> 668deb81cba1959d58d4f043a46270987e9408fd
     byTrack.set(slug, bucket);
   }
   const out: TrackRecord[] = [];
@@ -517,10 +666,15 @@ export function personalRecords(sessions: Session[]): TrackRecord[] {
       attempts: bucket.laps.length,
       seasons,
 <<<<<<< HEAD
+<<<<<<< HEAD
       firstAt: Math.min(...bucket.laps.map((l) => l.at)),
       lastAt: Math.max(...bucket.laps.map((l) => l.at)),
 =======
 >>>>>>> 1c6d288d5748ccd014853a524b7ead6ffafd2de5
+=======
+      firstAt: Math.min(...bucket.laps.map((l) => l.at)),
+      lastAt: Math.max(...bucket.laps.map((l) => l.at)),
+>>>>>>> 668deb81cba1959d58d4f043a46270987e9408fd
     });
   }
   return out.sort((a, b) => a.track.localeCompare(b.track));
