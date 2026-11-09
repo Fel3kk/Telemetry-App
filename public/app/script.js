@@ -55,7 +55,9 @@ function canonicalTeam(t) {
 
 // Team lookup that tolerates casing differences between the
 // telemetry driver names (UPPERCASE) and manually saved keys.
-function teamForDriver(teams, name) {
+function teamForDriver(teams, name, season = currentSeason, sessionTeam = "") {
+  const recordedTeam = canonicalTeam(sessionTeam);
+  if (recordedTeam && recordedTeam.toLowerCase() !== "unassigned") return recordedTeam;
   if (!name) return "";
   const key = String(name).trim().toUpperCase();
   if (teams) {
@@ -65,16 +67,13 @@ function teamForDriver(teams, name) {
     }
   }
   // Fallback: teams recorded inside the uploaded telemetry itself.
-  return canonicalTeam(teamFromTelemetry(key));
+  return canonicalTeam(teamFromTelemetry(key, season));
 }
 
-// Name -> team map rebuilt from every saved session's telemetry, so drivers
-// that were never assigned manually still show their real team.
-let _telemetryTeamCache = null;
-let _telemetryTeamCacheSize = -1;
-function teamFromTelemetry(upperName) {
+// Only the requested season can supply a missing constructor. Rebuild from
+// current rows so replacing a file cannot leave a stale same-length cache.
+function teamFromTelemetry(upperName, season = currentSeason) {
   const sessions = (typeof allSessions !== "undefined" && allSessions) || [];
-  if (!_telemetryTeamCache || _telemetryTeamCacheSize !== sessions.length) {
     const map = {};
     const put = (n, t) => {
       if (!n || !t) return;
@@ -84,6 +83,7 @@ function teamFromTelemetry(upperName) {
       if (!map[k]) map[k] = v;
     };
     sessions.forEach((s) => {
+      if (Number(s.season) !== Number(season)) return;
       (Array.isArray(s.results) ? s.results : []).forEach((r) =>
         put(r && r.name, r && r.team),
       );
@@ -95,10 +95,7 @@ function teamFromTelemetry(upperName) {
         );
       }
     });
-    _telemetryTeamCache = map;
-    _telemetryTeamCacheSize = sessions.length;
-  }
-  return _telemetryTeamCache[upperName] || "";
+  return map[upperName] || "";
 }
 
 // Sector times of a driver's best lap (from the packet session history).
@@ -1535,6 +1532,7 @@ function processTelemetryData(data) {
                     name: String(
                       e.name || e.driver_name || "UNKNOWN",
                     ).toUpperCase(),
+                    team: e.team || e["team-name"] || "",
                     position:
                       e["final-classification"]?.["position"] ||
                       e["track-position"] ||
@@ -2723,7 +2721,7 @@ function renderQualiResults() {
   segmentsGridContainer.className = "quali-segments-grid";
   bodyContainer.appendChild(segmentsGridContainer);
 
-  const teamsAssigned = getDriverTeams();
+  const teamsAssigned = getTeamsForSeason(currentData.season);
 
   // Sort segments logically (usually by their session_type name)
   qualiSessions.sort((a, b) =>
@@ -2795,8 +2793,7 @@ function renderQualiResults() {
       else if (lowerTitle.includes("2") && pos > 10) isEliminated = true;
 
       const team =
-        teamForDriver(teamsAssigned, res.name) ||
-        canonicalTeam(res.team) ||
+        teamForDriver(teamsAssigned, res.name, session.season, res.team) ||
         "Unassigned";
       const teamColor = teamColorFor(team);
 
@@ -4797,7 +4794,7 @@ function renderRecordsTable() {
       driverAgg[name].fastest_laps += s.fastest_laps || 0;
       driverAgg[name].dnfs += s.dnfs || 0;
       driverAgg[name].seasons.add(season);
-      { const _t = teamForDriver(teams, name); if (_t) driverAgg[name].lastTeam = _t; }
+      { const _t = teamForDriver(teams, name, season); if (_t) driverAgg[name].lastTeam = _t; }
     });
 
 
@@ -4812,7 +4809,7 @@ function renderRecordsTable() {
     // Constructor aggregates for this season
     const teamSeason = {};
     Object.entries(standings).forEach(([name, s]) => {
-      const team = teamForDriver(teams, name) || "Unassigned";
+      const team = teamForDriver(teams, name, season) || "Unassigned";
       if (!teamSeason[team]) teamSeason[team] = { points: 0, wins: 0, podiums: 0 };
       teamSeason[team].points += s.points;
       teamSeason[team].wins += s.wins;
@@ -4850,8 +4847,8 @@ function renderRecordsTable() {
       const p1 = posFor(1);
       const p2 = posFor(2);
       if (!p1 || !p2) return;
-      const t1 = teamForDriver(teams, p1.name) || null;
-      const t2 = teamForDriver(teams, p2.name) || null;
+      const t1 = teamForDriver(teams, p1.name, season, p1.team) || null;
+      const t2 = teamForDriver(teams, p2.name, season, p2.team) || null;
       if (!t1 || !t2 || t1 !== t2 || t1 === "Unassigned") return;
       if (!teamAgg[t1]) {
         teamAgg[t1] = { points: 0, wins: 0, podiums: 0, one_twos: 0, front_row_lockouts: 0, titles: 0, seasons: new Set() };
@@ -6716,7 +6713,7 @@ function renderPaceDeltaChart() {
 ---------------------------------------------------------------- */
 function buildStartingGridData() {
   if (!currentData) return [];
-  const teams = typeof getDriverTeams === "function" ? getDriverTeams() : {};
+  const teams = getTeamsForSeason(currentData.season);
   const currentTrack = normalizeTrackName(currentData.track_name);
 
   // Prefer the race (or sprint) file of the same weekend — its lap-0 order is
@@ -6753,7 +6750,7 @@ function buildStartingGridData() {
       .map((e) => ({
         position: Number(e.position),
         name: String(e.name).toUpperCase(),
-        team: canonicalTeam(e.team) || teamForDriver(teams, e.name) || "Unassigned",
+        team: teamForDriver(teams, e.name, currentData.season, e.team) || "Unassigned",
         time: e.lap_time_str || "",
         source: "Race start (lap 0)",
       }));
@@ -6783,7 +6780,7 @@ function gridFromQualiFor(session, teamsMap) {
   if (!session) return [];
   const teams =
     teamsMap ||
-    (typeof getDriverTeams === "function" ? getDriverTeams() : {});
+    getTeamsForSeason(session.season);
   const isSprintish =
     session.category === "Sprint" || session.category === "Sprint Shootout";
   const targetCat = isSprintish ? "Sprint Shootout" : "Qualifying";
@@ -6823,7 +6820,7 @@ function gridFromQualiFor(session, teamsMap) {
         byPos.set(r.pos, {
           position: r.pos,
           name,
-          team: teamForDriver(teams, r.name) || teamForDriver(teams, name) || "Unassigned",
+          team: teamForDriver(teams, r.name, qs.season, r.team) || "Unassigned",
           time: r.best_lap && r.best_lap !== "N/A" ? r.best_lap : "",
           source: label,
         });
@@ -6841,7 +6838,6 @@ async function backfillStartingGrids() {
   if (_gridBackfillDone) return;
   _gridBackfillDone = true;
   const db = typeof getSupabaseClient === "function" ? getSupabaseClient() : null;
-  const teams = typeof getDriverTeams === "function" ? getDriverTeams() : {};
   let changed = 0;
 
   for (const s of allSessions || []) {
@@ -6850,7 +6846,7 @@ async function backfillStartingGrids() {
     if (!rs) continue;
     if (Array.isArray(rs.starting_grid) && rs.starting_grid.length) continue;
 
-    const grid = gridFromQualiFor(s, teams)
+    const grid = gridFromQualiFor(s)
       .filter((e) => e.position > 0 && e.name)
       .map((e) => ({ position: e.position, name: e.name, team: e.team }));
     if (grid.length < 3) continue;

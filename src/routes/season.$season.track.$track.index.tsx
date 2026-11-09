@@ -6,8 +6,6 @@ import {
   cacheIsFresh,
   trackSlug,
   trackFlag,
-  trackMapUrl,
-  trackMapFallbackUrl,
   titleCaseTrack,
   badgesFor,
   racePosition,
@@ -412,15 +410,6 @@ function TrackPage() {
 
   const notesTemplate = `SOFTS:\n\nMEDIUMS:\n\nHARDS:\n\nBATTERY MANAGEMENT:\n`;
 
-  const [imgOk, setImgOk] = useState(true);
-  const [imgSrc, setImgSrc] = useState<string>("");
-  const triedFallback = useMemo(() => ({ v: false }), [canonicalName]);
-  useEffect(() => {
-    setImgSrc(trackMapUrl(canonicalName));
-    setImgOk(true);
-    triedFallback.v = false;
-  }, [canonicalName, triedFallback]);
-
   const orderedOptions = useMemo(() => {
     const byView = new Map(OPTIONS.map((o) => [o.view, o]));
     return order.map((v) => byView.get(v)).filter(Boolean) as Opt[];
@@ -445,7 +434,7 @@ function TrackPage() {
         ]}
       />
       <ShellPage>
-        <section className="mb-8 grid gap-6 lg:grid-cols-[1.4fr_1fr]">
+        <section className="mb-8">
           <div>
             <div className="mb-2 flex items-center gap-3">
               <span className="text-3xl sm:text-4xl">{trackFlag(canonicalName)}</span>
@@ -565,25 +554,6 @@ function TrackPage() {
               placeholder={notesTemplate}
               className="min-h-[200px] w-full resize-y sm:min-h-[340px] whitespace-pre-wrap rounded-md border border-white/10 bg-white/[0.03] p-3 font-mono text-sm leading-relaxed text-white outline-none focus:border-red-500/60"
             />
-          </div>
-          <div className="overflow-hidden rounded-lg border border-white/10 bg-black/40">
-            {imgOk ? (
-              <img
-                src={imgSrc || trackMapUrl(canonicalName)}
-                alt={canonicalName}
-                className="h-full w-full object-contain p-4"
-                onError={() => {
-                  if (!triedFallback.v) {
-                    triedFallback.v = true;
-                    setImgSrc(trackMapFallbackUrl(canonicalName));
-                  } else setImgOk(false);
-                }}
-              />
-            ) : (
-              <div className="flex h-full min-h-[240px] items-center justify-center text-6xl opacity-40">
-                {trackFlag(canonicalName)}
-              </div>
-            )}
           </div>
         </section>
 

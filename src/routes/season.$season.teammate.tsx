@@ -15,6 +15,11 @@ function loadCollapsed(): Set<string> {
 import { ShellHeader, ShellPage } from "@/components/f1/ShellHeader";
 
 export const Route = createFileRoute("/season/$season/teammate")({
+  head: ({ params }) => {
+    const title = `Season ${params.season} Teammate H2H · F1 Telemetry`;
+    const description = `Compare teammates' race and qualifying results throughout Season ${params.season}.`;
+    return { meta: [{ title }, { name: "description", content: description }, { property: "og:title", content: title }, { property: "og:description", content: description }, { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" }] };
+  },
   component: TeammatePage,
 });
 
