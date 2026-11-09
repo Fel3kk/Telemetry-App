@@ -46,6 +46,17 @@ describe("race consistency", () => {
 });
 
 describe("debrief facts", () => {
+  it("counts pitting and in-pits status for the same stop once", () => {
+    const data = laps([90, 90, 90, 90, 90, 90], (n) => ({
+      pit_status: n === 2 ? 1 : n === 3 ? 2 : 0,
+    }));
+    const facts = buildDebriefFacts({ track_name: "Spa", category: "Race", lap_history: data });
+    expect(verifiedPitLaps(data)).toEqual([2]);
+    expect(splitStints(data)).toHaveLength(2);
+    expect(facts.pit_laps).toEqual([2]);
+    expect(facts.pit_stops).toBe(1);
+  });
+
 <<<<<<< HEAD
   it("accepts exactly 108% as push pace, not slower cooldown laps", () => {
     expect(classifyQualifyingLaps(laps([100, 108, 108.001])).map((l) => l.role)).toEqual(["push", "push", "cooldown/recharge"]);
@@ -59,9 +70,9 @@ describe("debrief facts", () => {
     expect(verifiedPitLaps(data)).toEqual([]);
     expect(buildDebriefFacts({ track_name: "Melbourne", category: "Race", lap_history: data }).stints[0].compound).toBe("Medium");
   });
-  it("accepts sustained compound changes and recorded pit_status > 0", () => {
+  it("accepts sustained compound changes and recorded pit_status 1", () => {
     expect(verifiedPitLaps(laps([90, 90, 90, 90], (n) => ({ current_tyre_compound: n >= 3 ? "Hard" : "Medium" })))).toEqual([2]);
-    expect(verifiedPitLaps(laps([90, 90, 90], (n) => ({ pit_status: n === 2 ? 2 : 0 })))).toEqual([2]);
+    expect(verifiedPitLaps(laps([90, 90, 90], (n) => ({ pit_status: n === 2 ? 1 : 0 })))).toEqual([2]);
   });
 =======
 >>>>>>> 668deb81cba1959d58d4f043a46270987e9408fd

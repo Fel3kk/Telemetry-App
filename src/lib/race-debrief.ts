@@ -90,7 +90,7 @@ export function splitStints(laps: DebriefLap[]): DebriefLap[][] {
     }
     compound = cur.length ? compound : (sustained || Number(l.pit_status || 0) > 0 ? nextCompound : compound || nextCompound);
     cur.push({ ...l, current_tyre_compound: compound });
-    if (Number(l.pit_status || 0) > 0) {
+    if (Number(l.pit_status || 0) === 1) {
 =======
   for (const l of laps) {
     if (cur.length && l.current_tyre_compound !== compound) {
@@ -113,11 +113,13 @@ export function splitStints(laps: DebriefLap[]): DebriefLap[][] {
 <<<<<<< HEAD
 /** Recorded pit flags or a sustained compound transition, never a one-lap glitch. */
 export function verifiedPitLaps(laps: DebriefLap[]): number[] {
-  const recorded = laps.filter((l) => Number(l.pit_status || 0) > 0).map((l) => l.lap);
+  const recorded = laps.filter((l) => Number(l.pit_status || 0) === 1).map((l) => l.lap);
   const groups = splitStints(laps);
   for (let i = 1; i < groups.length; i++) {
     const previous = groups[i - 1].at(-1);
-    if (previous) recorded.push(previous.lap);
+    if (previous && !recorded.some((lap) => Math.abs(lap - previous.lap) <= 1)) {
+      recorded.push(previous.lap);
+    }
   }
   return [...new Set(recorded)].sort((a, b) => a - b);
 }
@@ -257,6 +259,7 @@ export function buildDebriefFacts(s: DebriefSession) {
   const laps = (s.lap_history ?? []).filter((l) => Number(l?.lap) > 0).sort((a, b) => a.lap - b.lap);
   const isQuali = /quali|shootout/i.test(`${s.category} ${s.session_type ?? ""}`);
   const consistency = isQuali ? null : raceConsistency(laps);
+  const pitLaps = verifiedPitLaps(laps);
   const times = laps.map((l) => lapSeconds(l.lap_time)).filter((t): t is number => t !== null);
   const bestLap = times.length ? Math.min(...times) : null;
 
@@ -332,11 +335,13 @@ export function buildDebriefFacts(s: DebriefSession) {
     laps_completed: laps.length,
     best_lap_s: bestLap !== null ? r3(bestLap) : null,
 <<<<<<< HEAD
-    pit_laps: verifiedPitLaps(laps),
+    pit_laps: pitLaps,
+    pit_stops: pitLaps.length,
     qualifying_laps: isQuali ? classifyQualifyingLaps(laps) : null,
     push_lap_times_s: isQuali ? classifyQualifyingLaps(laps).filter((l) => l.role === "push").map((l) => l.time_s) : null,
 =======
-    pit_laps: laps.filter((l) => Number(l.pit_status || 0) === 1).map((l) => l.lap),
+    pit_laps: pitLaps,
+    pit_stops: pitLaps.length,
 >>>>>>> 668deb81cba1959d58d4f043a46270987e9408fd
     safety_car_laps: laps.filter((l) => Number(l.sc_status || 0) > 0).map((l) => l.lap),
     fuel_used_kg: fuelStart !== null && fuelEnd !== null ? r3(fuelStart - fuelEnd) : null,
