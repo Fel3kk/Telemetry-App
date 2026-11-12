@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CircleX, Flag, Gauge, Share2, Timer, Trophy, Upload, Zap } from "lucide-react";
+import { Share2, Timer, Trophy, Upload } from "lucide-react";
 import {
   appUploadUrl,
   fetchSessions,
@@ -9,7 +9,6 @@ import {
   getSavedSeason,
   setSavedSeason,
   groupByTrack,
-  seasonStats,
   trackFlag,
   trackMapUrl,
   trackMapFallbackUrl,
@@ -36,9 +35,15 @@ export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "F1 Telemetry Analyzer" },
-      { name: "description", content: "Season standings, race stories, and telemetry from your F1 uploads." },
+      {
+        name: "description",
+        content: "Season standings, race stories, and telemetry from your F1 uploads.",
+      },
       { property: "og:title", content: "F1 Telemetry Analyzer" },
-      { property: "og:description", content: "Season standings, race stories, and telemetry from your F1 uploads." },
+      {
+        property: "og:description",
+        content: "Season standings, race stories, and telemetry from your F1 uploads.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
@@ -112,7 +117,6 @@ function MainPage() {
     () => sessions.filter((s) => Number(s.season) === season),
     [sessions, season],
   );
-  const stats = useMemo(() => seasonStats(seasonSessions), [seasonSessions]);
   // Rounds follow the order tracks were first driven, so modded tracks slot in naturally.
   const rounds = useMemo(() => roundOrder(seasonSessions), [seasonSessions]);
   const [sortBy, setSortBy] = useState<SortKey>("round");
@@ -120,12 +124,16 @@ function MainPage() {
     const v = localStorage.getItem("f1.cards.sort") as SortKey | null;
     if (v && SORTS.some((o) => o.key === v)) setSortBy(v);
   }, []);
-  const changeSort = (k: SortKey) => { setSortBy(k); localStorage.setItem("f1.cards.sort", k); };
+  const changeSort = (k: SortKey) => {
+    setSortBy(k);
+    localStorage.setItem("f1.cards.sort", k);
+  };
   const trackGroups = useMemo(() => {
     const byRound = (a: any, b: any) =>
       (rounds.get(trackSlug(a.track)) ?? 999) - (rounds.get(trackSlug(b.track)) ?? 999) ||
       (a.category === "Sprint" ? -1 : 0) - (b.category === "Sprint" ? -1 : 0);
-    const newest = (g: any) => Math.max(0, ...g.sessions.map((s: Session) => Date.parse(s.created_at || "") || 0));
+    const newest = (g: any) =>
+      Math.max(0, ...g.sessions.map((s: Session) => Date.parse(s.created_at || "") || 0));
     const best = (g: any) => Math.min(99, ...g.sessions.map((s: Session) => racePosition(s) ?? 99));
     const cmp: Record<SortKey, (a: any, b: any) => number> = {
       round: byRound,
@@ -137,7 +145,10 @@ function MainPage() {
     return groupByTrack(seasonSessions).sort(cmp[sortBy]);
   }, [seasonSessions, rounds, sortBy]);
 
-  const pick = (n: number) => { setSeason(n); setSavedSeason(n); };
+  const pick = (n: number) => {
+    setSeason(n);
+    setSavedSeason(n);
+  };
 
   return (
     <>
@@ -178,17 +189,17 @@ function MainPage() {
                   Title<span className="hidden sm:inline"> Race</span>
                 </span>
               </Link>
-              <Link
-                to="/records"
-                className={ACTION_CLS}
-              >
+              <Link to="/records" className={ACTION_CLS}>
                 <Timer size={14} aria-hidden="true" />
                 <span className="truncate">Records</span>
               </Link>
               <button
                 type="button"
                 onClick={() => setUploadOpen(true)}
-                className={ACTION_CLS + " border-primary/40 bg-primary/10"}
+                className={
+                  ACTION_CLS +
+                  " border-primary bg-primary text-primary-foreground shadow-[0_0_22px_-7px_var(--primary)] hover:bg-primary/90 hover:text-primary-foreground"
+                }
                 title="Upload telemetry for this season"
               >
                 <Upload size={14} aria-hidden="true" />
@@ -198,8 +209,6 @@ function MainPage() {
             </div>
           </div>
         </section>
-
-        <StatsBar stats={stats} />
 
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-bold uppercase tracking-widest text-white/60">
@@ -212,7 +221,11 @@ function MainPage() {
               onChange={(e) => changeSort(e.target.value as SortKey)}
               className="rounded-md border border-border bg-background px-2 py-1 text-xs font-semibold normal-case tracking-normal text-foreground"
             >
-              {SORTS.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
+              {SORTS.map((o) => (
+                <option key={o.key} value={o.key}>
+                  {o.label}
+                </option>
+              ))}
             </select>
           </label>
         </div>
@@ -243,8 +256,8 @@ function MainPage() {
           <DialogHeader>
             <DialogTitle>Upload telemetry</DialogTitle>
             <DialogDescription>
-              Choose one or more original telemetry JSON files for Season {season}. The
-              dashboard refreshes after they save.
+              Choose one or more original telemetry JSON files for Season {season}. The dashboard
+              refreshes after they save.
             </DialogDescription>
           </DialogHeader>
           <iframe
@@ -267,39 +280,6 @@ const SORTS: { key: SortKey; label: string }[] = [
   { key: "best", label: "Best finish" },
   { key: "name", label: "Track A–Z" },
 ];
-
-function StatsBar({ stats }: { stats: ReturnType<typeof seasonStats> }) {
-  const items = [
-    { label: "GP Wins", value: stats.raceWins, icon: Trophy },
-    { label: "Sprint Wins", value: stats.sprintWins, icon: Flag },
-    { label: "GP Poles", value: stats.gpPoles, icon: Timer },
-    { label: "Sprint Poles", value: stats.sprintPoles, icon: Zap },
-    { label: "Fastest Laps", value: stats.fastestLaps, icon: Gauge },
-    { label: "DNFs", value: stats.dnfs, icon: CircleX },
-  ];
-  return (
-    <div className="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-      {items.map((it) => (
-        <article
-          key={it.label}
-          className="group min-w-0 rounded-xl border border-border/70 bg-card/60 px-3 py-2.5 transition hover:border-primary/45 hover:bg-card"
-        >
-          <div className="flex items-center justify-between gap-2">
-            <span className="truncate text-[9px] font-bold uppercase tracking-[0.14em] text-muted-foreground sm:text-[10px]">
-              {it.label}
-            </span>
-            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary transition group-hover:bg-primary/15">
-              <it.icon size={15} strokeWidth={2} aria-hidden="true" />
-            </span>
-          </div>
-          <div className="mt-1 text-2xl font-black leading-none tabular-nums tracking-tight">
-            {it.value}
-          </div>
-        </article>
-      ))}
-    </div>
-  );
-}
 
 function ShareButton({ season, sessions }: { season: number; sessions: Session[] }) {
   const [busy, setBusy] = useState(false);
@@ -327,7 +307,7 @@ function ShareButton({ season, sessions }: { season: number; sessions: Session[]
         <Share2 size={14} aria-hidden="true" />
         <span className="truncate">
           {busy ? "Creating…" : "Share"}
-          <span className="hidden sm:inline">{" "}season card</span>
+          <span className="hidden sm:inline"> season card</span>
         </span>
       </button>
       {msg && (
@@ -341,11 +321,25 @@ function ShareButton({ season, sessions }: { season: number; sessions: Session[]
   );
 }
 
-function TrackCard({ season, track, category, sessions, round }: { season: number; track: string; category: string; sessions: Session[]; round: number | null }) {
+function TrackCard({
+  season,
+  track,
+  category,
+  sessions,
+  round,
+}: {
+  season: number;
+  track: string;
+  category: string;
+  sessions: Session[];
+  round: number | null;
+}) {
   const badgeAgg: Record<string, boolean> = {};
   sessions.forEach((s) => {
     const b = badgesFor(s);
-    Object.entries(b).forEach(([k, v]) => { if (v) badgeAgg[k] = true; });
+    Object.entries(b).forEach(([k, v]) => {
+      if (v) badgeAgg[k] = true;
+    });
   });
   const positions = sessions.map(racePosition).filter((n): n is number => !!n);
   const bestPos = positions.length ? Math.min(...positions) : null;
@@ -363,12 +357,18 @@ function TrackCard({ season, track, category, sessions, round }: { season: numbe
   const start = main?.starting_position ?? null;
   const gained = fin && start ? start - fin : null;
   // Retired with no classified finish: show the grid slot and the DNF instead of "no result".
-  const dnfSession = !main ? sessions.find((s) => isRaceResultSession(s) && badgesFor(s).dnf) : undefined;
+  const dnfSession = !main
+    ? sessions.find((s) => isRaceResultSession(s) && badgesFor(s).dnf)
+    : undefined;
   const dnfStart = dnfSession?.starting_position ?? null;
   const dnfLaps = (() => {
     if (!dnfSession) return null;
-    const me = String(dnfSession.race_story?.player_name || dnfSession.driver_name || "").toUpperCase();
-    const row = (dnfSession.race_story?.classification ?? []).find((e: any) => String(e?.name || "").toUpperCase() === me);
+    const me = String(
+      dnfSession.race_story?.player_name || dnfSession.driver_name || "",
+    ).toUpperCase();
+    const row = (dnfSession.race_story?.classification ?? []).find(
+      (e: any) => String(e?.name || "").toUpperCase() === me,
+    );
     return Number(row?.laps) || null;
   })();
   return (
@@ -388,17 +388,27 @@ function TrackCard({ season, track, category, sessions, round }: { season: numbe
           decoding="async"
           className="pointer-events-none absolute -right-[12%] -top-[8%] -z-10 h-[115%] w-[90%] object-contain opacity-40 saturate-[1.2] transition duration-500 group-hover:-translate-x-2 group-hover:scale-105 group-hover:opacity-70"
           onError={() => {
-            if (!triedFallback.v) { triedFallback.v = true; setImgSrc(trackMapFallbackUrl(track)); }
-            else setImgOk(false);
+            if (!triedFallback.v) {
+              triedFallback.v = true;
+              setImgSrc(trackMapFallbackUrl(track));
+            } else setImgOk(false);
           }}
         />
       ) : (
-        <div className="pointer-events-none absolute -right-4 -top-6 -z-10 text-[9rem] leading-none opacity-10">{trackFlag(track)}</div>
+        <div className="pointer-events-none absolute -right-4 -top-6 -z-10 text-[9rem] leading-none opacity-10">
+          {trackFlag(track)}
+        </div>
       )}
       {/* Readability gradients */}
       <div className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-t from-[#0c0c10] via-[#0c0c10]/75 to-transparent" />
       <div className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-r from-[#0c0c10]/90 via-transparent to-transparent" />
-      <span className={"absolute inset-y-0 left-0 w-[3px] " + (isSprint ? "bg-amber-400" : isPractice ? "bg-slate-400" : "bg-red-500") + " opacity-60 transition group-hover:opacity-100"} />
+      <span
+        className={
+          "absolute inset-y-0 left-0 w-[3px] " +
+          (isSprint ? "bg-amber-400" : isPractice ? "bg-slate-400" : "bg-red-500") +
+          " opacity-60 transition group-hover:opacity-100"
+        }
+      />
 
       <div className="absolute right-3 top-3 flex flex-wrap justify-end gap-1">
         {badgeAgg.gs && <Tag color="#c084fc">GS</Tag>}
@@ -416,32 +426,48 @@ function TrackCard({ season, track, category, sessions, round }: { season: numbe
         <span
           className={
             "rounded px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.15em] " +
-            (isSprint ? "border border-amber-400/70 bg-black/40 text-amber-300" : isPractice ? "bg-slate-500 text-white" : "bg-red-500 text-white")
+            (isSprint
+              ? "border border-amber-400/70 bg-black/40 text-amber-300"
+              : isPractice
+                ? "bg-slate-500 text-white"
+                : "bg-red-500 text-white")
           }
         >
           {category}
-        </span>
-        <span className="rounded bg-black/40 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white/60 backdrop-blur-sm">
-          {sessions.length} session{sessions.length === 1 ? "" : "s"}
         </span>
       </div>
 
       <div className="flex flex-col gap-1.5 px-3 pb-3 pt-12 sm:px-3.5 sm:pt-14">
         <div className="flex items-center gap-2">
           <span className="text-xl leading-none">{trackFlag(track)}</span>
-          <span className="truncate text-lg font-black uppercase italic tracking-tight drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)] sm:text-xl">{display}</span>
+          <span className="truncate text-lg font-black uppercase italic tracking-tight drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)] sm:text-xl">
+            {display}
+          </span>
+        </div>
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-white/45">
+          {sessions.length} uploaded session{sessions.length === 1 ? "" : "s"}
         </div>
         {fin ? (
           <div className="flex items-end justify-between">
             <div className="flex items-baseline gap-2 font-mono">
               {start && <span className="text-sm text-white/45">P{start}</span>}
               {start && <span className="text-white/30">→</span>}
-              <span className={"text-3xl font-black leading-none " + (fin === 1 ? "text-yellow-400" : fin <= 3 ? "text-orange-300" : "text-white")}>
+              <span
+                className={
+                  "text-3xl font-black leading-none " +
+                  (fin === 1 ? "text-yellow-400" : fin <= 3 ? "text-orange-300" : "text-white")
+                }
+              >
                 P{fin}
               </span>
             </div>
             {gained !== null && gained !== 0 && (
-              <span className={"rounded px-1.5 py-0.5 font-mono text-xs font-bold " + (gained > 0 ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400")}>
+              <span
+                className={
+                  "rounded px-1.5 py-0.5 font-mono text-xs font-bold " +
+                  (gained > 0 ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400")
+                }
+              >
                 {gained > 0 ? `▲ +${gained}` : `▼ ${gained}`}
               </span>
             )}
@@ -460,7 +486,9 @@ function TrackCard({ season, track, category, sessions, round }: { season: numbe
             )}
           </div>
         ) : (
-          <div className="text-xs font-semibold uppercase tracking-wider text-white/35">No race result yet</div>
+          <div className="text-xs font-semibold uppercase tracking-wider text-white/35">
+            No race result yet
+          </div>
         )}
       </div>
     </Link>

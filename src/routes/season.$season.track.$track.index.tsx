@@ -48,7 +48,16 @@ export const Route = createFileRoute("/season/$season/track/$track/")({
   head: ({ params }) => {
     const title = `${titleCaseTrack(params.track)} · Season ${params.season} · F1 Telemetry`;
     const description = `Qualifying, lap simulations, race analysis and telemetry for ${titleCaseTrack(params.track)} in Season ${params.season}.`;
-    return { meta: [{ title }, { name: "description", content: description }, { property: "og:title", content: title }, { property: "og:description", content: description }, { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" }] };
+    return {
+      meta: [
+        { title },
+        { name: "description", content: description },
+        { property: "og:title", content: title },
+        { property: "og:description", content: description },
+        { property: "og:type", content: "website" },
+        { name: "twitter:card", content: "summary" },
+      ],
+    };
   },
   component: TrackPage,
 });
@@ -56,10 +65,30 @@ export const Route = createFileRoute("/season/$season/track/$track/")({
 type Opt = { view: string; label: string; icon: LucideIcon; desc: string };
 
 const GROUPS = [
-  { id: "race", label: "Race Telemetry & Analysis", icon: Flag, views: ["race-story", "compare", "graphs", "data", "ai-debrief"] },
-  { id: "quali", label: "Qualifying & Setup", icon: Gauge, views: ["quali-results", "quali-simulation", "ers-map"] },
-  { id: "prep", label: "Pre-Race Preparation", icon: Activity, views: ["practice", "strategies", "grid"] },
-  { id: "season", label: "Championship & Season", icon: Trophy, views: ["standings", "records", "progress", "assignments", "teammate"] },
+  {
+    id: "race",
+    label: "Race Telemetry & Analysis",
+    icon: Flag,
+    views: ["race-story", "compare", "graphs", "data", "ai-debrief"],
+  },
+  {
+    id: "quali",
+    label: "Qualifying & Setup",
+    icon: Gauge,
+    views: ["quali-results", "quali-simulation", "ers-map"],
+  },
+  {
+    id: "prep",
+    label: "Pre-Race Preparation",
+    icon: Activity,
+    views: ["practice", "strategies", "grid"],
+  },
+  {
+    id: "season",
+    label: "Championship & Season",
+    icon: Trophy,
+    views: ["standings", "season-stats", "records", "progress", "assignments", "teammate"],
+  },
 ] as const;
 type GroupId = (typeof GROUPS)[number]["id"];
 const GROUP_KEY = "f1.sectionsGroup";
@@ -70,6 +99,12 @@ const OPTIONS: Opt[] = [
     label: "Standings",
     icon: Trophy,
     desc: "Full season table for the championship",
+  },
+  {
+    view: "season-stats",
+    label: "Season Stats",
+    icon: Medal,
+    desc: "Driver profile tiles for this season",
   },
   {
     view: "records",
@@ -84,10 +119,30 @@ const OPTIONS: Opt[] = [
     desc: "Points & position by round, drivers and teams",
   },
   { view: "quali-results", label: "Qualifying", icon: Timer, desc: "Q1–Q3 / shootout times" },
-  { view: "quali-simulation", label: "Qualifying Simulation", icon: Gauge, desc: "Your lap versus P1, or P2 from pole" },
-  { view: "ers-map", label: "ERS Map", icon: Zap, desc: "Paint your race and quali battery plan on the track" },
-  { view: "ai-debrief", label: "AI Race Engineer", icon: Headphones, desc: "Debrief, consistency score and coaching notes" },
-  { view: "grid", label: "Starting Grid", icon: Flag, desc: "Pole to the back row, weekend lineup" },
+  {
+    view: "quali-simulation",
+    label: "Qualifying Simulation",
+    icon: Gauge,
+    desc: "Your lap versus P1, or P2 from pole",
+  },
+  {
+    view: "ers-map",
+    label: "ERS Map",
+    icon: Zap,
+    desc: "Paint your race and quali battery plan on the track",
+  },
+  {
+    view: "ai-debrief",
+    label: "AI Race Engineer",
+    icon: Headphones,
+    desc: "Debrief, consistency score and coaching notes",
+  },
+  {
+    view: "grid",
+    label: "Starting Grid",
+    icon: Flag,
+    desc: "Pole to the back row, weekend lineup",
+  },
   { view: "assignments", label: "Teams", icon: Users, desc: "Driver / constructor pairings" },
   {
     view: "race-story",
@@ -101,7 +156,12 @@ const OPTIONS: Opt[] = [
     icon: ArrowLeftRight,
     desc: "Compare your lap times against any driver",
   },
-  { view: "graphs", label: "Graphs", icon: ChartLine, desc: "Lap times, fuel, ERS, tyre wear + faults" },
+  {
+    view: "graphs",
+    label: "Graphs",
+    icon: ChartLine,
+    desc: "Lap times, fuel, ERS, tyre wear + faults",
+  },
   { view: "data", label: "Laps", icon: ClipboardList, desc: "Per-lap table and stint summary" },
   { view: "practice", label: "Practice", icon: Activity, desc: "Free practice fuel calculator" },
   {
@@ -118,9 +178,9 @@ const OPTIONS: Opt[] = [
   },
 ];
 
-
 const ACCENTS: Record<string, string> = {
   standings: "#ffd15c",
+  "season-stats": "#4bf09a",
   records: "#cf9bff",
   progress: "#5cb0ff",
   "quali-results": "#4bf09a",
@@ -165,7 +225,11 @@ function TrackPage() {
   }, []);
   const pickGroup = (g: GroupId) => {
     setGroup(g);
-    try { localStorage.setItem(GROUP_KEY, g); } catch { /* ignore */ }
+    try {
+      localStorage.setItem(GROUP_KEY, g);
+    } catch {
+      /* ignore */
+    }
   };
 
   // Load cached sessions after mount to avoid SSR hydration mismatch.
@@ -285,57 +349,58 @@ function TrackPage() {
   function persistNotes(value: string, dbKey: string, quiet = false) {
     if (!quiet) setSaveStatus("saving");
     const sequence = ++saveSequence.current;
-    saveQueue.current = saveQueue.current.catch(() => {}).then(async () => {
-      try {
-        const { data: userData } = await supabase.auth.getUser();
-        const uid = userData?.user?.id;
-        if (!uid) {
-          if (!quiet) setSaveStatus("local"); // anonymous → local only
-          return;
-        }
-        // Per-user lookup then update/insert. RLS already scopes reads to the
-        // signed-in user, but the table can still hold a legacy row with the
-        // same `track_key` owned by nobody/someone else — inserting then hits
-        // a duplicate-key error, which is what made saves fail ~50% of tracks.
-        const { data: existing } = await supabase
-          .from("track_notes")
-          .select("id")
-          .eq("track_key", dbKey)
-          .eq("user_id", uid)
-          .order("updated_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        const payload = {
-          track_key: dbKey,
-          notes: value,
-          updated_at: new Date().toISOString(),
-          user_id: uid,
-        };
-        let error = existing?.id
-          ? (await supabase.from("track_notes").update(payload).eq("id", existing.id)).error
-          : (await supabase.from("track_notes").insert(payload)).error;
-        if (error && !existing?.id) {
-          // Duplicate key on track_key → a row already exists; take it over.
-          const retry = await supabase
+    saveQueue.current = saveQueue.current
+      .catch(() => {})
+      .then(async () => {
+        try {
+          const { data: userData } = await supabase.auth.getUser();
+          const uid = userData?.user?.id;
+          if (!uid) {
+            if (!quiet) setSaveStatus("local"); // anonymous → local only
+            return;
+          }
+          // Per-user lookup then update/insert. RLS already scopes reads to the
+          // signed-in user, but the table can still hold a legacy row with the
+          // same `track_key` owned by nobody/someone else — inserting then hits
+          // a duplicate-key error, which is what made saves fail ~50% of tracks.
+          const { data: existing } = await supabase
             .from("track_notes")
-            .update(payload)
+            .select("id")
             .eq("track_key", dbKey)
-            .select("id");
-          if (!retry.error && retry.data && retry.data.length) error = null;
-        }
-        if (error) {
-          console.warn("track_notes save failed", error);
+            .eq("user_id", uid)
+            .order("updated_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          const payload = {
+            track_key: dbKey,
+            notes: value,
+            updated_at: new Date().toISOString(),
+            user_id: uid,
+          };
+          let error = existing?.id
+            ? (await supabase.from("track_notes").update(payload).eq("id", existing.id)).error
+            : (await supabase.from("track_notes").insert(payload)).error;
+          if (error && !existing?.id) {
+            // Duplicate key on track_key → a row already exists; take it over.
+            const retry = await supabase
+              .from("track_notes")
+              .update(payload)
+              .eq("track_key", dbKey)
+              .select("id");
+            if (!retry.error && retry.data && retry.data.length) error = null;
+          }
+          if (error) {
+            console.warn("track_notes save failed", error);
+            if (!quiet && sequence === saveSequence.current) setSaveStatus("error");
+            return;
+          }
+          if (dbKey === trackKeyRef.current) lastSaved.current = value;
+          if (!quiet && sequence === saveSequence.current) setSaveStatus("saved");
+        } catch (err) {
+          console.warn("track_notes save error", err);
           if (!quiet && sequence === saveSequence.current) setSaveStatus("error");
-          return;
         }
-        if (dbKey === trackKeyRef.current) lastSaved.current = value;
-        if (!quiet && sequence === saveSequence.current) setSaveStatus("saved");
-
-      } catch (err) {
-        console.warn("track_notes save error", err);
-        if (!quiet && sequence === saveSequence.current) setSaveStatus("error");
-      }
-    });
+      });
     return saveQueue.current;
   }
 
@@ -440,7 +505,6 @@ function TrackPage() {
     return () => clearTimeout(id);
   }, [notes, notesReady, seasonN, noteTrackKey]);
 
-
   const saveLabel: Record<string, string> = {
     idle: "",
     editing: "Editing…",
@@ -449,8 +513,6 @@ function TrackPage() {
     local: "Saved on this device (sign in to sync)",
     error: "Save failed — retry by editing again",
   };
-
-
 
   const notesTemplate = `SOFTS:\n\nMEDIUMS:\n\nHARDS:\n\nBATTERY MANAGEMENT:\n`;
   const noteRows = parseTrackNotes(notes);
@@ -489,11 +551,18 @@ function TrackPage() {
               <span className="text-2xl sm:text-3xl">{trackFlag(canonicalName)}</span>
               <h1 className="min-w-0 text-xl font-black sm:text-2xl">
                 {displayName}
-                {cat && <span className="ml-2 text-sm font-bold text-muted-foreground sm:text-base">{cat}</span>}
+                {cat && (
+                  <span className="ml-2 text-sm font-bold text-muted-foreground sm:text-base">
+                    {cat}
+                  </span>
+                )}
               </h1>
             </div>
             {hasTrackNavigation && (
-              <div className="mb-2 grid grid-cols-1 gap-1.5 sm:grid-cols-2" suppressHydrationWarning>
+              <div
+                className="mb-2 grid grid-cols-1 gap-1.5 sm:grid-cols-2"
+                suppressHydrationWarning
+              >
                 {(prevSeason || nextSeason) && (
                   <NavBar
                     center={`Same track`}
@@ -551,13 +620,10 @@ function TrackPage() {
               </div>
             )}
 
-
             <p className="mb-2.5 text-xs text-muted-foreground">{infoSummary}</p>
             <UploadedSessions
               sessions={sessions.filter(
-                (s) =>
-                  Number(s.season) === seasonN &&
-                  trackSlug(s.track_name) === trackSlug(track),
+                (s) => Number(s.season) === seasonN && trackSlug(s.track_name) === trackSlug(track),
               )}
               onDeleted={(id) => {
                 setSessions((prev) => prev.filter((s) => s.id !== id));
@@ -746,12 +812,11 @@ function TrackPage() {
           {visibleOptions.map((o, index) => {
             const accent = ACCENTS[o.view] ?? "#ef3340";
             const Icon = o.icon;
-            const raceCardSpan =
-              useRaceCardGrid
-                ? index < 2
-                  ? "lg:col-span-3"
-                  : "lg:col-span-2"
-                : "";
+            const raceCardSpan = useRaceCardGrid
+              ? index < 2
+                ? "lg:col-span-3"
+                : "lg:col-span-2"
+              : "";
             const linkProps =
               o.view === "teammate"
                 ? {
@@ -815,11 +880,18 @@ function TrackPage() {
                       boxShadow: `inset 0 0 0 1px color-mix(in oklab, ${accent} 28%, transparent)`,
                     }}
                   >
-                    <Icon size={18} strokeWidth={1.8} style={{ color: accent }} aria-hidden="true" />
+                    <Icon
+                      size={18}
+                      strokeWidth={1.8}
+                      style={{ color: accent }}
+                      aria-hidden="true"
+                    />
                   </span>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-2">
-                      <div className="text-sm font-bold tracking-tight text-foreground">{o.label}</div>
+                      <div className="text-sm font-bold tracking-tight text-foreground">
+                        {o.label}
+                      </div>
                       {customizingLayout && (
                         <GripVertical
                           size={15}
@@ -828,7 +900,9 @@ function TrackPage() {
                         />
                       )}
                     </div>
-                    <div className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-muted-foreground">{o.desc}</div>
+                    <div className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-muted-foreground">
+                      {o.desc}
+                    </div>
                     <TrackCardPreview view={o.view} data={cardPreview} />
                   </div>
                 </Link>
@@ -836,7 +910,6 @@ function TrackPage() {
             );
           })}
         </div>
-
       </ShellPage>
     </>
   );
@@ -852,9 +925,7 @@ const TYRE_COMPOUND_COLORS: Record<string, string> = {
 
 function TrackCardPreview({ view, data }: { view: string; data: TrackCardPreviewData }) {
   if (view === "race-story") {
-    const positionChange = data.positions
-      ? data.positions.start - data.positions.finish
-      : null;
+    const positionChange = data.positions ? data.positions.start - data.positions.finish : null;
     return (
       <div className="mt-2 space-y-1.5">
         <div className="flex items-center justify-between gap-2 text-[10px]">
@@ -871,7 +942,10 @@ function TrackCardPreview({ view, data }: { view: string; data: TrackCardPreview
         </div>
         {data.stints.length > 0 ? (
           <>
-            <div className="flex h-2.5 overflow-hidden rounded-full bg-muted/60" aria-label="Tyre stints">
+            <div
+              className="flex h-2.5 overflow-hidden rounded-full bg-muted/60"
+              aria-label="Tyre stints"
+            >
               {data.stints.map((stint, index) => (
                 <span
                   key={`${stint.compound}-${stint.startLap}-${index}`}
@@ -879,7 +953,8 @@ function TrackCardPreview({ view, data }: { view: string; data: TrackCardPreview
                   className="min-w-1 border-r border-background/50 last:border-r-0"
                   style={{
                     flex: `${Math.max(stint.laps, 1)} 1 0%`,
-                    backgroundColor: TYRE_COMPOUND_COLORS[stint.compound.toLowerCase()] ?? "#94a3b8",
+                    backgroundColor:
+                      TYRE_COMPOUND_COLORS[stint.compound.toLowerCase()] ?? "#94a3b8",
                   }}
                 />
               ))}
@@ -887,7 +962,8 @@ function TrackCardPreview({ view, data }: { view: string; data: TrackCardPreview
             <div className="flex flex-wrap gap-x-2 text-[9px] text-muted-foreground">
               {data.stints.map((stint, index) => (
                 <span key={`${stint.compound}-${stint.startLap}-label-${index}`}>
-                  {stint.compound}{stint.laps ? ` · L${stint.startLap}–${stint.endLap}` : ""}
+                  {stint.compound}
+                  {stint.laps ? ` · L${stint.startLap}–${stint.endLap}` : ""}
                 </span>
               ))}
             </div>
@@ -910,7 +986,8 @@ function TrackCardPreview({ view, data }: { view: string; data: TrackCardPreview
           <span className="text-muted-foreground">
             Median vs field{" "}
             <strong className="font-mono text-foreground">
-              {delta > 0 ? "+" : ""}{(delta / 1000).toFixed(2)}s
+              {delta > 0 ? "+" : ""}
+              {(delta / 1000).toFixed(2)}s
             </strong>
           </span>
         ) : data.laps.length === 0 ? (
@@ -922,17 +999,23 @@ function TrackCardPreview({ view, data }: { view: string; data: TrackCardPreview
 
   if (view === "compare") {
     if (data.bestLapMs === null) {
-      return <p className="mt-2 text-[10px] text-muted-foreground">No lap-time comparison available</p>;
+      return (
+        <p className="mt-2 text-[10px] text-muted-foreground">No lap-time comparison available</p>
+      );
     }
     const gap = data.fastestRival ? data.bestLapMs - data.fastestRival.ms : null;
     return (
       <div className="mt-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-[10px]">
         <span className="text-muted-foreground">
-          Best <strong className="font-mono text-foreground">{formatPreviewLapTime(data.bestLapMs)}</strong>
+          Best{" "}
+          <strong className="font-mono text-foreground">
+            {formatPreviewLapTime(data.bestLapMs)}
+          </strong>
         </span>
         {gap !== null ? (
           <span className="font-mono font-semibold text-foreground/90">
-            {gap > 0 ? "+" : ""}{(gap / 1000).toFixed(3)}s vs {data.fastestRival?.name}
+            {gap > 0 ? "+" : ""}
+            {(gap / 1000).toFixed(3)}s vs {data.fastestRival?.name}
           </span>
         ) : (
           <span className="text-muted-foreground">No rival lap data</span>
@@ -943,7 +1026,9 @@ function TrackCardPreview({ view, data }: { view: string; data: TrackCardPreview
 
   if (view === "graphs") {
     if (data.laps.length < 2) {
-      return <p className="mt-2 text-[10px] text-muted-foreground">Not enough lap times for a trend</p>;
+      return (
+        <p className="mt-2 text-[10px] text-muted-foreground">Not enough lap times for a trend</p>
+      );
     }
     const times = data.laps.map((lap) => lap.ms);
     const min = Math.min(...times);
@@ -974,7 +1059,9 @@ function TrackCardPreview({ view, data }: { view: string; data: TrackCardPreview
             vectorEffect="non-scaling-stroke"
           />
         </svg>
-        <span className="shrink-0 text-[9px] tabular-nums text-muted-foreground">{times.length} laps</span>
+        <span className="shrink-0 text-[9px] tabular-nums text-muted-foreground">
+          {times.length} laps
+        </span>
       </div>
     );
   }
@@ -984,11 +1071,15 @@ function TrackCardPreview({ view, data }: { view: string; data: TrackCardPreview
       <div className="mt-2 grid grid-cols-2 gap-2 text-[10px]">
         <div>
           <div className="text-muted-foreground">Best</div>
-          <div className="font-mono font-semibold text-foreground">{formatPreviewLapTime(data.bestLapMs)}</div>
+          <div className="font-mono font-semibold text-foreground">
+            {formatPreviewLapTime(data.bestLapMs)}
+          </div>
         </div>
         <div>
           <div className="text-muted-foreground">Average</div>
-          <div className="font-mono font-semibold text-foreground">{formatPreviewLapTime(data.averageLapMs)}</div>
+          <div className="font-mono font-semibold text-foreground">
+            {formatPreviewLapTime(data.averageLapMs)}
+          </div>
         </div>
       </div>
     ) : (
@@ -1039,9 +1130,21 @@ function NavLink({
       aria-label={`${dir === "prev" ? "Previous" : "Next"}: ${label}`}
       className="group flex min-w-0 max-w-[45%] flex-1 items-center gap-1 rounded-lg px-2 py-1.5 text-[11px] font-semibold text-foreground/80 transition hover:bg-primary/10 hover:text-foreground sm:px-2.5"
     >
-      {dir === "prev" && <ChevronLeft size={14} className="shrink-0 transition-transform group-hover:-translate-x-0.5" aria-hidden="true" />}
+      {dir === "prev" && (
+        <ChevronLeft
+          size={14}
+          className="shrink-0 transition-transform group-hover:-translate-x-0.5"
+          aria-hidden="true"
+        />
+      )}
       <span className="truncate">{label}</span>
-      {dir === "next" && <ChevronRight size={14} className="shrink-0 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />}
+      {dir === "next" && (
+        <ChevronRight
+          size={14}
+          className="shrink-0 transition-transform group-hover:translate-x-0.5"
+          aria-hidden="true"
+        />
+      )}
     </Link>
   );
 }
@@ -1069,7 +1172,8 @@ function UploadedSessions({
   );
 
   async function remove(s: Session) {
-    if (!confirm(`Delete only "${sessionLabel(s)}" from this weekend? This cannot be undone.`)) return;
+    if (!confirm(`Delete only "${sessionLabel(s)}" from this weekend? This cannot be undone.`))
+      return;
     setBusy(s.id);
     setError(null);
     const { error } = await supabase.from("telemetry_sessions").delete().eq("id", s.id);
@@ -1111,7 +1215,9 @@ function UploadedSessions({
           {sorted.map((s) => (
             <li key={s.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
               <div className="min-w-0">
-                <div className="truncate text-xs font-semibold text-foreground">{sessionLabel(s)}</div>
+                <div className="truncate text-xs font-semibold text-foreground">
+                  {sessionLabel(s)}
+                </div>
                 <div className="text-[10px] text-muted-foreground">
                   {s.created_at ? new Date(s.created_at).toLocaleString() : ""}
                   {s.finishing_position ? ` · P${s.finishing_position}` : ""}

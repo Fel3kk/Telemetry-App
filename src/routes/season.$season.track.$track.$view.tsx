@@ -5,18 +5,29 @@ import { ShellHeader, ShellPage } from "@/components/f1/ShellHeader";
 import { QualifyingSimulation } from "@/components/f1/QualifyingSimulation";
 import { ErsMapEditor } from "@/components/f1/ErsMapEditor";
 import { AiDebrief } from "@/components/f1/AiDebrief";
+import { SeasonStats } from "@/components/f1/SeasonStats";
 
 export const Route = createFileRoute("/season/$season/track/$track/$view")({
   head: ({ params }) => {
     const title = `${LABELS[params.view] ?? params.view} · ${titleCaseTrack(params.track)} · F1 Telemetry`;
     const description = `Season ${params.season} ${titleCaseTrack(params.track)} ${LABELS[params.view] ?? params.view} from your uploaded F1 telemetry.`;
-    return { meta: [{ title }, { name: "description", content: description }, { property: "og:title", content: title }, { property: "og:description", content: description }, { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" }] };
+    return {
+      meta: [
+        { title },
+        { name: "description", content: description },
+        { property: "og:title", content: title },
+        { property: "og:description", content: description },
+        { property: "og:type", content: "website" },
+        { name: "twitter:card", content: "summary" },
+      ],
+    };
   },
   component: ViewPage,
 });
 
 const LABELS: Record<string, string> = {
   standings: "Standings",
+  "season-stats": "Season Stats",
   records: "All-Time Records",
   progress: "Season Progress",
   "quali-results": "Qualifying",
@@ -32,7 +43,7 @@ const LABELS: Record<string, string> = {
   practice: "Practice",
 };
 
-const NATIVE_VIEWS = new Set(["quali-simulation", "ers-map", "ai-debrief"]);
+const NATIVE_VIEWS = new Set(["quali-simulation", "ers-map", "ai-debrief", "season-stats"]);
 
 function ViewPage() {
   const { season, track, view } = Route.useParams();
@@ -52,7 +63,10 @@ function ViewPage() {
       if (e?.data && e.data.type === "f1-embed-ready") setLoading(false);
     };
     window.addEventListener("message", onMsg);
-    return () => { clearTimeout(t); window.removeEventListener("message", onMsg); };
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener("message", onMsg);
+    };
   }, [src, view]);
 
   return (
@@ -81,23 +95,35 @@ function ViewPage() {
             ← Back to {trackDisplay}
           </Link>
         </div>
-        {view === "quali-simulation" ? <QualifyingSimulation season={Number(season)} track={track} cat={cat} /> : view === "ers-map" ? <ErsMapEditor season={Number(season)} track={track} cat={cat} /> : view === "ai-debrief" ? <AiDebrief season={Number(season)} track={track} cat={cat} /> : <div className="relative overflow-hidden rounded-lg border border-white/10 bg-black/30">
-          {loading && (
-            <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-[#0a0a0f]/90 backdrop-blur-sm">
-              <div className="h-10 w-10 animate-spin rounded-full border-2 border-white/15 border-t-red-500" />
-              <div className="text-sm font-semibold text-white/80">Loading {label}…</div>
-              <div className="text-xs text-white/40">
-                {slow ? "Fetching telemetry from the database (first load can take 10–15s)" : "Preparing charts and race data"}
+        {view === "quali-simulation" ? (
+          <QualifyingSimulation season={Number(season)} track={track} cat={cat} />
+        ) : view === "ers-map" ? (
+          <ErsMapEditor season={Number(season)} track={track} cat={cat} />
+        ) : view === "ai-debrief" ? (
+          <AiDebrief season={Number(season)} track={track} cat={cat} />
+        ) : view === "season-stats" ? (
+          <SeasonStats season={Number(season)} />
+        ) : (
+          <div className="relative overflow-hidden rounded-lg border border-white/10 bg-black/30">
+            {loading && (
+              <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-[#0a0a0f]/90 backdrop-blur-sm">
+                <div className="h-10 w-10 animate-spin rounded-full border-2 border-white/15 border-t-red-500" />
+                <div className="text-sm font-semibold text-white/80">Loading {label}…</div>
+                <div className="text-xs text-white/40">
+                  {slow
+                    ? "Fetching telemetry from the database (first load can take 10–15s)"
+                    : "Preparing charts and race data"}
+                </div>
               </div>
-            </div>
-          )}
-          <iframe
-            key={src}
-            title={label}
-            src={src}
-            className="min-h-[70vh] w-full sm:min-h-[85vh]"
-          />
-        </div>}
+            )}
+            <iframe
+              key={src}
+              title={label}
+              src={src}
+              className="min-h-[70vh] w-full sm:min-h-[85vh]"
+            />
+          </div>
+        )}
       </ShellPage>
     </>
   );

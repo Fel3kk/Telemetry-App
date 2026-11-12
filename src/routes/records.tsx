@@ -7,8 +7,22 @@ import {
   trackFlag,
   type Session,
 } from "@/lib/f1-shell";
-import { formatLapMs, personalRecords, sortRecords, type RecordSortKey } from "@/lib/f1-stats";
+import {
+  allTimeDriverProfiles,
+  computeStandings,
+  computeTitleMath,
+  formatLapMs,
+  hasClinchedTitle,
+  loadExcludedTracks,
+  loadExtraTracks,
+  loadSprintWeekends,
+  personalRecords,
+  sortRecords,
+  type RecordSortKey,
+} from "@/lib/f1-stats";
 import { ShellHeader, ShellPage } from "@/components/f1/ShellHeader";
+import { DriverProfileDialog, type DriverProfile } from "@/components/f1/DriverProfileDialog";
+import { DriverProfileTiles, type DriverTileProfile } from "@/components/f1/DriverProfileTiles";
 
 export const Route = createFileRoute("/records")({
   head: () => ({
@@ -16,7 +30,10 @@ export const Route = createFileRoute("/records")({
       { title: "Personal Records · F1 Telemetry Analyzer" },
       { name: "description", content: "Your fastest lap on every track across all seasons." },
       { property: "og:title", content: "Personal Records · F1 Telemetry Analyzer" },
-      { property: "og:description", content: "Your fastest lap on every track across all seasons." },
+      {
+        property: "og:description",
+        content: "Your fastest lap on every track across all seasons.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
@@ -33,14 +50,24 @@ function RecordsPage() {
   useEffect(() => {
     let cancelled = false;
     fetchSessions()
-      .then((rows) => { if (!cancelled) setSessions(rows); })
-      .catch((e) => { if (!cancelled) setErr(String(e)); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+      .then((rows) => {
+        if (!cancelled) setSessions(rows);
+      })
+      .catch((e) => {
+        if (!cancelled) setErr(String(e));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const [sortBy, setSortBy] = useState<RecordSortKey>("round");
   const [open, setOpen] = useState<Set<string>>(new Set());
+  const [selectedDriver, setSelectedDriver] = useState<DriverProfile | null>(null);
+  const [profileContext, setProfileContext] = useState("All-Time Stats");
   useEffect(() => {
     try {
       const v = localStorage.getItem(SORT_KEY) as RecordSortKey | null;
@@ -54,11 +81,19 @@ function RecordsPage() {
   }, []);
   const changeSort = (k: RecordSortKey) => {
     setSortBy(k);
-    try { localStorage.setItem(SORT_KEY, k); } catch { /* ignore */ }
+    try {
+      localStorage.setItem(SORT_KEY, k);
+    } catch {
+      /* ignore */
+    }
   };
   const saveOpen = (next: Set<string>) => {
     setOpen(next);
-    try { localStorage.setItem(OPEN_KEY, JSON.stringify([...next])); } catch { /* ignore */ }
+    try {
+      localStorage.setItem(OPEN_KEY, JSON.stringify([...next]));
+    } catch {
+      /* ignore */
+    }
   };
   const toggle = (slug: string) => {
     const next = new Set(open);
@@ -69,6 +104,42 @@ function RecordsPage() {
 
   const allRecords = useMemo(() => personalRecords(sessions), [sessions]);
   const records = useMemo(() => sortRecords(allRecords, sortBy), [allRecords, sortBy]);
+  const allTimeDrivers = useMemo(() => {
+    const seasons = [...new Set(sessions.map((s) => Number(s.season)).filter(Number.isFinite))];
+    const currentSeason = Math.max(0, ...seasons);
+    const titles = new Map<string, number>();
+
+    for (const season of seasons) {
+      const seasonStandings = computeStandings(
+        sessions.filter((session) => Number(session.season) === season),
+      );
+      const leader = seasonStandings[0];
+      if (!leader || leader.points <= 0) continue;
+
+      let titleIsFinal = season !== currentSeason;
+      if (!titleIsFinal) {
+        const titleMath = computeTitleMath(sessions, season, {
+          excluded: loadExcludedTracks(season),
+          sprints: loadSprintWeekends(season),
+          extras: loadExtraTracks(season),
+        });
+        titleIsFinal = hasClinchedTitle(titleMath.standings, titleMath.maxPointsLeft);
+      }
+      if (titleIsFinal) titles.set(leader.name, (titles.get(leader.name) ?? 0) + 1);
+    }
+
+    return allTimeDriverProfiles(sessions, titles);
+  }, [sessions]);
+  const selectDriver = (driver: DriverTileProfile, context: string) => {
+    setSelectedDriver({
+      name: driver.name,
+      team: driver.team,
+      stats: driver.stats,
+      titles: driver.titles,
+      seasonsActive: driver.seasonsActive,
+    });
+    setProfileContext(context);
+  };
   const allOpen = records.length > 0 && records.every((r) => open.has(r.slug));
   const totalImprovement = useMemo(
     () => records.reduce((acc, r) => acc + (r.secondBestMs ? r.secondBestMs - r.bestMs : 0), 0),
@@ -108,7 +179,11 @@ function RecordsPage() {
                 onChange={(e) => changeSort(e.target.value as RecordSortKey)}
                 className="rounded-md border border-border bg-background px-2 py-1 text-xs font-semibold normal-case tracking-normal text-foreground"
               >
-                {SORTS.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
+                {SORTS.map((o) => (
+                  <option key={o.key} value={o.key}>
+                    {o.label}
+                  </option>
+                ))}
               </select>
             </label>
           </div>
@@ -116,6 +191,32 @@ function RecordsPage() {
 
         {loading && <div className="text-white/50">Loading sessions…</div>}
         {err && <div className="text-red-400">Failed to load: {err}</div>}
+        <section className="mb-6 overflow-hidden rounded-xl border border-border/70 bg-card/50">
+          <div className="border-b border-border/70 px-3 py-2.5">
+            <h2 className="text-xs font-bold uppercase tracking-widest text-white/70">
+              All-Time Stats
+            </h2>
+            <p className="mt-1 text-[10px] text-white/40">
+              Select a driver for their complete career profile. Titles count only after a season is
+              complete or mathematically clinched.
+            </p>
+          </div>
+          {allTimeDrivers.length ? (
+            <DriverProfileTiles
+              drivers={allTimeDrivers}
+              onSelect={(driver) => selectDriver(driver, "All-Time Stats")}
+            />
+          ) : (
+            <p className="px-3 py-4 text-sm text-white/45">No driver standings yet.</p>
+          )}
+        </section>
+
+        <DriverProfileDialog
+          driver={selectedDriver}
+          context={profileContext}
+          onClose={() => setSelectedDriver(null)}
+        />
+
         {!loading && records.length === 0 && (
           <div className="rounded-lg border border-dashed border-white/15 p-8 text-center text-white/50">
             No laps recorded yet. Upload race or qualifying sessions to build your records wall.
@@ -139,11 +240,17 @@ function RecordsPage() {
                 >
                   <span className="text-lg leading-none">{trackFlag(r.track)}</span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-bold">{titleCaseTrack(r.track)}</span>
+                    <span className="block truncate text-sm font-bold">
+                      {titleCaseTrack(r.track)}
+                    </span>
                     <span className="flex items-center gap-2 text-[11px]">
-                      <span className="font-mono font-black text-purple-300">{formatLapMs(r.bestMs)}</span>
+                      <span className="font-mono font-black text-purple-300">
+                        {formatLapMs(r.bestMs)}
+                      </span>
                       {delta != null && delta > 0 && (
-                        <span className="font-mono font-semibold text-emerald-400">−{(delta / 1000).toFixed(3)}</span>
+                        <span className="font-mono font-semibold text-emerald-400">
+                          −{(delta / 1000).toFixed(3)}
+                        </span>
                       )}
                     </span>
                   </span>
@@ -163,52 +270,56 @@ function RecordsPage() {
                   inert={!isOpen}
                 >
                   <div className="min-h-0 overflow-hidden">
-                  <div className="border-t border-white/10 px-3 pb-3 pt-2">
-                    <div className="mb-2 flex flex-wrap items-center justify-between gap-1 text-[11px] text-white/50">
-                      <span>
-                        Season {r.bestSeason}
-                        {r.bestTeam ? ` · ${r.bestTeam}` : ""} · {r.bestCategory}
-                      </span>
-                      <span>
-                        {r.attempts} session{r.attempts === 1 ? "" : "s"}
-                        {delta != null && delta > 0 ? ` · −${(delta / 1000).toFixed(3)}s vs next best` : ""}
-                      </span>
-                    </div>
-                    {r.seasons.length > 0 && (
-                      <div className="mt-3 border-t border-white/10 pt-2">
-                        <div className="mb-1 text-[10px] uppercase tracking-widest text-white/40">
-                          By season
-                        </div>
-                        <ul className="space-y-1">
-                          {r.seasons.map((s) => (
-                            <li
-                              key={s.season}
-                              className="grid grid-cols-[auto_1fr_auto_auto] items-center gap-2 text-[11px]"
-                            >
-                              <span className="font-bold text-white/70">S{s.season}</span>
-                              <span className="truncate text-white/50">{s.team || "—"}</span>
-                              <span className={`font-mono ${s.ms === r.bestMs ? "text-purple-300" : "text-white/80"}`}>
-                                {formatLapMs(s.ms)}
-                              </span>
-                              <span
-                                className={`w-14 text-right font-mono ${
-                                  s.deltaPrevMs == null
-                                    ? "text-white/30"
-                                    : s.deltaPrevMs < 0
-                                      ? "text-emerald-400"
-                                      : "text-red-400"
-                                }`}
-                              >
-                                {s.deltaPrevMs == null
-                                  ? "—"
-                                  : `${s.deltaPrevMs < 0 ? "−" : "+"}${(Math.abs(s.deltaPrevMs) / 1000).toFixed(3)}`}
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
+                    <div className="border-t border-white/10 px-3 pb-3 pt-2">
+                      <div className="mb-2 flex flex-wrap items-center justify-between gap-1 text-[11px] text-white/50">
+                        <span>
+                          Season {r.bestSeason}
+                          {r.bestTeam ? ` · ${r.bestTeam}` : ""} · {r.bestCategory}
+                        </span>
+                        <span>
+                          {r.attempts} session{r.attempts === 1 ? "" : "s"}
+                          {delta != null && delta > 0
+                            ? ` · −${(delta / 1000).toFixed(3)}s vs next best`
+                            : ""}
+                        </span>
                       </div>
-                    )}
-                  </div>
+                      {r.seasons.length > 0 && (
+                        <div className="mt-3 border-t border-white/10 pt-2">
+                          <div className="mb-1 text-[10px] uppercase tracking-widest text-white/40">
+                            By season
+                          </div>
+                          <ul className="space-y-1">
+                            {r.seasons.map((s) => (
+                              <li
+                                key={s.season}
+                                className="grid grid-cols-[auto_1fr_auto_auto] items-center gap-2 text-[11px]"
+                              >
+                                <span className="font-bold text-white/70">S{s.season}</span>
+                                <span className="truncate text-white/50">{s.team || "—"}</span>
+                                <span
+                                  className={`font-mono ${s.ms === r.bestMs ? "text-purple-300" : "text-white/80"}`}
+                                >
+                                  {formatLapMs(s.ms)}
+                                </span>
+                                <span
+                                  className={`w-14 text-right font-mono ${
+                                    s.deltaPrevMs == null
+                                      ? "text-white/30"
+                                      : s.deltaPrevMs < 0
+                                        ? "text-emerald-400"
+                                        : "text-red-400"
+                                  }`}
+                                >
+                                  {s.deltaPrevMs == null
+                                    ? "—"
+                                    : `${s.deltaPrevMs < 0 ? "−" : "+"}${(Math.abs(s.deltaPrevMs) / 1000).toFixed(3)}`}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>

@@ -509,7 +509,7 @@ export function ErsMapEditor({ season, track, cat }: { season: number; track: st
                   const active = note.id === activeNoteId;
                   return (
                     <g key={note.id} transform={`translate(${p.x * 1080} ${p.y * 608})`}
-                      className="cursor-help" role="button" tabIndex={0} aria-label={`Track note: ${note.text}`}
+                      className="cursor-pointer" role="button" tabIndex={0} aria-label={`Track note: ${note.text}`}
                       onPointerDown={(e) => e.stopPropagation()} onPointerUp={(e) => e.stopPropagation()}
                       onPointerEnter={() => setActiveNoteId(note.id)} onPointerLeave={() => setActiveNoteId((id) => id === note.id ? null : id)}
                       onFocus={() => setActiveNoteId(note.id)} onBlur={() => setActiveNoteId((id) => id === note.id ? null : id)}

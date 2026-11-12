@@ -9,6 +9,7 @@ import {
 } from "@/lib/f1-shell";
 import {
   computeTitleMath,
+  hasClinchedTitle,
   loadExcludedTracks,
   loadExtraTracks,
   loadSprintWeekends,
@@ -16,17 +17,25 @@ import {
   saveExtraTracks,
   saveSprintWeekends,
 } from "@/lib/f1-stats";
-
-const EXTRA_NAMES: Record<string, string> = Object.fromEntries(EXTRA_TRACKS.map((t) => [t.slug, t.name]));
 import { ShellHeader, ShellPage } from "@/components/f1/ShellHeader";
+
+const EXTRA_NAMES: Record<string, string> = Object.fromEntries(
+  EXTRA_TRACKS.map((track) => [track.slug, track.name]),
+);
 
 export const Route = createFileRoute("/season/$season/title")({
   head: () => ({
     meta: [
       { title: "Title Race · F1 Telemetry Analyzer" },
-      { name: "description", content: "Championship permutations: points needed per remaining race to win the title." },
+      {
+        name: "description",
+        content: "Championship permutations: points needed per remaining race to win the title.",
+      },
       { property: "og:title", content: "Title Race · F1 Telemetry Analyzer" },
-      { property: "og:description", content: "Championship permutations: points needed per remaining race to win the title." },
+      {
+        property: "og:description",
+        content: "Championship permutations: points needed per remaining race to win the title.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
@@ -92,17 +101,28 @@ function TitlePage() {
   useEffect(() => {
     let cancelled = false;
     fetchSessions()
-      .then((rows) => { if (!cancelled) setSessions(rows); })
-      .catch((e) => { if (!cancelled) setErr(String(e)); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+      .then((rows) => {
+        if (!cancelled) setSessions(rows);
+      })
+      .catch((e) => {
+        if (!cancelled) setErr(String(e));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const math = useMemo(
-    () => computeTitleMath(sessions, seasonN, { excluded, sprints, extras, extraNames: EXTRA_NAMES }),
+    () =>
+      computeTitleMath(sessions, seasonN, { excluded, sprints, extras, extraNames: EXTRA_NAMES }),
     [sessions, seasonN, excluded, sprints, extras],
   );
-  const { standings, player, leader, remaining, racesLeft, sprintsLeft, maxPointsLeft, rounds } = math;
+  const { standings, player, leader, remaining, racesLeft, sprintsLeft, maxPointsLeft, rounds } =
+    math;
+  const titleSecured = hasClinchedTitle(standings, maxPointsLeft);
   const roundBySlug = new Map(rounds.map((r) => [r.slug, r]));
   const addable = EXTRA_TRACKS.filter((t) => !roundBySlug.has(t.slug));
   const isPlayerLeader = !!player && !!leader && player.name === leader.name;
@@ -116,16 +136,18 @@ function TitlePage() {
   // everything left can't catch them (tiebreak ignored, +1 for safety).
   const p2 = standings.find((d) => d.name !== leader?.name) ?? null;
   const magicNumber =
-    isPlayerLeader && p2 ? Math.max(0, p2.points + maxPointsLeft + 1 - (leader?.points ?? 0)) : null;
+    isPlayerLeader && p2
+      ? Math.max(0, p2.points + maxPointsLeft + 1 - (leader?.points ?? 0))
+      : null;
 
   return (
     <>
-      <ShellHeader
-        crumbs={[{ label: `Season ${season}`, to: "/" }, { label: "Title Race" }]}
-      />
+      <ShellHeader crumbs={[{ label: `Season ${season}`, to: "/" }, { label: "Title Race" }]} />
       <ShellPage>
         <div className="mb-5">
-          <h1 className="text-2xl font-black tracking-tight sm:text-3xl">🏆 Title Race · Season {season}</h1>
+          <h1 className="text-2xl font-black tracking-tight sm:text-3xl">
+            🏆 Title Race · Season {season}
+          </h1>
           <p className="mt-1 text-sm text-white/50">
             Championship permutations based on your uploaded races.
           </p>
@@ -142,11 +164,25 @@ function TitlePage() {
         {standings.length > 0 && (
           <>
             <div className="mb-6 grid grid-cols-2 gap-2 sm:grid-cols-4">
-              <HeroStat label="Leader" value={leader?.name ?? "—"} sub={`${leader?.points ?? 0} pts`} />
+              <HeroStat
+                label="Leader"
+                value={leader?.name ?? "—"}
+                sub={`${leader?.points ?? 0} pts`}
+              />
               <HeroStat
                 label={isPlayerLeader ? "Your lead" : "Your gap"}
-                value={player ? (isPlayerLeader ? `+${leader!.points - (standings[1]?.points ?? 0)}` : `−${gapToLeader}`) : "—"}
-                sub={player ? `${player.points} pts · P${standings.findIndex((d) => d.name === player.name) + 1}` : "no points yet"}
+                value={
+                  player
+                    ? isPlayerLeader
+                      ? `+${leader!.points - (standings[1]?.points ?? 0)}`
+                      : `−${gapToLeader}`
+                    : "—"
+                }
+                sub={
+                  player
+                    ? `${player.points} pts · P${standings.findIndex((d) => d.name === player.name) + 1}`
+                    : "no points yet"
+                }
                 accent={isPlayerLeader ? "text-emerald-400" : "text-red-400"}
               />
               <HeroStat
@@ -156,19 +192,43 @@ function TitlePage() {
               />
               <HeroStat
                 label={isPlayerLeader ? "Magic number" : "Verdict"}
-                value={!player ? "—" : isPlayerLeader ? (magicNumber != null && magicNumber > 0 ? String(magicNumber) : "Clinched 🏆") : canStillWin ? "Alive 💪" : "Eliminated"}
+                value={
+                  !player
+                    ? "—"
+                    : isPlayerLeader
+                      ? titleSecured
+                        ? "Clinched 🏆"
+                        : magicNumber != null
+                          ? String(magicNumber)
+                          : "—"
+                      : canStillWin
+                        ? "Alive 💪"
+                        : "Eliminated"
+                }
                 sub={
                   !player
                     ? "you're not in the results yet"
                     : isPlayerLeader
-                    ? magicNumber != null && magicNumber > 0
-                      ? "pts to secure the title"
-                      : "title is yours"
-                    : canStillWin
-                      ? "you can still win"
-                      : "out of contention"
+                      ? !titleSecured && magicNumber != null
+                        ? "pts to secure the title"
+                        : titleSecured
+                          ? "title is yours"
+                          : "waiting for more classified drivers"
+                      : canStillWin
+                        ? "you can still win"
+                        : "out of contention"
                 }
-                accent={!player ? "text-white/60" : isPlayerLeader ? "text-emerald-400" : canStillWin ? "text-amber-300" : "text-red-400"}
+                accent={
+                  !player
+                    ? "text-white/60"
+                    : isPlayerLeader
+                      ? titleSecured
+                        ? "text-emerald-400"
+                        : "text-amber-300"
+                      : canStillWin
+                        ? "text-amber-300"
+                        : "text-red-400"
+                }
               />
             </div>
 
@@ -201,7 +261,11 @@ function TitlePage() {
                         <td className="px-3 py-2 font-bold text-white/60">{i + 1}</td>
                         <td className="px-3 py-2 font-bold">
                           {d.name}
-                          {isPlayerRow && <span className="ml-2 rounded-sm bg-red-500 px-1.5 py-0.5 text-[9px] font-black uppercase">You</span>}
+                          {isPlayerRow && (
+                            <span className="ml-2 rounded-sm bg-red-500 px-1.5 py-0.5 text-[9px] font-black uppercase">
+                              You
+                            </span>
+                          )}
                         </td>
                         <td className="px-3 py-2 text-white/60">{d.team || "—"}</td>
                         <td className="px-3 py-2 text-right font-black">{d.points}</td>
@@ -243,8 +307,8 @@ function TitlePage() {
               {showCalendar && (
                 <div className="mb-3 rounded-md border border-white/10 bg-black/30 p-3">
                   <p className="mb-2 text-[11px] leading-relaxed text-white/45">
-                    Tap a track to include or skip it. Tap <b>Sprint</b> to mark a sprint weekend. Rounds you've
-                    already driven are numbered in the order you drove them.
+                    Tap a track to include or skip it. Tap <b>Sprint</b> to mark a sprint weekend.
+                    Rounds you've already driven are numbered in the order you drove them.
                   </p>
                   <ul className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
                     {rounds.map((r) => {
@@ -255,7 +319,9 @@ function TitlePage() {
                           key={r.slug}
                           className={
                             "flex items-center gap-1 rounded-md border px-1.5 py-1 " +
-                            (active ? "border-emerald-500/30 bg-emerald-500/10" : "border-white/10 bg-white/[0.03]")
+                            (active
+                              ? "border-emerald-500/30 bg-emerald-500/10"
+                              : "border-white/10 bg-white/[0.03]")
                           }
                         >
                           <button
@@ -272,17 +338,29 @@ function TitlePage() {
                             </span>
                             <span>{trackFlag(r.slug)}</span>
                             <span className="truncate">{r.name}</span>
-                            {r.done && <span className="text-emerald-400" title="Race uploaded">✓</span>}
+                            {r.done && (
+                              <span className="text-emerald-400" title="Race uploaded">
+                                ✓
+                              </span>
+                            )}
                           </button>
                           <button
                             type="button"
                             onClick={() => toggleSprint(r.slug)}
                             disabled={r.sprintDone}
                             aria-pressed={r.sprint}
-                            title={r.sprintDone ? "Sprint uploaded" : r.sprint ? "Sprint weekend — tap to remove" : "Mark as sprint weekend"}
+                            title={
+                              r.sprintDone
+                                ? "Sprint uploaded"
+                                : r.sprint
+                                  ? "Sprint weekend — tap to remove"
+                                  : "Mark as sprint weekend"
+                            }
                             className={
                               "shrink-0 rounded px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider " +
-                              (r.sprint ? "bg-amber-400/20 text-amber-300" : "text-white/30 hover:bg-white/10 hover:text-white/60")
+                              (r.sprint
+                                ? "bg-amber-400/20 text-amber-300"
+                                : "text-white/30 hover:bg-white/10 hover:text-white/60")
                             }
                           >
                             Sprint
@@ -321,7 +399,9 @@ function TitlePage() {
                 </div>
               )}
               {racesLeft === 0 ? (
-                <p className="text-sm text-white/50">Season complete — all calendar races uploaded.</p>
+                <p className="text-sm text-white/50">
+                  Season complete — all calendar races uploaded.
+                </p>
               ) : (
                 <div className="flex flex-wrap gap-2">
                   {remaining.map((t) => (
@@ -332,7 +412,9 @@ function TitlePage() {
                       <span>{trackFlag(t.slug)}</span>
                       {t.name}
                       {roundBySlug.get(t.slug)?.sprint && !roundBySlug.get(t.slug)?.sprintDone && (
-                        <span className="rounded bg-amber-400/20 px-1 text-[9px] font-black uppercase text-amber-300">Sprint</span>
+                        <span className="rounded bg-amber-400/20 px-1 text-[9px] font-black uppercase text-amber-300">
+                          Sprint
+                        </span>
                       )}
                     </span>
                   ))}
@@ -340,8 +422,9 @@ function TitlePage() {
               )}
               <p className="mt-3 text-[11px] leading-relaxed text-white/40">
                 “Needs / race” is the average points per remaining race required to pass the leader.
-                Max available assumes 25 per Grand Prix (win, no fastest-lap point) plus 8 per sprint weekend still to run.
-                Modded tracks you drive join the calendar automatically, numbered in the order you raced them.
+                Max available assumes 25 per Grand Prix (win, no fastest-lap point) plus 8 per
+                sprint weekend still to run. Modded tracks you drive join the calendar
+                automatically, numbered in the order you raced them.
               </p>
             </div>
 
@@ -357,7 +440,17 @@ function TitlePage() {
   );
 }
 
-function HeroStat({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent?: string }) {
+function HeroStat({
+  label,
+  value,
+  sub,
+  accent,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  accent?: string;
+}) {
   return (
     <div className="rounded-md border border-white/10 bg-white/[0.03] px-3 py-3">
       <div className="text-[10px] uppercase tracking-widest text-white/50">{label}</div>

@@ -79,8 +79,15 @@ export type DriverStanding = {
   team: string;
   points: number;
   wins: number;
+  raceWins: number;
+  sprintWins: number;
   podiums: number;
   dnfs: number;
+  gpPoles: number;
+  sprintPoles: number;
+  fastestLaps: number;
+  gpStarts: number;
+  sprintStarts: number;
 };
 
 // Championship standings for one season, scored from each race/sprint
@@ -96,23 +103,102 @@ export function computeStandings(sessions: Session[]): DriverStanding[] {
     for (const e of classificationOf(s)) {
       const name = String(e?.name || "").toUpperCase();
       if (!name) continue;
-      const d = map.get(name) ?? { name, team: String(e?.team || ""), points: 0, wins: 0, podiums: 0, dnfs: 0 };
+      const d = map.get(name) ?? {
+        name,
+        team: String(e?.team || ""),
+        points: 0,
+        wins: 0,
+        raceWins: 0,
+        sprintWins: 0,
+        podiums: 0,
+        dnfs: 0,
+        gpPoles: 0,
+        sprintPoles: 0,
+        fastestLaps: 0,
+        gpStarts: 0,
+        sprintStarts: 0,
+      };
       if (e?.team) d.team = String(e.team);
+      if (kind === "Sprint") d.sprintStarts += 1;
+      else d.gpStarts += 1;
       const dnf = entryIsDnf(e);
       const pos = Number(e?.position) || 0;
       if (dnf) {
         d.dnfs += 1;
       } else if (pos > 0) {
         d.points += table[pos] || 0;
-        if (pos === 1) d.wins += 1;
+        if (pos === 1) {
+          d.wins += 1;
+          if (kind === "Sprint") d.sprintWins += 1;
+          else d.raceWins += 1;
+        }
         if (pos <= 3) d.podiums += 1;
       }
       map.set(name, d);
+    }
+
+    const startingGrid: { name?: string; team?: string; position?: number }[] = Array.isArray(
+      s.race_story?.starting_grid,
+    )
+      ? s.race_story.starting_grid
+      : [];
+    const pole = startingGrid.find((entry) => Number(entry.position) === 1);
+    const poleName = String(
+      pole?.name || (Number(s.starting_position) === 1 ? playerNameOf(s) : ""),
+    ).toUpperCase();
+    if (poleName) {
+      const d = map.get(poleName) ?? {
+        name: poleName,
+        team: String(pole?.team || ""),
+        points: 0,
+        wins: 0,
+        raceWins: 0,
+        sprintWins: 0,
+        podiums: 0,
+        dnfs: 0,
+        gpPoles: 0,
+        sprintPoles: 0,
+        fastestLaps: 0,
+        gpStarts: 0,
+        sprintStarts: 0,
+      };
+      if (kind === "Sprint") d.sprintPoles += 1;
+      else d.gpPoles += 1;
+      map.set(poleName, d);
+    }
+
+    const fastestLapName = String(
+      s.race_story?.fastest_lap?.name || (s.race_story?.player_fastest_lap ? playerNameOf(s) : ""),
+    ).toUpperCase();
+    if (kind === "Race" && fastestLapName) {
+      const d = map.get(fastestLapName) ?? {
+        name: fastestLapName,
+        team: "",
+        points: 0,
+        wins: 0,
+        raceWins: 0,
+        sprintWins: 0,
+        podiums: 0,
+        dnfs: 0,
+        gpPoles: 0,
+        sprintPoles: 0,
+        fastestLaps: 0,
+        gpStarts: 0,
+        sprintStarts: 0,
+      };
+      d.fastestLaps += 1;
+      map.set(fastestLapName, d);
     }
   }
   return Array.from(map.values()).sort(
     (a, b) => b.points - a.points || b.wins - a.wins || a.name.localeCompare(b.name),
   );
+}
+
+export function hasClinchedTitle(standings: DriverStanding[], maxPointsLeft: number): boolean {
+  const leader = standings[0];
+  if (!leader || leader.points <= 0) return false;
+  return leader.points > (standings[1]?.points ?? 0) + Math.max(0, maxPointsLeft);
 }
 
 export type TitleMath = {
@@ -169,7 +255,14 @@ export const GP_MAX_POINTS = RACE_POINTS[1]; // race win (no fastest-lap point)
 export const SPRINT_MAX_POINTS = SPRINT_POINTS[1]; // sprint win
 
 // Real 2026 sprint weekends — used as the starting list for a new season.
-export const DEFAULT_SPRINT_WEEKENDS = ["shanghai", "miami", "montreal", "silverstone", "zandvoort", "singapore"];
+export const DEFAULT_SPRINT_WEEKENDS = [
+  "shanghai",
+  "miami",
+  "montreal",
+  "silverstone",
+  "zandvoort",
+  "singapore",
+];
 
 function loadSlugSet(key: string, fallback: string[]): Set<string> {
   try {
@@ -227,7 +320,8 @@ export function computeTitleMath(
   season: number,
   excludedOrOpts: Set<string> | TitleOptions = new Set(),
 ): TitleMath & { rounds: CalendarRound[]; sprintsLeft: number } {
-  const opts: TitleOptions = excludedOrOpts instanceof Set ? { excluded: excludedOrOpts } : excludedOrOpts;
+  const opts: TitleOptions =
+    excludedOrOpts instanceof Set ? { excluded: excludedOrOpts } : excludedOrOpts;
   const excluded = opts.excluded ?? new Set<string>();
   const sprints = opts.sprints ?? new Set<string>();
   const extras = opts.extras ?? new Set<string>();
@@ -243,10 +337,12 @@ export function computeTitleMath(
   // (mods appear automatically). Driven rounds come first, in the order they
   // were driven; the rest keep calendar order.
   const names = new Map<string, string>(SEASON_CALENDAR.map((t) => [t.slug, t.name]));
-  for (const slug of extras) if (!names.has(slug)) names.set(slug, opts.extraNames?.[slug] ?? prettyTrack(slug));
+  for (const slug of extras)
+    if (!names.has(slug)) names.set(slug, opts.extraNames?.[slug] ?? prettyTrack(slug));
   for (const s of seasonSessions) {
     const slug = trackSlug(s.track_name);
-    if (slug && !names.has(slug)) names.set(slug, opts.extraNames?.[slug] ?? prettyTrack(s.track_name));
+    if (slug && !names.has(slug))
+      names.set(slug, opts.extraNames?.[slug] ?? prettyTrack(s.track_name));
   }
   const calIndex = (slug: string) => {
     const i = SEASON_CALENDAR.findIndex((t) => t.slug === slug);
@@ -335,56 +431,120 @@ function isGpQuali(s: Session): boolean {
 }
 const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
 
-export function seasonSummary(sessions: Session[], season: number): SeasonSummary {
-  const seasonSessions = sessions.filter((s) => Number(s.season) === season);
-  const standings = computeStandings(seasonSessions);
-  const scoring = seasonSessions.filter((s) => isRaceResultSession(s));
-  const playerName = seasonPlayerName(seasonSessions);
-  const standingIdx = standings.findIndex((d) => d.name === playerName);
+export type DriverSeasonProfile = {
+  name: string;
+  team: string;
+  stats: SeasonSummary;
+  finishCount: number;
+  gridCount: number;
+  qualiCount: number;
+};
 
-  let wins = 0, sprintWins = 0, podiums = 0, pointsFinishes = 0, poles = 0, sprintPoles = 0;
-  let fastestLaps = 0, dnfs = 0, gpStarts = 0, sprintStarts = 0, positionsGained = 0, laps = 0;
+export type DriverCareerProfile = {
+  name: string;
+  team: string;
+  seasonsActive: number;
+  titles: number;
+  stats: SeasonSummary;
+};
+
+function calculateDriverSeasonProfile(
+  seasonSessions: Session[],
+  season: number,
+  name: string,
+): DriverSeasonProfile {
+  const standings = computeStandings(seasonSessions);
+  const standingIndex = standings.findIndex((driver) => driver.name === name);
+  const scoring = seasonSessions.filter((session) => isRaceResultSession(session));
+  let wins = 0;
+  let sprintWins = 0;
+  let podiums = 0;
+  let pointsFinishes = 0;
+  let poles = 0;
+  let sprintPoles = 0;
+  let fastestLaps = 0;
+  let dnfs = 0;
+  let gpStarts = 0;
+  let sprintStarts = 0;
+  let positionsGained = 0;
+  let lapsCompleted = 0;
+  let team = "";
   const finishes: number[] = [];
   const grids: number[] = [];
-  for (const s of scoring) {
-    const kind = isRaceResultSession(s);
-    const b = badgesFor(s);
+
+  for (const session of scoring) {
+    const kind = isRaceResultSession(session);
+    const playerSession = playerNameOf(session) === name;
+    const result = classificationOf(session).find(
+      (entry: any) => String(entry?.name || "").toUpperCase() === name,
+    );
+    if (!result && !playerSession) continue;
+
     if (kind === "Sprint") sprintStarts += 1;
     else gpStarts += 1;
-    if (b.win) kind === "Sprint" ? sprintWins++ : wins++;
-    if (b.pole) kind === "Sprint" ? sprintPoles++ : poles++;
-    if (b.podium) podiums += 1;
-    if (b.fl) fastestLaps += 1;
-    const me = classificationOf(s).find((e: any) => String(e?.name || "").toUpperCase() === playerNameOf(s));
-    laps += Number(me?.laps) || 0;
-    const gridEntry = Array.isArray(s.race_story?.starting_grid)
-      ? s.race_story.starting_grid.find((e: any) => String(e?.name || "").toUpperCase() === playerNameOf(s))
+    if (result?.team) team = String(result.team);
+
+    const position =
+      Number(result?.position || (playerSession ? session.finishing_position : 0)) || 0;
+    const status = String(result?.status || "").toUpperCase();
+    const dnf = result
+      ? result.is_dnf === true || (status.length > 0 && !/FINISHED|ACTIVE/.test(status))
+      : playerSession && badgesFor(session).dnf;
+    const gridEntry = Array.isArray(session.race_story?.starting_grid)
+      ? session.race_story.starting_grid.find(
+          (entry: any) => String(entry?.name || "").toUpperCase() === name,
+        )
       : null;
-    const grid = Number(gridEntry?.position || s.starting_position) || 0;
+    const grid =
+      Number(gridEntry?.position || (playerSession ? session.starting_position : 0)) || 0;
+
     if (kind === "Race" && grid > 0) grids.push(grid);
-    if (b.dnf) {
+    if (grid === 1) kind === "Sprint" ? sprintPoles++ : poles++;
+    if (position === 1 && !dnf) kind === "Sprint" ? sprintWins++ : wins++;
+    if (position > 0 && position <= 3 && !dnf) podiums += 1;
+    const hasFastestLap = playerSession
+      ? badgesFor(session).fl
+      : String(session.race_story?.fastest_lap?.name || "").toUpperCase() === name;
+    if (hasFastestLap) {
+      fastestLaps += 1;
+    }
+
+    lapsCompleted += Number(result?.laps) || 0;
+    if (dnf) {
       dnfs += 1;
       continue;
     }
-    const fin = racePosition(s);
-    if (!fin) continue;
-    finishes.push(fin);
-    if (fin <= (kind === "Sprint" ? 8 : 10)) pointsFinishes += 1;
-    if (grid > 0) positionsGained += grid - fin;
+    if (!position) continue;
+    finishes.push(position);
+    if (position <= (kind === "Sprint" ? 8 : 10)) pointsFinishes += 1;
+    if (grid > 0) positionsGained += grid - position;
   }
 
-  // Furthest qualifying stage per GP weekend, from the deepest session uploaded.
-  const byTrack = new Map<string, Session[]>();
-  for (const s of seasonSessions.filter(isGpQuali)) {
-    const slug = trackSlug(s.track_name);
-    byTrack.set(slug, [...(byTrack.get(slug) ?? []), s]);
+  const qualifyingByTrack = new Map<string, Array<{ session: Session; position: number }>>();
+  for (const session of seasonSessions.filter(isGpQuali)) {
+    const playerSession = playerNameOf(session) === name;
+    const result = classificationOf(session).find(
+      (entry: any) => String(entry?.name || "").toUpperCase() === name,
+    );
+    if (!result && !playerSession) continue;
+    const position =
+      Number(result?.position || (playerSession ? session.finishing_position : 0)) || 0;
+    const slug = trackSlug(session.track_name);
+    qualifyingByTrack.set(slug, [...(qualifyingByTrack.get(slug) ?? []), { session, position }]);
+    if (result?.team) team = String(result.team);
   }
-  // Appearances are cumulative: reaching Q3 also counts as a Q2 and Q1 appearance.
-  let q1Apps = 0, q2Apps = 0, q3Apps = 0;
+
+  let q1Apps = 0;
+  let q2Apps = 0;
+  let q3Apps = 0;
   const qualiPositions: number[] = [];
-  for (const list of byTrack.values()) {
-    const pos = (stage: number) => Number(list.find((s) => qualiStage(s) === stage)?.finishing_position) || 0;
-    const p1 = pos(1), p2 = pos(2), p3 = pos(3), single = pos(4);
+  for (const weekend of qualifyingByTrack.values()) {
+    const resultAt = (stage: number) =>
+      weekend.find(({ session }) => qualiStage(session) === stage)?.position ?? 0;
+    const p1 = resultAt(1);
+    const p2 = resultAt(2);
+    const p3 = resultAt(3);
+    const single = resultAt(4);
     const final = p3 || p2 || p1 || single;
     if (final > 0) qualiPositions.push(final);
     const reachedQ3 = p3 > 0 || (p2 > 0 && p2 <= 10) || (single > 0 && single <= 10);
@@ -395,10 +555,10 @@ export function seasonSummary(sessions: Session[], season: number): SeasonSummar
   }
 
   const starts = gpStarts + sprintStarts;
-  const totalPoints = standingIdx >= 0 ? standings[standingIdx].points : 0;
-  return {
+  const totalPoints = standingIndex >= 0 ? standings[standingIndex].points : 0;
+  const summary: SeasonSummary = {
     season,
-    championshipPos: standingIdx >= 0 ? standingIdx + 1 : null,
+    championshipPos: standingIndex >= 0 ? standingIndex + 1 : null,
     totalPoints,
     avgPoints: starts ? totalPoints / starts : null,
     starts,
@@ -417,12 +577,202 @@ export function seasonSummary(sessions: Session[], season: number): SeasonSummar
     avgGrid: avg(grids),
     bestFinish: finishes.length ? Math.min(...finishes) : null,
     positionsGained,
-    lapsCompleted: laps,
+    lapsCompleted,
     q1Apps,
     q2Apps,
     q3Apps,
     avgQuali: avg(qualiPositions),
   };
+  return {
+    name,
+    team: team || standings[standingIndex]?.team || "",
+    stats: summary,
+    finishCount: finishes.length,
+    gridCount: grids.length,
+    qualiCount: qualiPositions.length,
+  };
+}
+
+export function seasonDriverProfiles(sessions: Session[], season: number): DriverSeasonProfile[] {
+  const seasonSessions = sessions.filter((session) => Number(session.season) === season);
+  const names = new Set(computeStandings(seasonSessions).map((driver) => driver.name));
+  for (const session of seasonSessions) {
+    if (!isRaceResultSession(session) && !isGpQuali(session)) continue;
+    const playerName = playerNameOf(session);
+    if (playerName) names.add(playerName);
+    for (const result of classificationOf(session)) {
+      const name = String(result?.name || "")
+        .trim()
+        .toUpperCase();
+      if (name) names.add(name);
+    }
+  }
+  return [...names]
+    .map((name) => calculateDriverSeasonProfile(seasonSessions, season, name))
+    .sort(
+      (a, b) =>
+        (a.stats.championshipPos ?? Number.MAX_SAFE_INTEGER) -
+          (b.stats.championshipPos ?? Number.MAX_SAFE_INTEGER) ||
+        b.stats.totalPoints - a.stats.totalPoints ||
+        a.name.localeCompare(b.name),
+    );
+}
+
+export function seasonSummary(sessions: Session[], season: number): SeasonSummary {
+  const seasonSessions = sessions.filter((session) => Number(session.season) === season);
+  const playerName = seasonPlayerName(seasonSessions);
+  return playerName
+    ? calculateDriverSeasonProfile(seasonSessions, season, playerName).stats
+    : calculateDriverSeasonProfile(seasonSessions, season, "").stats;
+}
+
+export function allTimeDriverProfiles(
+  sessions: Session[],
+  titles: ReadonlyMap<string, number> = new Map(),
+): DriverCareerProfile[] {
+  const seasons = [
+    ...new Set(sessions.map((session) => Number(session.season)).filter(Number.isFinite)),
+  ].sort((a, b) => a - b);
+  const profiles = new Map<
+    string,
+    {
+      team: string;
+      seasonsActive: number;
+      totalPoints: number;
+      starts: number;
+      gpStarts: number;
+      sprintStarts: number;
+      wins: number;
+      sprintWins: number;
+      podiums: number;
+      pointsFinishes: number;
+      poles: number;
+      sprintPoles: number;
+      fastestLaps: number;
+      dnfs: number;
+      finishSum: number;
+      finishCount: number;
+      gridSum: number;
+      gridCount: number;
+      bestFinish: number | null;
+      positionsGained: number;
+      lapsCompleted: number;
+      q1Apps: number;
+      q2Apps: number;
+      q3Apps: number;
+      qualiSum: number;
+      qualiCount: number;
+      latestSeason: number;
+    }
+  >();
+
+  for (const season of seasons) {
+    for (const profile of seasonDriverProfiles(sessions, season)) {
+      const { name, stats } = profile;
+      const aggregate = profiles.get(name) ?? {
+        team: "",
+        seasonsActive: 0,
+        totalPoints: 0,
+        starts: 0,
+        gpStarts: 0,
+        sprintStarts: 0,
+        wins: 0,
+        sprintWins: 0,
+        podiums: 0,
+        pointsFinishes: 0,
+        poles: 0,
+        sprintPoles: 0,
+        fastestLaps: 0,
+        dnfs: 0,
+        finishSum: 0,
+        finishCount: 0,
+        gridSum: 0,
+        gridCount: 0,
+        bestFinish: null,
+        positionsGained: 0,
+        lapsCompleted: 0,
+        q1Apps: 0,
+        q2Apps: 0,
+        q3Apps: 0,
+        qualiSum: 0,
+        qualiCount: 0,
+        latestSeason: season,
+      };
+      aggregate.team = profile.team || aggregate.team;
+      aggregate.seasonsActive += 1;
+      aggregate.totalPoints += stats.totalPoints;
+      aggregate.starts += stats.starts;
+      aggregate.gpStarts += stats.gpStarts;
+      aggregate.sprintStarts += stats.sprintStarts;
+      aggregate.wins += stats.wins;
+      aggregate.sprintWins += stats.sprintWins;
+      aggregate.podiums += stats.podiums;
+      aggregate.pointsFinishes += stats.pointsFinishes;
+      aggregate.poles += stats.poles;
+      aggregate.sprintPoles += stats.sprintPoles;
+      aggregate.fastestLaps += stats.fastestLaps;
+      aggregate.dnfs += stats.dnfs;
+      aggregate.finishSum += (stats.avgFinish ?? 0) * profile.finishCount;
+      aggregate.finishCount += profile.finishCount;
+      aggregate.gridSum += (stats.avgGrid ?? 0) * profile.gridCount;
+      aggregate.gridCount += profile.gridCount;
+      aggregate.bestFinish =
+        stats.bestFinish == null
+          ? aggregate.bestFinish
+          : aggregate.bestFinish == null
+            ? stats.bestFinish
+            : Math.min(aggregate.bestFinish, stats.bestFinish);
+      aggregate.positionsGained += stats.positionsGained;
+      aggregate.lapsCompleted += stats.lapsCompleted;
+      aggregate.q1Apps += stats.q1Apps;
+      aggregate.q2Apps += stats.q2Apps;
+      aggregate.q3Apps += stats.q3Apps;
+      aggregate.qualiSum += (stats.avgQuali ?? 0) * profile.qualiCount;
+      aggregate.qualiCount += profile.qualiCount;
+      aggregate.latestSeason = season;
+      profiles.set(name, aggregate);
+    }
+  }
+
+  const ranked = [...profiles.entries()].sort(
+    ([nameA, a], [nameB, b]) => b.totalPoints - a.totalPoints || nameA.localeCompare(nameB),
+  );
+  return ranked.map(([name, aggregate], index) => {
+    const starts = aggregate.starts;
+    return {
+      name,
+      team: aggregate.team,
+      seasonsActive: aggregate.seasonsActive,
+      titles: titles.get(name) ?? 0,
+      stats: {
+        season: aggregate.latestSeason,
+        championshipPos: index + 1,
+        totalPoints: aggregate.totalPoints,
+        avgPoints: starts ? aggregate.totalPoints / starts : null,
+        starts,
+        gpStarts: aggregate.gpStarts,
+        sprintStarts: aggregate.sprintStarts,
+        wins: aggregate.wins,
+        sprintWins: aggregate.sprintWins,
+        podiums: aggregate.podiums,
+        pointsFinishes: aggregate.pointsFinishes,
+        poles: aggregate.poles,
+        sprintPoles: aggregate.sprintPoles,
+        fastestLaps: aggregate.fastestLaps,
+        dnfs: aggregate.dnfs,
+        finishRate: starts ? ((starts - aggregate.dnfs) / starts) * 100 : null,
+        avgFinish: aggregate.finishCount ? aggregate.finishSum / aggregate.finishCount : null,
+        avgGrid: aggregate.gridCount ? aggregate.gridSum / aggregate.gridCount : null,
+        bestFinish: aggregate.bestFinish,
+        positionsGained: aggregate.positionsGained,
+        lapsCompleted: aggregate.lapsCompleted,
+        q1Apps: aggregate.q1Apps,
+        q2Apps: aggregate.q2Apps,
+        q3Apps: aggregate.q3Apps,
+        avgQuali: aggregate.qualiCount ? aggregate.qualiSum / aggregate.qualiCount : null,
+      },
+    };
+  });
 }
 
 export type SeasonBest = {
@@ -468,7 +818,13 @@ export function personalRecords(sessions: Session[]): TrackRecord[] {
     if (!slug) continue;
     const team = cleanTeam(entry?.team || (s as any).race_story?.player_team || (s as any).team);
     const bucket = byTrack.get(slug) ?? { track: s.track_name, laps: [] };
-    bucket.laps.push({ ms, season: Number(s.season) || 1, category: s.category || "Race", team, at: Date.parse(s.created_at || "") || 0 });
+    bucket.laps.push({
+      ms,
+      season: Number(s.season) || 1,
+      category: s.category || "Race",
+      team,
+      at: Date.parse(s.created_at || "") || 0,
+    });
     byTrack.set(slug, bucket);
   }
   const out: TrackRecord[] = [];

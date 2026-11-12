@@ -72,15 +72,15 @@
         <p>Detailed stats &amp; graphs from your telemetry uploads</p>
       </div>
 
-      <div id="seasonStatsHost" class="season-stats-host"></div>
-
-
       <div class="collapsible-tabs sticky-tabs">
         <button class="section-tab active" data-target="section-standings">
           🏆 Standings
         </button>
+        <button class="section-tab" data-target="section-season-stats">
+          📊 Season Stats
+        </button>
         <button class="section-tab" data-target="section-records">
-          📚 Records
+          📊 All-Time Stats
         </button>
         <button class="section-tab" data-target="section-progress">
           📈 Season Progress
@@ -118,16 +118,25 @@
       <div class="collapsible-content">
         <div class="collapsible-section" id="section-standings">
           <div class="section-header">
-            <h2 style="margin: 0; font-size: 1.05rem">🏆 Season Standings</h2>
+            <h2 style="margin: 0; font-size: 1.05rem">🏆 Championship &amp; Season</h2>
           </div>
           <div class="section-body">
             <div id="standings-container"></div>
           </div>
         </div>
 
+        <div class="collapsible-section" id="section-season-stats">
+          <div class="section-header">
+            <h2 style="margin: 0; font-size: 1.05rem">📊 Season Stats</h2>
+          </div>
+          <div class="section-body">
+            <div id="season-stats-container"></div>
+          </div>
+        </div>
+
         <div class="collapsible-section" id="section-records">
           <div class="section-header">
-            <h2 style="margin: 0; font-size: 1.05rem">📚 All-Time Records</h2>
+            <h2 style="margin: 0; font-size: 1.05rem">📊 All-Time Stats</h2>
           </div>
           <div class="section-body">
             <div id="records-container"></div>

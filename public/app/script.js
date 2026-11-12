@@ -2079,52 +2079,7 @@ function renderSavedSessions(sessions) {
   const grid = document.getElementById("savedSessionsGrid");
   if (!grid) return;
 
-  // Calculate season-wide statistics
-  const seasonSessions = allSessions.filter((s) => s.season === currentSeason);
-  const raceWins = seasonSessions.filter(
-    (s) => s.category === "Race" && Number(s.finishing_position) === 1,
-  ).length;
-  const sprintWins = seasonSessions.filter(
-    (s) => s.category === "Sprint" && Number(s.finishing_position) === 1,
-  ).length;
-  const gpPoles = seasonSessions.filter(
-    (s) => s.category === "Race" && Number(s.starting_position) === 1,
-  ).length;
-  const sprintPoles = seasonSessions.filter(
-    (s) => s.category === "Sprint" && Number(s.starting_position) === 1,
-  ).length;
-
   grid.innerHTML = "";
-
-  // Render summary cards at the TOP of the main pane
-  let summaryContainer = document.getElementById("seasonSummaryCards");
-  if (!summaryContainer) {
-    summaryContainer = document.createElement("div");
-    summaryContainer.id = "seasonSummaryCards";
-    summaryContainer.className = "season-summary";
-  }
-  const summaryHost = document.getElementById("seasonStatsHost");
-  if (summaryHost && summaryContainer.parentElement !== summaryHost) {
-    summaryHost.appendChild(summaryContainer);
-  }
-  summaryContainer.innerHTML = `
-    <div class="stat-card">
-      <span class="stat-label">Race Wins</span>
-      <span class="stat-value">🏆 ${raceWins}</span>
-    </div>
-    <div class="stat-card">
-      <span class="stat-label">Sprint Wins</span>
-      <span class="stat-value">🏁 ${sprintWins}</span>
-    </div>
-    <div class="stat-card">
-      <span class="stat-label">GP Poles</span>
-      <span class="stat-value">⏱️ ${gpPoles}</span>
-    </div>
-    <div class="stat-card">
-      <span class="stat-label">Sprint Poles</span>
-      <span class="stat-value">⚡ ${sprintPoles}</span>
-    </div>
-  `;
 
   // Build one row per (track, weekend-bucket). Practice/Quali/Shootout
   // fold into either the Race or Sprint row for the same track rather than
@@ -4952,6 +4907,7 @@ function getFlagHtml(session, roundNum) {
 }
 
 function renderStandingsTable() {
+  renderSeasonStatsTable();
   const container = document.getElementById("standings-container");
   if (!container || allSessions.length === 0) return;
 
@@ -5138,6 +5094,15 @@ function sessionFingerprint(s) {
 
 function computeSeasonStandings(season) {
   const drivers = {};
+  const ensureDriver = (name) => {
+    if (!drivers[name]) {
+      drivers[name] = {
+        points: 0, wins: 0, race_wins: 0, sprint_wins: 0, podiums: 0,
+        races: 0, fastest_laps: 0, dnfs: 0, gp_poles: 0, sprint_poles: 0,
+      };
+    }
+    return drivers[name];
+  };
   const sessions = allSessions
     .filter(
       (s) =>
@@ -5168,23 +5133,25 @@ function computeSeasonStandings(season) {
     (session.results || []).forEach((res) => {
       const name = res.name;
       if (!name) return;
-      if (!drivers[name]) drivers[name] = { points: 0, wins: 0, podiums: 0, races: 0, fastest_laps: 0, dnfs: 0 };
+      const driver = ensureDriver(name);
       const pos = parseInt(res.position);
       const cat = (session.category || "").toLowerCase();
+      const didNotFinish = dnfNames.has(String(name).toUpperCase()) || !pos || pos <= 0;
       let pts = 0;
       if (cat === "race") pts = [0, 25, 18, 15, 12, 10, 8, 6, 4, 2, 1][pos] || 0;
       else if (cat === "sprint") pts = [0, 8, 7, 6, 5, 4, 3, 2, 1][pos] || 0;
-      drivers[name].points += pts;
+      if (!didNotFinish) driver.points += pts;
       if (!seen.has(name)) {
-        drivers[name].races += 1;
+        driver.races += 1;
         seen.add(name);
-        // Secondary DNF check: no valid finishing position OR classified as DNF in race_story
-        if (cat === "race" && (dnfNames.has(name) || !pos || pos <= 0)) {
-          drivers[name].dnfs += 1;
-        }
-        if (cat === "race") {
-          if (pos === 1) drivers[name].wins += 1;
-          if (pos >= 1 && pos <= 3) drivers[name].podiums += 1;
+        if (cat === "race" || cat === "sprint") {
+          if (didNotFinish) driver.dnfs += 1;
+          if (!didNotFinish && pos === 1) {
+            driver.wins += 1;
+            if (cat === "sprint") driver.sprint_wins += 1;
+            else driver.race_wins += 1;
+          }
+          if (!didNotFinish && pos >= 1 && pos <= 3) driver.podiums += 1;
         }
       }
     });
@@ -5195,19 +5162,350 @@ function computeSeasonStandings(season) {
       const name = (e.name || "").toUpperCase();
       if (!name || seen.has(name)) return;
       const isDNF = e.is_dnf || (e.status && !/FINISHED/i.test(e.status));
-      if (!drivers[name]) drivers[name] = { points: 0, wins: 0, podiums: 0, races: 0, fastest_laps: 0, dnfs: 0 };
-      drivers[name].races += 1;
-      if ((session.category || "").toLowerCase() === "race" && isDNF) drivers[name].dnfs += 1;
+      const driver = ensureDriver(name);
+      driver.races += 1;
+      if (isDNF) driver.dnfs += 1;
       seen.add(name);
     });
+
+    const category = (session.category || "").toLowerCase();
+    if (category === "race" || category === "sprint") {
+      const startingGrid = Array.isArray(session.race_story?.starting_grid)
+        ? session.race_story.starting_grid
+        : [];
+      const pole = startingGrid.find((entry) => parseInt(entry.position) === 1)
+        || (session.results || []).find((entry) => parseInt(entry.starting_position) === 1)
+        || (Number(session.starting_position) === 1
+          ? { name: session.race_story?.player_name || session.driver_name }
+          : null);
+      if (pole?.name) {
+        const driver = ensureDriver(String(pole.name).toUpperCase());
+        if (category === "sprint") driver.sprint_poles += 1;
+        else driver.gp_poles += 1;
+      }
+    }
     // Fastest lap credit (race only)
-    const flName = ((session.race_story?.fastest_lap?.name) || "").toUpperCase();
+    const flName = (
+      session.race_story?.fastest_lap?.name ||
+      (session.race_story?.player_fastest_lap
+        ? session.race_story?.player_name || session.driver_name
+        : "")
+    ).toUpperCase();
     if (flName && (session.category || "").toLowerCase() === "race") {
-      if (!drivers[flName]) drivers[flName] = { points: 0, wins: 0, podiums: 0, races: 0, fastest_laps: 0, dnfs: 0 };
-      drivers[flName].fastest_laps += 1;
+      ensureDriver(flName).fastest_laps += 1;
     }
   });
   return drivers;
+}
+
+function driverProfileStats(name, season) {
+  const driverName = String(name || "").toUpperCase();
+  const sessions = allSessions.filter(
+    (session) => season === "all" || Number(session.season) === Number(season),
+  );
+  const scoringSessions = sessions.filter((session) =>
+    ["race", "sprint"].includes(String(session.category || "").toLowerCase()),
+  );
+  const seenSessions = new Set();
+  let totalPoints = 0;
+  let gpStarts = 0;
+  let sprintStarts = 0;
+  let wins = 0;
+  let sprintWins = 0;
+  let podiums = 0;
+  let pointsFinishes = 0;
+  let poles = 0;
+  let sprintPoles = 0;
+  let fastestLaps = 0;
+  let dnfs = 0;
+  let positionsGained = 0;
+  let lapsCompleted = 0;
+  const finishes = [];
+  const grids = [];
+
+  scoringSessions.forEach((session) => {
+    const results = Array.isArray(session.results) ? session.results : [];
+    const fingerprint = results.length ? sessionFingerprint(session) : String(session.id || "");
+    if (fingerprint && seenSessions.has(fingerprint)) return;
+    if (fingerprint) seenSessions.add(fingerprint);
+
+    const classification = Array.isArray(session.race_story?.classification)
+      ? session.race_story.classification
+      : [];
+    const result = results.find((entry) => String(entry.name || "").toUpperCase() === driverName);
+    const storyResult = classification.find((entry) => String(entry.name || "").toUpperCase() === driverName);
+    if (!result && !storyResult) return;
+
+    const category = String(session.category || "").toLowerCase();
+    const isSprint = category === "sprint";
+    if (isSprint) sprintStarts += 1;
+    else gpStarts += 1;
+
+    const position = parseInt(result?.position ?? storyResult?.position, 10) || 0;
+    const status = String(storyResult?.status || "").toUpperCase();
+    const dnf = Boolean(
+      storyResult?.is_dnf ||
+      (status && !/FINISHED|ACTIVE/.test(status)) ||
+      position <= 0,
+    );
+    const gridEntry = Array.isArray(session.race_story?.starting_grid)
+      ? session.race_story.starting_grid.find((entry) => String(entry.name || "").toUpperCase() === driverName)
+      : null;
+    const grid = parseInt(
+      gridEntry?.position ??
+      result?.starting_position ??
+      result?.grid_position ??
+      result?.grid ??
+      (String(session.race_story?.player_name || session.driver_name || "").toUpperCase() === driverName
+        ? session.starting_position
+        : null),
+      10,
+    ) || 0;
+    if (!isSprint && grid > 0) grids.push(grid);
+    if (grid === 1) isSprint ? sprintPoles++ : poles++;
+
+    if (!dnf && position > 0) {
+      const points = isSprint
+        ? [0, 8, 7, 6, 5, 4, 3, 2, 1][position] || 0
+        : [0, 25, 18, 15, 12, 10, 8, 6, 4, 2, 1][position] || 0;
+      totalPoints += points;
+      if (position === 1) isSprint ? sprintWins++ : wins++;
+      if (position <= 3) podiums++;
+      if (position <= (isSprint ? 8 : 10)) pointsFinishes++;
+      finishes.push(position);
+      if (grid > 0) positionsGained += grid - position;
+    } else {
+      dnfs++;
+    }
+
+    lapsCompleted += parseInt(result?.laps ?? storyResult?.laps, 10) || 0;
+    const fastestLapName = String(
+      session.race_story?.fastest_lap?.name ||
+      (session.race_story?.player_fastest_lap
+        ? session.race_story?.player_name || session.driver_name
+        : ""),
+    ).toUpperCase();
+    if (!isSprint && fastestLapName === driverName) fastestLaps++;
+  });
+
+  const qualiByWeekend = new Map();
+  sessions.forEach((session) => {
+    const category = String(session.category || "").toLowerCase();
+    if (!/quali/.test(category) || /sprint|shootout/.test(category)) return;
+    const results = Array.isArray(session.results) ? session.results : [];
+    const classification = Array.isArray(session.race_story?.classification)
+      ? session.race_story.classification
+      : [];
+    const result = results.find((entry) => String(entry.name || "").toUpperCase() === driverName);
+    const storyResult = classification.find((entry) => String(entry.name || "").toUpperCase() === driverName);
+    if (!result && !storyResult) return;
+    const position = parseInt(result?.position ?? storyResult?.position, 10) || 0;
+    const type = String(session.session_type || "").toLowerCase().replace(/\s+/g, "");
+    const stageMatch = type.match(/^(?:q|qualifying)([123])$/);
+    const stage = stageMatch ? Number(stageMatch[1]) : 4;
+    const weekendKey = `${session.season}|${normalizeTrackName(session.track_name || session.track || "")}`;
+    const weekend = qualiByWeekend.get(weekendKey) || {};
+    weekend[stage] = position;
+    qualiByWeekend.set(weekendKey, weekend);
+  });
+
+  let q1Apps = 0;
+  let q2Apps = 0;
+  let q3Apps = 0;
+  const qualiPositions = [];
+  qualiByWeekend.forEach((weekend) => {
+    const final = weekend[3] || weekend[2] || weekend[1] || weekend[4] || 0;
+    if (final > 0) qualiPositions.push(final);
+    const reachedQ3 = weekend[3] > 0 || (weekend[2] > 0 && weekend[2] <= 10) ||
+      (weekend[4] > 0 && weekend[4] <= 10);
+    const reachedQ2 = reachedQ3 || weekend[2] > 0 ||
+      (weekend[1] > 0 && weekend[1] <= 16) || (weekend[4] > 0 && weekend[4] <= 16);
+    q1Apps++;
+    if (reachedQ2) q2Apps++;
+    if (reachedQ3) q3Apps++;
+  });
+
+  const starts = gpStarts + sprintStarts;
+  return {
+    totalPoints,
+    avgPoints: starts ? totalPoints / starts : null,
+    starts,
+    gpStarts,
+    sprintStarts,
+    wins,
+    sprintWins,
+    podiums,
+    pointsFinishes,
+    poles,
+    sprintPoles,
+    fastestLaps,
+    dnfs,
+    finishRate: starts ? ((starts - dnfs) / starts) * 100 : null,
+    avgFinish: finishes.length ? finishes.reduce((sum, value) => sum + value, 0) / finishes.length : null,
+    avgGrid: grids.length ? grids.reduce((sum, value) => sum + value, 0) / grids.length : null,
+    bestFinish: finishes.length ? Math.min(...finishes) : null,
+    positionsGained,
+    lapsCompleted,
+    q1Apps,
+    q2Apps,
+    q3Apps,
+    avgQuali: qualiPositions.length
+      ? qualiPositions.reduce((sum, value) => sum + value, 0) / qualiPositions.length
+      : null,
+  };
+}
+
+function showDriverProfile(button) {
+  const name = button.dataset.driver || "";
+  const season = button.dataset.season || "all";
+  const stats = driverProfileStats(name, season);
+  const team = button.dataset.team || "";
+  const title = Number(button.dataset.titles || 0);
+  const activeSeasons = Number(button.dataset.seasons || 0);
+  const position = Number(button.dataset.rank || 0);
+  const context = season === "all" ? "All-Time Stats" : `Season ${season} Stats`;
+  const dialog = document.getElementById("driver-stats-profile") || document.createElement("dialog");
+  dialog.id = "driver-stats-profile";
+  dialog.style.cssText = "width:min(900px,calc(100vw - 28px));max-height:90vh;overflow:auto;padding:20px;border:1px solid #444;border-radius:16px;background:#111;color:#f5f5f5;";
+  const value = (number, digits = 1) => number == null ? "—" : Number(number).toFixed(digits);
+  const metric = (label, text) =>
+    `<article style="min-width:0;padding:10px 12px;border:1px solid #333;border-radius:10px;background:#191919;">
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:#999;">${label}</div>
+      <strong style="display:block;margin-top:5px;font-size:14px;">${text}</strong>
+    </article>`;
+  const rankText = position ? `P${position}` : "—";
+  const qualiAvailable = stats.q1Apps > 0;
+  const titleLabel = title ? ` · ${title} title${title === 1 ? "" : "s"}` : "";
+  const seasonLabel = activeSeasons ? ` · ${activeSeasons} seasons` : "";
+
+  dialog.innerHTML = `
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
+      <div>
+        <h2 style="margin:0;font-size:22px;font-weight:800;">${escapeHtml(name)}</h2>
+        <p style="margin:5px 0 0;color:#aaa;">${escapeHtml(team)}${team ? " · " : ""}${context}${seasonLabel}${titleLabel}</p>
+      </div>
+      <button type="button" onclick="this.closest('dialog').close()" aria-label="Close driver profile"
+        style="border:1px solid #444;border-radius:8px;background:#222;color:#fff;padding:6px 10px;cursor:pointer;">Close</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin:16px 0;">
+      ${metric("Championship", rankText)}
+      ${metric("Total points", `${stats.totalPoints} · ${value(stats.avgPoints)} per start`)}
+      ${metric("Average finish / grid", `${value(stats.avgFinish)} / ${value(stats.avgGrid)}`)}
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:8px;">
+      ${metric("Wins", `${stats.wins} GP · ${stats.sprintWins} sprint`)}
+      ${metric("Podiums", stats.podiums)}
+      ${metric("Poles", `${stats.poles} GP · ${stats.sprintPoles} sprint`)}
+      ${metric("Fastest laps", stats.fastestLaps)}
+      ${metric("Points finishes", stats.pointsFinishes)}
+      ${metric("Best finish", stats.bestFinish == null ? "—" : `P${stats.bestFinish}`)}
+      ${metric("Net positions gained", stats.positionsGained)}
+      ${metric("DNFs", stats.dnfs)}
+      ${metric("Finish rate", stats.finishRate == null ? "—" : `${value(stats.finishRate)}%`)}
+      ${metric("Q3 appearances", qualiAvailable ? `${stats.q3Apps} / ${stats.q1Apps}` : "—")}
+      ${metric("Q2 appearances", qualiAvailable ? `${stats.q2Apps} / ${stats.q1Apps}` : "—")}
+      ${metric("Q1 exits", qualiAvailable ? Math.max(0, stats.q1Apps - stats.q2Apps) : "—")}
+      ${metric("Average qualifying", value(stats.avgQuali))}
+      ${metric("Podium rate", stats.starts ? `${value(stats.podiums / stats.starts * 100)}%` : "—")}
+      ${metric("Starts", `${stats.gpStarts} GP · ${stats.sprintStarts} sprint`)}
+      ${metric("Laps completed", stats.lapsCompleted)}
+    </div>
+    <p style="margin:12px 0 0;font-size:10px;color:#999;">Qualifying metrics use the qualifying results available in uploaded sessions.</p>
+  `;
+  if (!dialog.isConnected) document.body.appendChild(dialog);
+  if (!dialog.open) dialog.showModal();
+}
+
+function renderDriverProfileTile(name, team, season, rank, titles = 0, seasonsActive = 0) {
+  return `<button type="button" data-driver="${escapeHtml(name)}" data-team="${escapeHtml(team)}"
+    data-season="${season}" data-rank="${rank}" data-titles="${titles}" data-seasons="${seasonsActive}"
+    onclick="showDriverProfile(this)"
+    style="display:flex;min-width:0;min-height:145px;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:14px;border:1px solid #333;border-radius:14px;background:#151515;color:#f5f5f5;cursor:pointer;">
+    <span role="img" aria-label="Blank profile picture placeholder"
+      style="display:block;width:68px;height:68px;border:1px solid #555;border-radius:50%;background:#202020;"></span>
+    <strong style="max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(name.toUpperCase())}</strong>
+    <small style="max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#999;">${escapeHtml(team || "Unassigned")}</small>
+  </button>`;
+}
+
+function renderSeasonStatsTable() {
+  const container = document.getElementById("season-stats-container");
+  if (!container) return;
+  if (!allSessions || allSessions.length === 0) {
+    container.innerHTML = `<p class="rec-empty">No season stats yet.</p>`;
+    return;
+  }
+
+  const season = Number(currentSeason);
+  const standings = computeSeasonStandings(season);
+  const teams = getTeamsForSeason(season);
+  const drivers = Object.entries(standings).sort((a, b) => b[1].points - a[1].points);
+  const tiles = drivers
+    .map(([name], index) =>
+      renderDriverProfileTile(
+        name,
+        teamForDriver(teams, name, season) || "Unassigned",
+        season,
+        index + 1,
+      ),
+    )
+    .join("");
+  container.innerHTML = `
+    <p class="records-legend">Season ${season} · Select a driver to view their full season profile.</p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px;">
+      ${tiles || `<p class="rec-empty">No driver stats for this season yet.</p>`}
+    </div>`;
+}
+
+function loadTitleTrackSet(key, fallback = []) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw == null) return new Set(fallback.map(normalizeTrackName));
+    const values = JSON.parse(raw);
+    return new Set(Array.isArray(values) ? values.map(normalizeTrackName) : []);
+  } catch (_) {
+    return new Set(fallback.map(normalizeTrackName));
+  }
+}
+
+function isSeasonTitleClinched(season, standings, gpMaxPoints = 25, sprintMaxPoints = 8) {
+  const ranked = Object.entries(standings).sort((a, b) => b[1].points - a[1].points);
+  const leader = ranked[0];
+  if (!leader || leader[1].points <= 0) return false;
+
+  const excludedKey = `f1_excluded_tracks_s${season}`;
+  const excluded = loadTitleTrackSet(excludedKey, [...loadTitleTrackSet("f1_excluded_tracks")]);
+  const sprintWeekends = loadTitleTrackSet(`f1_sprint_weekends_s${season}`, [
+    "shanghai", "miami", "montreal", "silverstone", "zandvoort", "singapore",
+  ]);
+  const extraTracks = loadTitleTrackSet(`f1_extra_tracks_s${season}`);
+  const seasonSessions = allSessions.filter((session) => Number(session.season) === Number(season));
+  const calendar = new Set(F1_2026_CALENDAR.map(normalizeTrackName));
+  extraTracks.forEach((slug) => calendar.add(slug));
+  seasonSessions.forEach((session) => {
+    const slug = normalizeTrackName(session.track_name);
+    if (slug) calendar.add(slug);
+  });
+
+  const raced = new Set();
+  const sprinted = new Set();
+  seasonSessions.forEach((session) => {
+    const slug = normalizeTrackName(session.track_name);
+    const category = String(session.category || "").toLowerCase();
+    if (category === "race") raced.add(slug);
+    if (category === "sprint") sprinted.add(slug);
+  });
+
+  const remaining = [...calendar].filter((slug) => !raced.has(slug) && !excluded.has(slug));
+  const sprintsLeft = [...calendar].filter(
+    (slug) =>
+      sprintWeekends.has(slug) &&
+      !sprinted.has(slug) &&
+      !raced.has(slug) &&
+      !excluded.has(slug),
+  ).length;
+  const maxPointsLeft = remaining.length * gpMaxPoints + sprintsLeft * sprintMaxPoints;
+  return leader[1].points > (ranked[1]?.[1].points || 0) + maxPointsLeft;
 }
 
 
@@ -5222,6 +5520,7 @@ function renderRecordsTable() {
   const seasons = Array.from(
     new Set(allSessions.map((s) => s.season).filter((x) => x != null)),
   ).sort((a, b) => a - b);
+  const currentMaxSeason = seasons[seasons.length - 1];
 
   // Driver aggregates across all seasons
   const driverAgg = {};
@@ -5235,14 +5534,18 @@ function renderRecordsTable() {
 
     Object.entries(standings).forEach(([name, s]) => {
       if (!driverAgg[name]) {
-        driverAgg[name] = { points: 0, wins: 0, podiums: 0, races: 0, fastest_laps: 0, dnfs: 0, titles: 0, seasons: new Set(), lastTeam: null };
+        driverAgg[name] = { points: 0, wins: 0, race_wins: 0, sprint_wins: 0, podiums: 0, races: 0, fastest_laps: 0, dnfs: 0, gp_poles: 0, sprint_poles: 0, titles: 0, seasons: new Set(), lastTeam: null };
       }
       driverAgg[name].points += s.points;
       driverAgg[name].wins += s.wins;
+      driverAgg[name].race_wins += s.race_wins || 0;
+      driverAgg[name].sprint_wins += s.sprint_wins || 0;
       driverAgg[name].podiums += s.podiums;
       driverAgg[name].races += s.races;
       driverAgg[name].fastest_laps += s.fastest_laps || 0;
       driverAgg[name].dnfs += s.dnfs || 0;
+      driverAgg[name].gp_poles += s.gp_poles || 0;
+      driverAgg[name].sprint_poles += s.sprint_poles || 0;
       driverAgg[name].seasons.add(season);
       { const _t = teamForDriver(teams, name, season); if (_t) driverAgg[name].lastTeam = _t; }
     });
@@ -5250,7 +5553,11 @@ function renderRecordsTable() {
 
     // Driver champion of season
     const driverRanked = Object.entries(standings).sort((a, b) => b[1].points - a[1].points);
-    if (driverRanked.length && driverRanked[0][1].points > 0) {
+    if (
+      driverRanked.length &&
+      driverRanked[0][1].points > 0 &&
+      (season !== currentMaxSeason || isSeasonTitleClinched(season, standings))
+    ) {
       const champ = driverRanked[0][0];
       driverAgg[champ].titles += 1;
       driverChampions[season] = champ;
@@ -5309,7 +5616,12 @@ function renderRecordsTable() {
     const teamRanked = Object.entries(teamSeason)
       .filter(([t]) => t !== "Unassigned")
       .sort((a, b) => b[1].points - a[1].points);
-    if (teamRanked.length && teamRanked[0][1].points > 0) {
+    const teamStandings = Object.fromEntries(teamRanked);
+    if (
+      teamRanked.length &&
+      teamRanked[0][1].points > 0 &&
+      (season !== currentMaxSeason || isSeasonTitleClinched(season, teamStandings, 43, 15))
+    ) {
       const champTeam = teamRanked[0][0];
       teamAgg[champTeam].titles += 1;
       constructorChampions[season] = champTeam;
@@ -5321,34 +5633,19 @@ function renderRecordsTable() {
     // Champions list shows finalized seasons only — we'll show all with a "*" for current.
     return null;
   })();
-  const currentMaxSeason = seasons[seasons.length - 1];
-
-  const driverRows = Object.entries(driverAgg)
+  const driverTiles = Object.entries(driverAgg)
     .sort((a, b) => b[1].points - a[1].points)
-    .map(([name, d], idx) => {
-      const team = d.lastTeam || "Unassigned";
-      const color = teamColorFor(team);
-      const titleBadge = d.titles > 0
-        ? `<span class="rec-title-badge" title="${d.titles} championship${d.titles > 1 ? "s" : ""}">★ ${d.titles}</span>`
-        : "";
-      return `<tr class="standings-row${idx === 0 ? " is-leader" : ""}">
-        <td class="col-rank rank-cell"><span class="rank-num">${idx + 1}</span></td>
-        <td class="col-driver driver-cell" style="--team-color:${color};">
-          <span class="driver-name">${name.toUpperCase()} ${titleBadge}</span>
-          <span class="driver-team">${team}</span>
-        </td>
-        <td class="pts-cell">${d.points}</td>
-        <td class="rec-num">${d.wins}</td>
-        <td class="rec-num">${d.podiums}</td>
-        <td class="rec-num">${d.fastest_laps || 0}</td>
-        <td class="rec-num">${d.races}</td>
-        <td class="rec-num">${d.dnfs || 0}</td>
-        <td class="rec-num">${d.seasons.size}</td>
-      </tr>`;
-
-    })
+    .map(([name, driver], index) =>
+      renderDriverProfileTile(
+        name,
+        driver.lastTeam || "Unassigned",
+        "all",
+        index + 1,
+        driver.titles,
+        driver.seasons.size,
+      ),
+    )
     .join("");
-
   const teamRows = Object.entries(teamAgg)
     .sort((a, b) => b[1].points - a[1].points)
     .map(([team, t], idx) => {
@@ -5392,10 +5689,13 @@ function renderRecordsTable() {
     <div class="records-wrap">
       <div class="records-legend">
         <span><b>Pts</b> Total points</span>
-        <span><b>Wins</b> Race wins (P1 in Race or Sprint)</span>
+        <span><b>W</b> Grand Prix wins</span>
+        <span><b>SW</b> Sprint wins</span>
         <span><b>Pod</b> Podiums (P1–P3)</span>
+        <span><b>GP</b> Grand Prix poles</span>
+        <span><b>SP</b> Sprint poles</span>
         <span><b>FL</b> Fastest laps</span>
-        <span><b>GP</b> Grands Prix entered (incl. DNFs)</span>
+        <span><b>Starts</b> Race and sprint starts</span>
         <span><b>DNF</b> Did-not-finish count</span>
         <span><b>Sn</b> Seasons active</span>
         <span><b>1-2</b> Constructor 1-2 finishes</span>
@@ -5403,25 +5703,10 @@ function renderRecordsTable() {
         <span><b>★</b> Championship titles</span>
       </div>
       <div class="records-block">
-        <h3 class="records-title">Driver Records — All Seasons</h3>
-        <div class="table-responsive standings-wrap">
-          <table class="standings-table standings-v2 records-table">
-            <thead>
-              <tr>
-                <th class="col-rank">#</th>
-                <th class="col-driver">Driver</th>
-                <th class="col-pts" title="Total points">Pts</th>
-                <th class="rec-num" title="Race wins">Wins</th>
-                <th class="rec-num" title="Podiums (P1–P3)">Pod</th>
-                <th class="rec-num" title="Fastest Laps">FL</th>
-                <th class="rec-num" title="Grands Prix entered (incl. DNFs)">GP</th>
-                <th class="rec-num" title="Did not finish">DNF</th>
-                <th class="rec-num" title="Seasons active">Sn</th>
-              </tr>
-            </thead>
-            <tbody>${driverRows || `<tr><td colspan="9" class="rec-empty">No race results yet.</td></tr>`}</tbody>
-          </table>
-
+        <h3 class="records-title">All-Time Stats</h3>
+        <p class="records-legend">Select a driver tile to open their complete career profile.</p>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px;">
+          ${driverTiles || `<p class="rec-empty">No race results yet.</p>`}
         </div>
       </div>
 
@@ -5459,7 +5744,7 @@ function renderRecordsTable() {
             <tbody>${champRows || `<tr><td colspan="3" class="rec-empty">No completed seasons yet.</td></tr>`}</tbody>
           </table>
         </div>
-        <div class="rec-footnote">The latest season is marked "live" — its champion may still change.</div>
+        <div class="rec-footnote">The latest season is marked "live"; its champion appears only after the title is mathematically secured.</div>
       </div>
     </div>
   `;
