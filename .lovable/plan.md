@@ -1,12 +1,9 @@
-# Account saving and mobile improvements
+# Qualifying simulation only
 
-- Retain only item 5: cross-device racing-line and ERS persistence.
-- Drop previous practice-table, saved-card background, Silverstone and AI scoring/pit work.
-- Improve mobile navigation, ERS touch targets, map zoom, painting and selection.
-- Verify saves through an owner-scoped read-back before confirming success.
+Earlier unfinished work is dropped at the user's request. Scope is limited to the uploaded curvature/speed modeling document.
 
-## Status
+- Curvature-derived 120-point speed profiles, two-pass braking/acceleration and official sector/lap timing.
+- Versioned device cache and owner-scoped account sync keyed by geometry, qualifying session and official timings.
+- Estimated speed/gear/pedals, optional speed heatmap, numbered apexes, instant scrubbing and 1×/2×/4× mobile controls.
 
-Mobile controls implemented and checked at 320px, 384px and desktop sizes. Painting, zoom and undo verified using the isolated editor; 19 focused tests pass.
-
-Account storage setup and authenticated cross-device verification remain blocked by access to the existing external database. The owner can run `docs/track-data-setup.sql` in its SQL Editor; this preserves existing data and supplies table grants and owner-only access.
+Implemented and tested: 72 tests pass; isolated sample playback and desktop/384px/320px layouts checked. Applying the account-cache SQL upgrade and verifying a real saved session across devices require access to the existing external database and a signed-in account.

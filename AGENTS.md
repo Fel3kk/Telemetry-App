@@ -15,3 +15,4 @@
 - Keep legacy constructor lookup regression tests against the analyzer's actual helper code; explicit session seasons prevent cross-season fallback and grid-backfill contamination.
 - ERS touch input uses SVG coordinate transforms and rejects scrolling gestures; zoom scrolls the map rather than changing calibrated points.
 - Account track saves read back the owner-scoped row before confirming success, so a failed write cannot appear synced.
+- Solve qualifying speed estimates in pure physics helpers and cache versioned profiles by track, session, geometry and both drivers' official timings; this keeps scrubbing deterministic and avoids regenerating unchanged simulations.

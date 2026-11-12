@@ -53,6 +53,10 @@
   --color-chart-5: var(--chart-5);
   --color-replay-player: var(--replay-player);
   --color-replay-rival: var(--replay-rival);
+  --color-speed-braking: var(--speed-braking);
+  --color-speed-apex: var(--speed-apex);
+  --color-speed-straight: var(--speed-straight);
+  --color-speed-flat: var(--speed-flat);
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);
@@ -64,6 +68,10 @@
 }
 
 :root {
+  --speed-braking: oklch(0.65 0.23 28);
+  --speed-apex: oklch(0.86 0.17 90);
+  --speed-straight: oklch(0.76 0.19 150);
+  --speed-flat: oklch(0.82 0.14 195);
   --replay-player: oklch(0.65 0.23 28);
   --replay-rival: oklch(0.82 0.14 195);
   --radius: 0.5rem;
@@ -148,7 +156,15 @@
 }
 
 @media (max-width: 639px) {
+  .quali-simulation button { min-height: 44px; min-width: 44px; }
   .ers-editor button { min-height: 44px; }
   .ers-editor button:has(> svg):not(:has(> span)) { min-width: 44px; }
   .ers-editor input:not([type="color"]), .ers-editor select { min-height: 44px; font-size: 16px; }
 }
+
+.quali-pedal { appearance: none; border: none; border-radius: 2px; background: var(--muted); }
+.quali-pedal::-webkit-progress-bar { background: var(--muted); border-radius: 2px; }
+.quali-throttle::-webkit-progress-value { background: var(--speed-straight); border-radius: 2px; }
+.quali-brake::-webkit-progress-value { background: var(--speed-braking); border-radius: 2px; }
+.quali-throttle::-moz-progress-bar { background: var(--speed-straight); }
+.quali-brake::-moz-progress-bar { background: var(--speed-braking); }

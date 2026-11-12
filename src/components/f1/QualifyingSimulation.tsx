@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Pause, Play, RotateCcw, Pencil, Check, Undo2, X, Minus, Plus } from "lucide-react";
+import { Pause, Play, RotateCcw, Pencil, Check, Undo2, X, Thermometer, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabase";
 import { getActiveCareer } from "@/lib/career";
 import { trackMapUrl, trackMapFallbackUrl, trackSlug } from "@/lib/f1-shell";
-import { replayPair, lapProgress, liveGap, pointOnLine, type Point, type QualiResult } from "@/lib/quali-simulation";
+import { replayPair, pointOnLine, type Point, type QualiResult } from "@/lib/quali-simulation";
 import { RacingLineActions } from "./RacingLineActions";
 import { resolveRacingLine, sharedRacingLine } from "@/lib/racing-lines";
 import { loadTrackData, saveTrackData } from "@/lib/track-cloud";
+import { simulationFingerprint, telemetryAt, timeAtProgress } from "@/lib/quali-physics";
+import { getSolvedSimulation, type SolvedSimulation } from "@/lib/quali-cache";
+import { QualifyingHud } from "./QualifyingHud";
 
 type QualiSession = { id: string; driver_name: string; track_name: string; category: string; session_type: string; results: QualiResult[] };
 const format = (t: number) => `${Math.floor(t / 60)}:${(t % 60).toFixed(3).padStart(6, "0")}`;
@@ -25,6 +28,11 @@ export function QualifyingSimulation({ season, track, cat }: { season: number; t
   const [image, setImage] = useState(trackMapUrl(track));
   const [imageFailed, setImageFailed] = useState(false);
   const [lineMessage, setLineMessage] = useState("");
+  const [simulation, setSimulation] = useState<SolvedSimulation | null>(null);
+  const [profileStatus, setProfileStatus] = useState("");
+  const [syncStatus, setSyncStatus] = useState("");
+  const [heatmap, setHeatmap] = useState(false);
+  const [corners, setCorners] = useState(true);
   const clock = useRef<number | null>(null);
 
   useEffect(() => {
@@ -66,9 +74,34 @@ export function QualifyingSimulation({ season, track, cat }: { season: number; t
   const session = sessions.find((s) => s.id === selected);
   const pair = useMemo(() => session ? replayPair(Array.isArray(session.results) ? session.results : [], session.driver_name) : null, [session]);
   const duration = pair ? Math.max(pair.player.lap, pair.rival.lap) : 0;
+  const fingerprint = useMemo(() => pair && line.length >= 3 ? simulationFingerprint(trackSlug(track), selected, line, [pair.player, pair.rival]) : "", [pair, line, track, selected]);
+  const solved = simulation?.fingerprint === fingerprint ? simulation : null;
+  useEffect(() => {
+    let active = true;
+    setPlaying(false);
+    setSimulation(null);
+    setSyncStatus("");
+    if (!pair || !fingerprint) { setProfileStatus(""); return; }
+    setProfileStatus("Preparing lap simulation…");
+    (async () => {
+      try {
+        const { data } = await supabase.auth.getSession();
+        const profile = await getSolvedSimulation({ fingerprint, owner: data.session?.user.id ?? null, track: trackSlug(track), line, player: pair.player, rival: pair.rival,
+          onSync: (message) => { if (active) setSyncStatus(message); },
+        });
+        if (active) { setSimulation(profile); setProfileStatus(""); }
+      } catch { if (active) setProfileStatus("This racing line could not be simulated. Check that it forms a complete circuit."); }
+    })();
+    return () => { active = false; };
+  }, [fingerprint, pair, line, track]);
+  const playerTelemetry = solved ? telemetryAt(solved.player, elapsed) : null;
+  const gap = solved ? (() => {
+    const progress = Math.min(telemetryAt(solved.player, elapsed).progress, telemetryAt(solved.rival, elapsed).progress);
+    return timeAtProgress(solved.player, progress) - timeAtProgress(solved.rival, progress);
+  })() : 0;
   useEffect(() => { setPlaying(false); setElapsed(0); }, [selected]);
   useEffect(() => {
-    if (!playing || !pair) return;
+    if (!playing || !pair || !solved) return;
     let frame = 0;
     clock.current = null;
     const tick = (now: number) => {
@@ -79,7 +112,7 @@ export function QualifyingSimulation({ season, track, cat }: { season: number; t
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [playing, pair, duration, speed]);
+  }, [playing, pair, duration, speed, solved]);
   useEffect(() => { if (duration > 0 && elapsed >= duration) setPlaying(false); }, [elapsed, duration]);
   useEffect(() => {
     const pause = () => { if (document.hidden) setPlaying(false); };
@@ -89,7 +122,7 @@ export function QualifyingSimulation({ season, track, cat }: { season: number; t
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.code !== "Space" || editing || !pair || line.length < 3) return;
+      if (e.code !== "Space" || editing || !pair || !solved || imageFailed) return;
       const t = e.target as HTMLElement;
       if (/INPUT|SELECT|TEXTAREA|BUTTON/.test(t.tagName)) return;
       e.preventDefault();
@@ -98,7 +131,7 @@ export function QualifyingSimulation({ season, track, cat }: { season: number; t
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [editing, pair, line.length, elapsed, duration]);
+  }, [editing, pair, solved, imageFailed, elapsed, duration]);
 
   async function saveLine() {
     if (draft.length < 3) return;
@@ -117,14 +150,15 @@ export function QualifyingSimulation({ season, track, cat }: { season: number; t
     { ...pair.rival, role: `P${pair.rival.position}`, className: "text-replay-rival" },
   ] : [];
 
-  return <section className="w-full">
+  return <section className="quali-simulation w-full">
     <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
       <div className="flex flex-wrap gap-2" role="group" aria-label="Qualifying sessions">
         {sessions.map((s) => <Button key={s.id} variant={selected === s.id ? "default" : "outline"} onClick={() => setSelected(s.id)} aria-pressed={selected === s.id}>{s.session_type || s.category}</Button>)}
       </div>
-      <span className="text-xs text-muted-foreground">{pair?.player.sectors && pair?.rival.sectors ? "Sector-paced estimate · Space to play" : "Estimated pace · lap-time based · Space to play"}</span>
+      <span className="text-xs text-muted-foreground">{pair?.player.sectors && pair?.rival.sectors ? "Estimated telemetry · official sector times" : "Estimated telemetry · official lap times"}</span>
     </div>
     {status && <p className="mb-4 text-sm text-muted-foreground" role="status">{status}</p>}
+    {profileStatus && <p className="mb-4 text-sm text-muted-foreground" role="status">{profileStatus}</p>}
     {!status && !pair && <p className="mb-4 text-sm text-muted-foreground">A valid player lap and {session?.results?.some((r) => r.name === session.driver_name && Number(r.position) === 1) ? "P2" : "P1"} lap are needed for this session.</p>}
     <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,340px)] lg:items-start">
     <div className="relative aspect-[1080/608] w-full min-w-0 overflow-hidden rounded-md border border-border bg-background">
@@ -139,8 +173,18 @@ export function QualifyingSimulation({ season, track, cat }: { season: number; t
         {editing && visibleLine.length > 0 && <><polyline points={visibleLine.map((p) => `${p.x * 1080},${p.y * 608}`).join(" ")} fill="none" stroke="currentColor" strokeWidth="3" className="text-replay-rival" />
           {visibleLine.map((p,i) => <circle key={i} cx={p.x*1080} cy={p.y*608} r={i === 0 ? 8 : 4} fill="currentColor" className={i === 0 ? "text-replay-player" : "text-replay-rival"}/>)}</>}
         {!editing && line.length >= 3 && <polyline points={[...line, line[0]].map((p) => `${p.x * 1080},${p.y * 608}`).join(" ")} fill="none" stroke="currentColor" strokeOpacity="0.18" strokeWidth="2" strokeDasharray="6 6" className="text-foreground" />}
-        {!editing && line.length >= 3 && dots.map((d) => {
-          const p = pointOnLine(line, lapProgress(elapsed,d.lap,d.sectors));
+        {!editing && solved && heatmap && solved.player.points.map((p, i, points) => {
+          const next = points[(i + 1) % points.length], v = solved.player.speeds[i];
+          const className = v < 115 ? "text-speed-braking" : v < 200 ? "text-speed-apex" : v < 285 ? "text-speed-straight" : "text-speed-flat";
+          return <line key={i} x1={p.x * 1080} y1={p.y * 608} x2={next.x * 1080} y2={next.y * 608} stroke="currentColor" strokeWidth="5" strokeLinecap="round" className={className}/>;
+        })}
+        {!editing && solved && corners && solved.player.corners.map((i, n) => {
+          const p = solved.player.points[i];
+          return <g key={i} transform={`translate(${p.x * 1080} ${p.y * 608})`} aria-label={`Estimated apex T${n + 1}`}><circle r="13" fill="var(--background)" stroke="var(--foreground)" strokeOpacity="0.5"/><text textAnchor="middle" y="5" fontSize="13" fill="var(--foreground)" fontWeight="700">T{n + 1}</text></g>;
+        })}
+        {!editing && solved && dots.map((d) => {
+          const profile = d.role === "You" ? solved.player : solved.rival;
+          const p = pointOnLine(profile.points, telemetryAt(profile, elapsed).progress);
           return <g key={d.role} className={d.className} transform={`translate(${p.x*1080} ${p.y*608})`}>
             <circle r="11" fill="currentColor" stroke="var(--background)" strokeWidth="3" />
             <text y={d.role === "You" ? -19 : 29} textAnchor="middle" fill="currentColor" fontSize="18" fontWeight="700">{d.role}</text>
@@ -152,18 +196,20 @@ export function QualifyingSimulation({ season, track, cat }: { season: number; t
     <aside className="flex min-w-0 flex-col gap-3 rounded-md border border-border bg-card/40 p-3" aria-label="Simulation controls">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <Button size="icon" aria-label={playing ? "Pause simulation" : "Play simulation"} title={playing ? "Pause" : "Play"} disabled={!pair || line.length < 3 || editing || imageFailed} onClick={() => { if (elapsed >= duration) setElapsed(0); setPlaying((p) => !p); }}>{playing ? <Pause/> : <Play/>}</Button>
+          <Button size="icon" aria-label={playing ? "Pause simulation" : "Play simulation"} title={playing ? "Pause" : "Play"} disabled={!solved || editing || imageFailed} onClick={() => { if (elapsed >= duration) setElapsed(0); setPlaying((p) => !p); }}>{playing ? <Pause/> : <Play/>}</Button>
           <Button variant="outline" size="icon" title="Restart" aria-label="Restart simulation" disabled={!pair} onClick={() => {setPlaying(false);setElapsed(0);}}><RotateCcw/></Button>
         </div>
         <div className="flex items-center gap-2">
           <span className="font-mono text-sm tabular-nums">{format(elapsed)}</span>
-          {pair && elapsed > 0 && (() => { const g = liveGap(elapsed, pair.player, pair.rival); return <span className={`rounded px-2 py-0.5 font-mono text-xs font-bold tabular-nums ${g > 0 ? "bg-destructive/15 text-destructive" : "bg-primary/15 text-primary"}`} title="Live gap to the other driver">{g > 0 ? "+" : "−"}{Math.abs(g).toFixed(3)}</span>; })()}
+          {solved && elapsed > 0 && <span className={`rounded px-2 py-0.5 font-mono text-xs font-bold tabular-nums ${gap > 0 ? "bg-destructive/15 text-destructive" : "bg-primary/15 text-primary"}`} title="Live gap to the other driver">{gap > 0 ? "+" : "−"}{Math.abs(gap).toFixed(3)}</span>}
         </div>
       </div>
 
+      <QualifyingHud telemetry={playerTelemetry}/>
+
       <label className="block">
         <span className="mb-1 block text-[11px] uppercase tracking-wider text-muted-foreground">Lap position</span>
-        <input type="range" aria-label="Lap playback position" min="0" max={duration || 1} step="0.01" value={elapsed} disabled={!pair || editing} onChange={(e) => {setPlaying(false);setElapsed(Number(e.target.value));}} className="w-full accent-primary"/>
+        <input type="range" aria-label="Lap playback position" min="0" max={duration || 1} step="0.001" value={elapsed} disabled={!solved || editing} onChange={(e) => {setPlaying(false);setElapsed(Number(e.target.value));}} className="h-8 w-full touch-manipulation accent-primary"/>
       </label>
 
       <div role="group" aria-label="Playback speed">
@@ -171,11 +217,12 @@ export function QualifyingSimulation({ season, track, cat }: { season: number; t
           <span className="text-[11px] uppercase tracking-wider text-muted-foreground">Speed</span>
           <span className="font-mono text-xs tabular-nums" aria-live="polite">{speed}×</span>
         </div>
-        <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" aria-label="Slow down playback" title="Slower" disabled={speed <= 0.25} onClick={() => setSpeed((s) => Math.max(0.25, Math.round((s - 0.25) * 100) / 100))}><Minus/></Button>
-          <input type="range" aria-label="Playback speed" min="0.25" max="8" step="0.25" value={speed} onChange={(e) => setSpeed(Number(e.target.value))} className="h-1.5 min-w-0 flex-1 accent-primary" />
-          <Button variant="ghost" size="icon" aria-label="Speed up playback" title="Faster" disabled={speed >= 8} onClick={() => setSpeed((s) => Math.min(8, Math.round((s + 0.25) * 100) / 100))}><Plus/></Button>
-        </div>
+        <div className="grid grid-cols-3 gap-2">{[1, 2, 4].map(value => <Button key={value} variant={speed === value ? "default" : "outline"} aria-pressed={speed === value} onClick={() => setSpeed(value)}>{value}×</Button>)}</div>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <Button variant={heatmap ? "secondary" : "outline"} aria-pressed={heatmap} onClick={() => setHeatmap(v => !v)}><Thermometer/>Speed map</Button>
+        <Button variant={corners ? "secondary" : "outline"} aria-pressed={corners} onClick={() => setCorners(v => !v)}><MapPin/>Apexes</Button>
       </div>
 
       <div className="flex flex-col gap-2 border-y border-border py-3">
@@ -200,6 +247,7 @@ export function QualifyingSimulation({ season, track, cat }: { season: number; t
         onDraft={(points) => { setLine(points); setDraft([]); setEditing(false); setPlaying(false); setLineMessage(""); }}
       />
       {lineMessage && <p role="status" className="text-xs text-muted-foreground">{lineMessage}</p>}
+      {syncStatus && <p role="status" className="text-xs text-muted-foreground">{syncStatus}</p>}
     </aside>
     </div>
   </section>;
