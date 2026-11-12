@@ -686,7 +686,14 @@ button:hover, .download-btn:hover {
 .stat-card::after { display: none; }
 
 /* Quali grid: stack Q1/Q2/Q3 vertically so the full lap time and gap fit */
-.quali-segments-grid { display: flex; flex-direction: column; gap: 22px; }
+.quali-segments-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  width: 100%;
+  max-width: 900px;
+  margin-inline: auto;
+}
 .quali-segments-grid .table-container { width: 100%; max-width: 100%; }
 /* Qualifying table: fixed column widths so the Gap column always fits,
    in both Best Lap and S1/S2/S3 modes, on any screen width. */

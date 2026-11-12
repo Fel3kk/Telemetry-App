@@ -2,7 +2,7 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
 import { supabase, displayNameFromSession } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
-import { Home, LogOut } from "lucide-react";
+import { Gauge, Home, LogOut } from "lucide-react";
 
 export function titleCase(name: string) {
   return (name || "")
@@ -17,7 +17,7 @@ export function ShellHeader({ crumbs }: { crumbs: { label: string; to?: any; par
     <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur">
       <div className="mx-auto grid max-w-[1400px] grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-2 px-3 py-2.5 sm:flex sm:flex-wrap sm:gap-x-3 sm:px-4 sm:py-3">
         <Link to="/careers" className="flex min-w-0 items-center gap-2 text-sm font-black text-foreground hover:text-primary sm:shrink-0 sm:text-lg">
-          <span>🏎️</span>
+          <Gauge className="h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
           <span className="truncate">F1 Telemetry</span>
         </Link>
         <div className="order-3 col-span-2 flex w-full min-w-0 items-center sm:order-none sm:ml-4 sm:w-auto">

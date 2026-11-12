@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { Copy, Download, Minus, Pencil, Plus, Trash2, Upload, X, Check, Undo2, Cloud, CloudOff, ZoomIn, ZoomOut, MousePointer2, CloudUpload } from "lucide-react";
+import { Copy, Download, Minus, Pencil, Plus, Trash2, Upload, X, Check, Undo2, Cloud, CloudOff, ZoomIn, ZoomOut, MousePointer2, CloudUpload, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { trackMapUrl, trackMapFallbackUrl, trackSlug } from "@/lib/f1-shell";
@@ -9,8 +9,9 @@ import { resolveRacingLine, sharedRacingLine } from "@/lib/racing-lines";
 import { loadTrackData, saveTrackData } from "@/lib/track-cloud";
 import { RacingLineActions } from "./RacingLineActions";
 import {
-  coverage, ersKeys, isValidSegment, isMapTap, lapOrder, nudge, pointAtProgress, projectOnLine, segmentSpan, sliceLine,
-  type ErsColor, type ErsMode, type ErsSegment, type ErsSlotMeta,
+  coverage, ersKeys, isValidSegment, isMapTap, nudge, pointAtProgress, projectOnLine, segmentSpan, sliceLine,
+  type ErsColor, type ErsMode, type ErsSegment, type ErsTrackNote, type ErsSlotMeta,
+  isValidTrackNote,
 } from "@/lib/ers-map";
 
 // Suggested swatches only — the user names every colour themselves.
@@ -40,11 +41,15 @@ function loadSlots(slug: string, mode: ErsMode): ErsSlotMeta[] {
   return valid.length ? valid : [{ id: "slot1", name: "Slot 1" }];
 }
 
-type ErsBundle = { version: 1; palette: ErsColor[]; modes: Record<ErsMode, (ErsSlotMeta & { segments: ErsSegment[] })[]> };
+type ErsBundle = { version: 1; palette: ErsColor[]; modes: Record<ErsMode, (ErsSlotMeta & { segments: ErsSegment[]; notes: ErsTrackNote[] })[]> };
 
 function bundleFromDevice(slug: string): ErsBundle {
   const modes = {} as ErsBundle["modes"];
-  for (const m of ["race", "quali"] as ErsMode[]) modes[m] = loadSlots(slug, m).map((s) => ({ ...s, segments: loadSegments(slug, m, s.id) }));
+  for (const m of ["race", "quali"] as ErsMode[]) modes[m] = loadSlots(slug, m).map((s) => ({
+    ...s,
+    segments: loadSegments(slug, m, s.id),
+    notes: loadNotes(slug, m, s.id),
+  }));
   return { version: 1, palette: readJson<ErsColor[]>(ersKeys.palette, []), modes };
 }
 
@@ -61,6 +66,7 @@ function writeBundleToDevice(slug: string, data: any) {
       if (!s || typeof s.id !== "string" || typeof s.name !== "string") continue;
       metas.push({ id: s.id, name: s.name.slice(0, 40) });
       localStorage.setItem(ersKeys.map(slug, m, s.id), JSON.stringify((Array.isArray(s.segments) ? s.segments : []).filter(isValidSegment)));
+      localStorage.setItem(ersKeys.notes(slug, m, s.id), JSON.stringify((Array.isArray(s.notes) ? s.notes : []).filter(isValidTrackNote)));
     }
     if (metas.length) localStorage.setItem(ersKeys.slots(slug, m), JSON.stringify(metas));
   }
@@ -71,6 +77,11 @@ function loadSegments(slug: string, mode: ErsMode, slotId: string): ErsSegment[]
   return Array.isArray(segs) ? segs.filter(isValidSegment) : [];
 }
 
+function loadNotes(slug: string, mode: ErsMode, slotId: string): ErsTrackNote[] {
+  const notes = readJson<unknown[]>(ersKeys.notes(slug, mode, slotId), []);
+  return Array.isArray(notes) ? notes.filter(isValidTrackNote) : [];
+}
+
 export function ErsMapEditor({ season, track, cat }: { season: number; track: string; cat?: string }) {
   const slug = trackSlug(track);
   const [mode, setMode] = useState<ErsMode>("race");
@@ -78,9 +89,14 @@ export function ErsMapEditor({ season, track, cat }: { season: number; track: st
   const [slots, setSlots] = useState<ErsSlotMeta[]>([]);
   const [slotId, setSlotId] = useState("slot1");
   const [segments, setSegments] = useState<ErsSegment[]>([]);
+  const [notes, setNotes] = useState<ErsTrackNote[]>([]);
   const [activeColor, setActiveColor] = useState("");
   const [pending, setPending] = useState<number | null>(null);
   const [selectedSeg, setSelectedSeg] = useState<string | null>(null);
+  const [pendingNote, setPendingNote] = useState<number | null>(null);
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [noteDraft, setNoteDraft] = useState("");
+  const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
   const [line, setLine] = useState<Point[]>([]);
   const [image, setImage] = useState(trackMapUrl(track));
   const [imageFailed, setImageFailed] = useState(false);
@@ -96,7 +112,7 @@ export function ErsMapEditor({ season, track, cat }: { season: number; track: st
   const pushTimer = useRef<number | undefined>(undefined);
   const [cloudTick, setCloudTick] = useState(0);
   const [zoom, setZoom] = useState(1);
-  const [tool, setTool] = useState<"paint" | "select">("paint");
+  const [tool, setTool] = useState<"paint" | "select" | "note">("paint");
   const pointerStart = useRef<Point | null>(null);
   const syncReady = useRef(false);
 
@@ -146,7 +162,12 @@ export function ErsMapEditor({ season, track, cat }: { season: number; track: st
     setSlots(s);
     setSlotId(id);
     setSegments(loadSegments(slug, mode, id));
+    setNotes(loadNotes(slug, mode, id));
     setPending(null);
+    setPendingNote(null);
+    setEditingNoteId(null);
+    setNoteDraft("");
+    setActiveNoteId(null);
     setSelectedSeg(null);
     setReady(true);
     setHistory([]);
@@ -198,6 +219,10 @@ export function ErsMapEditor({ season, track, cat }: { season: number; track: st
     setSegments(next);
     persist(ersKeys.map(slug, mode, slotId), next);
   }
+  function saveNotes(next: ErsTrackNote[]) {
+    setNotes(next);
+    persist(ersKeys.notes(slug, mode, slotId), next);
+  }
   function undo() {
     const prev = history[history.length - 1];
     if (!prev) return;
@@ -209,7 +234,12 @@ export function ErsMapEditor({ season, track, cat }: { season: number; track: st
   function switchSlot(id: string) {
     setSlotId(id);
     setSegments(loadSegments(slug, mode, id));
+    setNotes(loadNotes(slug, mode, id));
     setPending(null);
+    setPendingNote(null);
+    setEditingNoteId(null);
+    setNoteDraft("");
+    setActiveNoteId(null);
     setSelectedSeg(null);
     setHistory([]);
     persist(ersKeys.activeSlot(slug, mode), id);
@@ -235,16 +265,21 @@ export function ErsMapEditor({ season, track, cat }: { season: number; track: st
     const id = uid();
     const name = `${slots.find((s) => s.id === slotId)?.name ?? "Slot"} copy`.slice(0, 40);
     const copy = segments.map((s) => ({ ...s, id: uid() }));
+    const noteCopy = notes.map((note) => ({ ...note, id: uid() }));
     saveSlots([...slots, { id, name }]);
     persist(ersKeys.map(slug, mode, id), copy);
+    persist(ersKeys.notes(slug, mode, id), noteCopy);
     switchSlot(id);
   }
 
   function deleteSlot() {
     if (slots.length <= 1) return;
     const name = slots.find((s) => s.id === slotId)?.name;
-    if (!window.confirm(`Delete "${name}"? Its painted sections will be lost.`)) return;
-    try { localStorage.removeItem(ersKeys.map(slug, mode, slotId)); } catch {}
+    if (!window.confirm(`Delete "${name}"? Its painted sections and notes will be lost.`)) return;
+    try {
+      localStorage.removeItem(ersKeys.map(slug, mode, slotId));
+      localStorage.removeItem(ersKeys.notes(slug, mode, slotId));
+    } catch {}
     const next = slots.filter((s) => s.id !== slotId);
     saveSlots(next);
     switchSlot(next[0].id);
@@ -284,6 +319,14 @@ export function ErsMapEditor({ season, track, cat }: { season: number; track: st
       setSelectedSeg(found?.id ?? null);
       return;
     }
+    if (tool === "note") {
+      setPendingNote(hit.progress);
+      setEditingNoteId(null);
+      setNoteDraft("");
+      setActiveNoteId(null);
+      setHint("Add a note for this point on the track.");
+      return;
+    }
     if (!activeColor) { setHint("Add a colour first, then tap the track."); return; }
     setHint("");
     if (pending === null) { setPending(hit.progress); setSelectedSeg(null); return; }
@@ -298,10 +341,48 @@ export function ErsMapEditor({ season, track, cat }: { season: number; track: st
     saveSegments(segments.map((s) => (s.id === id ? { ...s, ...patch } : s)));
   }
 
+  function submitNote(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const text = noteDraft.trim().slice(0, 240);
+    if (!text) {
+      setHint("Enter a note before saving.");
+      return;
+    }
+    if (editingNoteId) {
+      saveNotes(notes.map((note) => note.id === editingNoteId ? { ...note, text } : note));
+      setActiveNoteId(editingNoteId);
+    } else if (pendingNote !== null) {
+      const note = { id: uid(), progress: pendingNote, text };
+      saveNotes([...notes, note]);
+      setActiveNoteId(note.id);
+    }
+    setPendingNote(null);
+    setEditingNoteId(null);
+    setNoteDraft("");
+    setHint("");
+  }
+
+  function cancelNoteEdit() {
+    setPendingNote(null);
+    setEditingNoteId(null);
+    setNoteDraft("");
+    setHint("");
+  }
+
+  function deleteNote(id: string) {
+    saveNotes(notes.filter((note) => note.id !== id));
+    if (activeNoteId === id) setActiveNoteId(null);
+    if (editingNoteId === id) cancelNoteEdit();
+  }
+
   function exportMaps() {
     const modes: Record<string, unknown> = {};
     for (const m of ["race", "quali"] as ErsMode[]) {
-      modes[m] = loadSlots(slug, m).map((s) => ({ ...s, segments: loadSegments(slug, m, s.id) }));
+      modes[m] = loadSlots(slug, m).map((s) => ({
+        ...s,
+        segments: loadSegments(slug, m, s.id),
+        notes: loadNotes(slug, m, s.id),
+      }));
     }
     const blob = new Blob([JSON.stringify({ version: 1, track: slug, palette, modes }, null, 2)], { type: "application/json" });
     const a = document.createElement("a");
@@ -326,6 +407,7 @@ export function ErsMapEditor({ season, track, cat }: { season: number; track: st
           if (!s || typeof s.id !== "string" || typeof s.name !== "string") continue;
           metas.push({ id: s.id, name: s.name.slice(0, 40) });
           persist(ersKeys.map(slug, m, s.id), (Array.isArray(s.segments) ? s.segments : []).filter(isValidSegment));
+          persist(ersKeys.notes(slug, m, s.id), (Array.isArray(s.notes) ? s.notes : []).filter(isValidTrackNote));
         }
         if (metas.length) persist(ersKeys.slots(slug, m), metas);
       }
@@ -342,7 +424,7 @@ export function ErsMapEditor({ season, track, cat }: { season: number; track: st
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement;
       if (/INPUT|SELECT|TEXTAREA/.test(t.tagName)) return;
-      if (e.key === "Escape") { setPending(null); setSelectedSeg(null); }
+      if (e.key === "Escape") { setPending(null); setSelectedSeg(null); cancelNoteEdit(); }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") { e.preventDefault(); undo(); }
     };
     window.addEventListener("keydown", onKey);
@@ -350,11 +432,12 @@ export function ErsMapEditor({ season, track, cat }: { season: number; track: st
   });
 
   const colorOf = (id: string) => palette.find((c) => c.id === id);
-  const ordered = useMemo(() => lapOrder(segments), [segments]);
+  const newestFirst = useMemo(() => [...segments].reverse(), [segments]);
   const cover = useMemo(() => coverage(segments), [segments]);
   const toSvg = (pts: Point[]) => pts.map((p) => `${p.x * 1080},${p.y * 608}`).join(" ");
   const hasLine = line.length >= 3;
   const activeSlotName = slots.find((s) => s.id === slotId)?.name ?? "";
+  const activeNote = notes.find((note) => note.id === activeNoteId);
 
   return (
     <section className="ers-editor w-full min-w-0" aria-label="ERS map editor">
@@ -378,9 +461,10 @@ export function ErsMapEditor({ season, track, cat }: { season: number; track: st
 
       <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(300px,360px)] lg:items-start">
         <div className="min-w-0">
-          <div className="mb-2 flex flex-wrap items-center gap-1 border-b border-border pb-2" aria-label="Map tools">
-            <Button variant={tool === "paint" ? "default" : "ghost"} size="sm" aria-pressed={tool === "paint"} onClick={() => { setTool("paint"); setPending(null); }}><Pencil />Paint</Button>
-            <Button variant={tool === "select" ? "default" : "ghost"} size="sm" aria-pressed={tool === "select"} onClick={() => { setTool("select"); setPending(null); }}><MousePointer2 />Select</Button>
+          <div className="sticky top-16 z-20 mb-2 flex flex-wrap items-center gap-1 rounded-lg border border-border bg-background/95 p-1.5 shadow-sm backdrop-blur" aria-label="Map tools">
+            <Button variant={tool === "paint" ? "default" : "ghost"} size="sm" aria-pressed={tool === "paint"} onClick={() => { setTool("paint"); setPending(null); cancelNoteEdit(); }}><Pencil />Paint</Button>
+            <Button variant={tool === "select" ? "default" : "ghost"} size="sm" aria-pressed={tool === "select"} onClick={() => { setTool("select"); setPending(null); cancelNoteEdit(); }}><MousePointer2 />Select</Button>
+            <Button variant={tool === "note" ? "default" : "ghost"} size="sm" aria-pressed={tool === "note"} title="Place a note on the circuit" onClick={() => { setTool("note"); setPending(null); cancelNoteEdit(); }}><MapPin />Note</Button>
             <Button variant="ghost" size="icon" disabled={!history.length} onClick={undo} aria-label="Undo" title="Undo"><Undo2 /></Button>
             <Button variant="ghost" size="icon" disabled={zoom === 1} onClick={() => setZoom((z) => z - 1)} aria-label="Zoom out" title="Zoom out"><ZoomOut /></Button>
             <Button variant="ghost" size="icon" disabled={zoom === 3} onClick={() => setZoom((z) => z + 1)} aria-label="Zoom in" title="Zoom in"><ZoomIn /></Button>
@@ -391,14 +475,14 @@ export function ErsMapEditor({ season, track, cat }: { season: number; track: st
           <div className="max-h-[60svh] min-h-48 overflow-auto overscroll-contain rounded-lg border border-border bg-card" aria-label="Zoomable circuit">
           <div className={`relative aspect-[1080/608] min-h-48 ${zoom === 3 ? "w-[300%]" : zoom === 2 ? "w-[200%]" : "w-full"}`}>
             {!imageFailed && (
-              <img src={image} alt={`${track} circuit`} className="absolute inset-0 h-full w-full object-fill opacity-40" onError={() => {
+              <img src={image} alt={`${track} circuit`} className="absolute inset-0 h-full w-full object-fill opacity-60" onError={() => {
                 if (image !== trackMapFallbackUrl(track)) setImage(trackMapFallbackUrl(track)); else setImageFailed(true);
               }} />
             )}
             {hasLine ? (
-              <svg viewBox="0 0 1080 608" preserveAspectRatio="none" className="absolute inset-0 h-full w-full cursor-crosshair touch-pan-x touch-pan-y" role="img" aria-label="ERS map — tap a start point, then an end point" onPointerDown={(e) => { if (e.isPrimary) pointerStart.current = { x: e.clientX, y: e.clientY }; }} onPointerUp={onMapTap} onPointerCancel={() => { pointerStart.current = null; }}>
-                <polyline points={toSvg([...line, line[0]])} fill="none" stroke="currentColor" strokeOpacity="0.12" strokeWidth="18" strokeLinejoin="round" className="text-foreground" />
-                <polyline points={toSvg([...line, line[0]])} fill="none" stroke="currentColor" strokeOpacity="0.45" strokeWidth="5" strokeLinejoin="round" strokeDasharray="2 10" strokeLinecap="round" className="text-foreground" />
+              <svg viewBox="0 0 1080 608" preserveAspectRatio="none" className="absolute inset-0 h-full w-full cursor-crosshair touch-pan-x touch-pan-y" role="group" aria-label="ERS track map — choose a tool, then tap the racing line" onPointerDown={(e) => { if (e.isPrimary) pointerStart.current = { x: e.clientX, y: e.clientY }; }} onPointerUp={onMapTap} onPointerCancel={() => { pointerStart.current = null; }}>
+                <polyline points={toSvg([...line, line[0]])} fill="none" stroke="currentColor" strokeOpacity="0.2" strokeWidth="18" strokeLinejoin="round" className="text-foreground" />
+                <polyline points={toSvg([...line, line[0]])} fill="none" stroke="currentColor" strokeOpacity="0.75" strokeWidth="5" strokeLinejoin="round" strokeDasharray="2 10" strokeLinecap="round" className="text-foreground" />
                 {segments.map((s) => {
                   const c = colorOf(s.colorId);
                   if (!c) return null;
@@ -412,15 +496,6 @@ export function ErsMapEditor({ season, track, cat }: { season: number; track: st
                     </g>
                   );
                 })}
-                {ordered.map((s, i) => {
-                  const c = colorOf(s.colorId);
-                  if (!c) return null;
-                  const p = pointAtProgress(line, (s.start + segmentSpan(s.start, s.end) / 2) % 1);
-                  return <g key={`l-${s.id}`} transform={`translate(${p.x * 1080} ${p.y * 608})`} className="pointer-events-none">
-                    <circle r="13" fill="var(--background)" stroke={c.color} strokeWidth="3" />
-                    <text textAnchor="middle" dy="5" fontSize="14" fontWeight="700" fill="currentColor" className="text-foreground">{i + 1}</text>
-                  </g>;
-                })}
                 {(() => { const p = pointAtProgress(line, 0); return <g transform={`translate(${p.x * 1080} ${p.y * 608})`}><rect x="-4" y="-14" width="8" height="28" rx="2" fill="currentColor" className="text-foreground" /></g>; })()}
                 {selectedSeg && (() => {
                   const s = segments.find((x) => x.id === selectedSeg);
@@ -428,6 +503,24 @@ export function ErsMapEditor({ season, track, cat }: { season: number; track: st
                   return [s.start, s.end].map((v, i) => { const p = pointAtProgress(line, v); return <circle key={i} cx={p.x * 1080} cy={p.y * 608} r="9" fill="var(--background)" stroke="currentColor" strokeWidth="4" className="text-foreground" />; });
                 })()}
                 {pending !== null && (() => { const p = pointAtProgress(line, pending); return <circle cx={p.x * 1080} cy={p.y * 608} r="11" fill={colorOf(activeColor)?.color ?? "currentColor"} stroke="var(--background)" strokeWidth="4" />; })()}
+                {pendingNote !== null && (() => { const p = pointAtProgress(line, pendingNote); return <g transform={`translate(${p.x * 1080} ${p.y * 608})`} aria-hidden="true"><circle r="13" fill="#facc15" stroke="var(--background)" strokeWidth="4" /><path d="M-4 0h8M0-4v8" stroke="#1c1917" strokeWidth="2" /></g>; })()}
+                {notes.map((note) => {
+                  const p = pointAtProgress(line, note.progress);
+                  const active = note.id === activeNoteId;
+                  return (
+                    <g key={note.id} transform={`translate(${p.x * 1080} ${p.y * 608})`}
+                      className="cursor-help" role="button" tabIndex={0} aria-label={`Track note: ${note.text}`}
+                      onPointerDown={(e) => e.stopPropagation()} onPointerUp={(e) => e.stopPropagation()}
+                      onPointerEnter={() => setActiveNoteId(note.id)} onPointerLeave={() => setActiveNoteId((id) => id === note.id ? null : id)}
+                      onFocus={() => setActiveNoteId(note.id)} onBlur={() => setActiveNoteId((id) => id === note.id ? null : id)}
+                      onClick={(e) => { e.stopPropagation(); setActiveNoteId(note.id); }}
+                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setActiveNoteId(note.id); } }}>
+                      <title>{note.text}</title>
+                      <circle r={active ? 14 : 11} fill="#facc15" stroke="var(--background)" strokeWidth="4" />
+                      <path d="M-4 0h8M0-4v8" stroke="#1c1917" strokeWidth="2" />
+                    </g>
+                  );
+                })}
               </svg>
             ) : (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-background/70 p-4 text-center">
@@ -442,8 +535,20 @@ export function ErsMapEditor({ season, track, cat }: { season: number; track: st
           </div>
           </div>
           <p className="mt-2 min-h-5 text-sm text-muted-foreground" role="status">
-            {hint || (pending !== null ? `Start: ${pct(pending)}` : selectedSeg ? "Section selected" : "")}
+            {hint || (pending !== null ? `Start: ${pct(pending)}` : pendingNote !== null ? `Note location: ${pct(pendingNote)}` : selectedSeg ? "Section selected" : "")}
           </p>
+          {activeNote && <div className="mb-2 rounded-md border border-amber-400/50 bg-amber-300/10 px-3 py-2 text-sm" role="status"><span className="mr-2 inline-flex items-center gap-1 font-semibold"><MapPin className="h-4 w-4" />Track note</span>{activeNote.text}</div>}
+          {(pendingNote !== null || editingNoteId !== null) && (
+            <form className="mb-3 flex flex-col gap-2 rounded-md border border-border p-3" onSubmit={submitNote}>
+              <label htmlFor="ers-track-note" className="text-sm font-semibold">{editingNoteId ? "Edit track note" : `Add track note at ${pct(pendingNote ?? 0)}`}</label>
+              <textarea id="ers-track-note" autoFocus maxLength={240} rows={3} value={noteDraft} onChange={(e) => setNoteDraft(e.target.value)}
+                placeholder="Add a braking reference, setup reminder, or other note." className="w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm" />
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="ghost" size="sm" onClick={cancelNoteEdit}>Cancel</Button>
+                <Button type="submit" size="sm" disabled={!noteDraft.trim()}><Check />Save note</Button>
+              </div>
+            </form>
+          )}
 
           {segments.length > 0 && (
             <div className="mt-2">
@@ -467,6 +572,34 @@ export function ErsMapEditor({ season, track, cat }: { season: number; track: st
             line={line}
             onDraft={(points) => { setLine(points); setPending(null); setSelectedSeg(null); setHint("AI draft ready. Review the route and start/finish position before exporting."); }}
           /></details>
+
+          <details className="border-t border-border pt-3">
+            <summary className="cursor-pointer py-2 text-sm font-semibold">Track notes ({notes.length})</summary>
+            <div className="pt-1">
+              {notes.length === 0 && <p className="text-sm text-muted-foreground">Choose Note, then tap a point on the racing line to add a reminder.</p>}
+              <ul className="flex flex-col gap-1.5">
+                {[...notes].sort((a, b) => a.progress - b.progress).map((note) => (
+                  <li key={note.id} className={`rounded-md border p-2 ${note.id === activeNoteId ? "border-amber-400/60 bg-amber-300/10" : "border-border"}`}
+                    onMouseEnter={() => setActiveNoteId(note.id)} onMouseLeave={() => setActiveNoteId((id) => id === note.id ? null : id)}
+                    onFocus={() => setActiveNoteId(note.id)} onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setActiveNoteId((id) => id === note.id ? null : id); }}>
+                    <div className="flex items-start gap-2">
+                      <button type="button" className="min-w-0 flex-1 text-left" aria-label={`Show note at ${pct(note.progress)}: ${note.text}`}
+                        onClick={() => setActiveNoteId(note.id)}>
+                        <span className="block font-mono text-xs text-muted-foreground">{pct(note.progress)} of lap</span>
+                        <span className="block whitespace-pre-wrap text-sm">{note.text}</span>
+                      </button>
+                      <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" aria-label="Edit track note" onClick={() => {
+                        setPendingNote(null);
+                        setEditingNoteId(note.id);
+                        setNoteDraft(note.text);
+                      }}><Pencil /></Button>
+                      <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" aria-label="Delete track note" onClick={() => deleteNote(note.id)}><Trash2 /></Button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </details>
 
           {/* Save slots */}
           <div>
@@ -540,48 +673,52 @@ export function ErsMapEditor({ season, track, cat }: { season: number; track: st
           </div>
 
           {/* Segments */}
-          <div>
-            <div className="mb-1.5 flex items-center justify-between">
-              <span className="text-[11px] uppercase tracking-wider text-muted-foreground">Sections ({segments.length})</span>
-              {segments.length > 0 && <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => { if (window.confirm("Clear every section in this slot?")) { saveSegments([]); setSelectedSeg(null); } }}>Clear all</Button>}
-            </div>
-            {segments.length === 0 && <p className="text-sm text-muted-foreground">No sections painted yet.</p>}
-            <ul className="flex flex-col gap-1.5">
-              {ordered.map((s, idx) => {
-                const c = colorOf(s.colorId);
-                const sel = s.id === selectedSeg;
-                return (
-                  <li key={s.id} className={`rounded-md border p-2 ${sel ? "border-primary bg-primary/5" : "border-border"}`}>
-                    <div className="flex items-center gap-2">
-                      <Button variant="ghost" className="h-auto min-w-0 flex-1 justify-start gap-2 px-0 text-left" onClick={() => setSelectedSeg(sel ? null : s.id)} aria-expanded={sel}>
-                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-background" style={{ background: c?.color }}>{idx + 1}</span>
-                        <span className="min-w-0"><span className="block truncate text-sm font-semibold">{c?.name ?? "Removed colour"}</span><span className="block font-mono text-xs tabular-nums text-muted-foreground">{pct(s.start)} → {pct(s.end)} · {pct(segmentSpan(s.start, s.end))}</span></span>
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="Delete section" onClick={() => { saveSegments(segments.filter((x) => x.id !== s.id)); if (sel) setSelectedSeg(null); }}><Trash2 /></Button>
-                    </div>
-                    {sel && (
-                      <div className="mt-2 grid grid-cols-1 gap-2 text-xs sm:grid-cols-2 lg:grid-cols-1">
-                        {(["start", "end"] as const).map((edge) => (
-                          <div key={edge} className="flex items-center justify-between gap-1">
-                            <span className="w-10 text-muted-foreground">{edge === "start" ? "Start" : "End"}</span>
-                            <Button variant="outline" size="icon" className="h-7 w-7" aria-label={`Move ${edge} back`} onClick={() => updateSeg(s.id, { [edge]: nudge(s[edge], -STEP) })}><Minus /></Button>
-                            <span className="w-14 text-center font-mono tabular-nums">{pct(s[edge])}</span>
-                            <Button variant="outline" size="icon" className="h-7 w-7" aria-label={`Move ${edge} forward`} onClick={() => updateSeg(s.id, { [edge]: nudge(s[edge], STEP) })}><Plus /></Button>
-                          </div>
-                        ))}
-                        {palette.length > 1 && (
-                          <select aria-label="Section colour" value={s.colorId} onChange={(e) => updateSeg(s.id, { colorId: e.target.value })}
-                            className="h-8 rounded-md border border-input bg-background px-2 text-sm sm:col-span-2 lg:col-span-1">
-                            {palette.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                          </select>
-                        )}
+          <details className="border-t border-border pt-3">
+            <summary className="cursor-pointer py-2 text-sm font-semibold">Sections</summary>
+            <div className="pt-1">
+              {segments.length > 0 && (
+                <div className="mb-1.5 flex justify-end">
+                  <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => { if (window.confirm("Clear every section in this slot?")) { saveSegments([]); setSelectedSeg(null); } }}>Clear all</Button>
+                </div>
+              )}
+              {segments.length === 0 && <p className="text-sm text-muted-foreground">No sections painted yet.</p>}
+              <ul className="flex flex-col gap-1.5">
+                {newestFirst.map((s) => {
+                  const c = colorOf(s.colorId);
+                  const sel = s.id === selectedSeg;
+                  return (
+                    <li key={s.id} className={`rounded-md border p-2 ${sel ? "border-primary bg-primary/5" : "border-border"}`}>
+                      <div className="flex items-center gap-2">
+                        <Button variant="ghost" className="h-auto min-w-0 flex-1 justify-start gap-2 px-0 text-left" onClick={() => setSelectedSeg(sel ? null : s.id)} aria-expanded={sel}>
+                          <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: c?.color }} aria-hidden="true" />
+                          <span className="min-w-0"><span className="block truncate text-sm font-semibold">{c?.name ?? "Removed colour"}</span><span className="block font-mono text-xs tabular-nums text-muted-foreground">{pct(s.start)} → {pct(s.end)} · {pct(segmentSpan(s.start, s.end))}</span></span>
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="Delete section" onClick={() => { saveSegments(segments.filter((x) => x.id !== s.id)); if (sel) setSelectedSeg(null); }}><Trash2 /></Button>
                       </div>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
+                      {sel && (
+                        <div className="mt-2 grid grid-cols-1 gap-2 text-xs sm:grid-cols-2 lg:grid-cols-1">
+                          {(["start", "end"] as const).map((edge) => (
+                            <div key={edge} className="flex items-center justify-between gap-1">
+                              <span className="w-10 text-muted-foreground">{edge === "start" ? "Start" : "End"}</span>
+                              <Button variant="outline" size="icon" className="h-7 w-7" aria-label={`Move ${edge} back`} onClick={() => updateSeg(s.id, { [edge]: nudge(s[edge], -STEP) })}><Minus /></Button>
+                              <span className="w-14 text-center font-mono tabular-nums">{pct(s[edge])}</span>
+                              <Button variant="outline" size="icon" className="h-7 w-7" aria-label={`Move ${edge} forward`} onClick={() => updateSeg(s.id, { [edge]: nudge(s[edge], STEP) })}><Plus /></Button>
+                            </div>
+                          ))}
+                          {palette.length > 1 && (
+                            <select aria-label="Section colour" value={s.colorId} onChange={(e) => updateSeg(s.id, { colorId: e.target.value })}
+                              className="h-8 rounded-md border border-input bg-background px-2 text-sm sm:col-span-2 lg:col-span-1">
+                              {palette.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                            </select>
+                          )}
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          </details>
 
           <div className="flex gap-2 border-t border-border pt-3">
             <Button variant="outline" size="sm" className="flex-1" onClick={exportMaps}><Download />Export</Button>

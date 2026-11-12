@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { coverage, projectOnLine, segmentSpan, sliceLine, nudge, isMapTap } from "./ers-map";
+import { coverage, projectOnLine, segmentSpan, sliceLine, nudge, isMapTap, isValidTrackNote } from "./ers-map";
 
 // A square on a 1080x608 map scaled so every side has equal real length.
 const h = 0.4;
@@ -48,5 +48,11 @@ describe("ERS map geometry", () => {
   it("wraps nudged pins around the lap", () => {
     expect(nudge(0.998, 0.005)).toBeCloseTo(0.003, 4);
     expect(nudge(0.001, -0.005)).toBeCloseTo(0.996, 4);
+  });
+
+  it("accepts only notes with a valid lap location and readable text", () => {
+    expect(isValidTrackNote({ id: "n1", progress: 0.5, text: "Brake early" })).toBe(true);
+    expect(isValidTrackNote({ id: "n2", progress: 1.1, text: "Outside lap" })).toBe(false);
+    expect(isValidTrackNote({ id: "n3", progress: 0.2, text: "  " })).toBe(false);
   });
 });

@@ -16,6 +16,7 @@ export type Session = {
   starting_position: number | null;
   created_at: string;
   lap_history?: any[];
+  stints?: unknown[];
   session_info?: any;
   race_story?: any;
 };
@@ -80,7 +81,7 @@ export async function fetchSessions(season?: number): Promise<Session[]> {
   const { getActiveCareer } = await import("./career");
   const career = getActiveCareer();
   const url = new URL(`${SUPABASE_URL}/rest/v1/telemetry_sessions`);
-  url.searchParams.set("select", "id,season,driver_name,track_name,category,session_type,finishing_pos,starting_pos,created_at,session_date,race_story,career_slot");
+  url.searchParams.set("select", "id,season,driver_name,track_name,category,session_type,finishing_pos,starting_pos,created_at,session_date,stints,race_story,career_slot");
   url.searchParams.set("order", "session_date.desc");
   if (season != null) url.searchParams.set("season", `eq.${season}`);
   if (career) url.searchParams.set("career_slot", `eq.${career}`);
@@ -138,6 +139,7 @@ function mapTelemetrySession(row: any): Session {
     starting_position: row.starting_position ?? row.starting_pos ?? null,
     created_at: row.created_at ?? row.session_date ?? "",
     lap_history: row.lap_history || [],
+    stints: row.stints || [],
     session_info: row.session_info || null,
     race_story: row.race_story || null,
   };

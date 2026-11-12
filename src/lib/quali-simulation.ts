@@ -70,3 +70,17 @@ export function pointOnLine(points: Point[], progress: number): Point {
   }
   return points[0];
 }
+
+export function trailOnLine(
+  points: Point[],
+  progress: number,
+  trailLength = 0.025,
+  sampleCount = 12,
+): Point[] {
+  if (points.length < 2 || sampleCount < 1) return [];
+  const end = Math.max(0, Math.min(1, progress));
+  const start = Math.max(0, end - Math.max(0, trailLength));
+  return Array.from({ length: sampleCount + 1 }, (_, index) =>
+    pointOnLine(points, start + ((end - start) * index) / sampleCount),
+  );
+}

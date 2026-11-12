@@ -1,6 +1,15 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import {
+  CircleX,
+  Flag,
+  Gauge,
+  Share2,
+  Timer,
+  Trophy,
+  Zap,
+} from "lucide-react";
+import {
   fetchSessions,
   loadCachedSessions,
   cacheIsFresh,
@@ -15,13 +24,11 @@ import {
   titleCaseTrack,
   badgesFor,
   racePosition,
-  appEmbedUrl,
   isRaceResultSession,
   roundOrder,
   type Session,
 } from "@/lib/f1-shell";
 import { ShellHeader, ShellPage } from "@/components/f1/ShellHeader";
-import { TemplateExamples } from "@/components/f1/TemplateExamples";
 import { shareSeasonStats } from "@/lib/share-stats";
 import { seasonSummary } from "@/lib/f1-stats";
 
@@ -67,16 +74,8 @@ function MainPage() {
           if (!cancelled) setLoading(false);
         });
     }
-    const onMsg = (e: MessageEvent) => {
-      if (e?.data?.type !== "f1-upload" && e?.data?.type !== "f1-sessions-updated") return;
-      fetchSessions()
-        .then((rows) => !cancelled && setSessions(rows))
-        .catch(() => {});
-    };
-    window.addEventListener("message", onMsg);
     return () => {
       cancelled = true;
-      window.removeEventListener("message", onMsg);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -151,7 +150,7 @@ function MainPage() {
                 params={{ season: String(season) }}
                 className={ACTION_CLS}
               >
-                🏆
+                <Trophy size={14} aria-hidden="true" />
                 <span className="truncate">
                   Title<span className="hidden sm:inline"> Race</span>
                 </span>
@@ -160,22 +159,15 @@ function MainPage() {
                 to="/records"
                 className={ACTION_CLS}
               >
-                ⏱️
+                <Timer size={14} aria-hidden="true" />
                 <span className="truncate">Records</span>
               </Link>
               <ShareButton season={season} sessions={seasonSessions} />
             </div>
           </div>
-          <div className="mt-2.5 border-t border-border pt-2.5 sm:mt-3 sm:pt-3">
-            <UploadPanel season={season} />
-            <div className="mt-1 flex justify-end">
-              <TemplateExamples />
-            </div>
-          </div>
         </section>
 
         <StatsBar stats={stats} />
-
 
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-bold uppercase tracking-widest text-white/60">
@@ -196,12 +188,12 @@ function MainPage() {
         {loading && <div className="text-white/50">Loading sessions…</div>}
         {err && <div className="text-red-400">Failed to load: {err}</div>}
         {!loading && trackGroups.length === 0 && (
-          <div className="rounded-lg border border-dashed border-white/15 p-8 text-center text-white/50">
-            No sessions uploaded for Season {season} yet. Use the upload panel above to add telemetry JSON.
+          <div className="rounded-xl border border-dashed border-border p-8 text-center text-muted-foreground">
+            No sessions available for Season {season} yet.
           </div>
         )}
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
           {trackGroups.map((g) => (
             <TrackCard
               key={`${trackSlug(g.track)}::${g.category}`}
@@ -227,56 +219,34 @@ const SORTS: { key: SortKey; label: string }[] = [
   { key: "name", label: "Track A–Z" },
 ];
 
-function UploadPanel({ season }: { season: number }) {
-  const src = appEmbedUrl({ season, track: "", view: "upload" });
-  const [height, setHeight] = useState(112);
-
-  useEffect(() => {
-    const onMsg = (ev: MessageEvent) => {
-      const d = ev?.data;
-      if (d?.type === "f1-embed-height" && d.view === "upload") {
-        const h = Number(d.height);
-        if (Number.isFinite(h)) setHeight(Math.min(Math.max(h + 4, 96), 260));
-      }
-    };
-    window.addEventListener("message", onMsg);
-    return () => window.removeEventListener("message", onMsg);
-  }, []);
-
-  return (
-    <iframe
-      title="Upload sessions"
-      src={src}
-      className="block w-full border-0 bg-transparent"
-      style={{ height }}
-    />
-  );
-}
-
 function StatsBar({ stats }: { stats: ReturnType<typeof seasonStats> }) {
   const items = [
-    { label: "GP Wins", value: stats.raceWins, icon: "🏆" },
-    { label: "Sprint Wins", value: stats.sprintWins, icon: "🏁" },
-    { label: "GP Poles", value: stats.gpPoles, icon: "⏱️" },
-    { label: "Sprint Poles", value: stats.sprintPoles, icon: "⚡" },
-    { label: "Fastest Laps", value: stats.fastestLaps, icon: "💜" },
-    { label: "DNFs", value: stats.dnfs, icon: "💥" },
+    { label: "GP Wins", value: stats.raceWins, icon: Trophy },
+    { label: "Sprint Wins", value: stats.sprintWins, icon: Flag },
+    { label: "GP Poles", value: stats.gpPoles, icon: Timer },
+    { label: "Sprint Poles", value: stats.sprintPoles, icon: Zap },
+    { label: "Fastest Laps", value: stats.fastestLaps, icon: Gauge },
+    { label: "DNFs", value: stats.dnfs, icon: CircleX },
   ];
   return (
-    <div className="mb-5 grid grid-cols-3 gap-1.5 sm:mb-6 sm:grid-cols-6 sm:gap-2">
+    <div className="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
       {items.map((it) => (
-        <div
+        <article
           key={it.label}
-          className="min-w-0 rounded-lg border border-white/10 bg-white/[0.03] px-2 py-2 transition hover:border-white/20 sm:px-3 sm:py-3"
+          className="group min-w-0 rounded-xl border border-border/70 bg-card/60 px-3 py-2.5 transition hover:border-primary/45 hover:bg-card"
         >
-          <div className="truncate text-[9px] uppercase tracking-[0.1em] text-white/50 sm:text-[10px] sm:tracking-widest">
-            {it.label}
+          <div className="flex items-center justify-between gap-2">
+            <span className="truncate text-[9px] font-bold uppercase tracking-[0.14em] text-muted-foreground sm:text-[10px]">
+              {it.label}
+            </span>
+            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary transition group-hover:bg-primary/15">
+              <it.icon size={15} strokeWidth={2} aria-hidden="true" />
+            </span>
           </div>
-          <div className="mt-0.5 flex items-baseline gap-1 font-black sm:mt-1">
-            <span className="shrink-0 text-sm sm:text-base">{it.icon}</span>
-            <span className="truncate text-base tabular-nums sm:text-xl">{it.value}</span>
+          <div className="mt-1 text-2xl font-black leading-none tabular-nums tracking-tight">
+            {it.value}
           </div>
-        </div>
+        </article>
       ))}
     </div>
   );
@@ -305,7 +275,7 @@ function ShareButton({ season, sessions }: { season: number; sessions: Session[]
         disabled={busy}
         className={ACTION_CLS + " disabled:cursor-not-allowed disabled:opacity-50"}
       >
-        📤
+        <Share2 size={14} aria-hidden="true" />
         <span className="truncate">
           {busy ? "Creating…" : "Share"}
           <span className="hidden sm:inline">{" "}season card</span>
@@ -357,7 +327,7 @@ function TrackCard({ season, track, category, sessions, round }: { season: numbe
       to="/season/$season/track/$track"
       params={{ season: String(season), track: trackSlug(track) }}
       search={{ cat: category }}
-      className="group relative isolate flex min-h-[190px] flex-col justify-end overflow-hidden rounded-xl border border-white/10 bg-[#0c0c10] shadow-[0_8px_24px_-12px_rgba(0,0,0,0.8)] transition duration-300 hover:-translate-y-1 hover:border-red-500/50 hover:shadow-[0_14px_36px_-12px_rgba(239,68,68,0.4)] sm:min-h-[260px]"
+      className="group relative isolate flex min-h-[164px] flex-col justify-end overflow-hidden rounded-xl border border-white/10 bg-[#0c0c10] shadow-[0_8px_24px_-12px_rgba(0,0,0,0.8)] transition duration-300 hover:-translate-y-1 hover:border-red-500/50 hover:shadow-[0_14px_36px_-12px_rgba(239,68,68,0.4)] sm:min-h-[205px]"
     >
       {/* Track map as a large, faded background layer */}
       {imgOk ? (
@@ -407,17 +377,17 @@ function TrackCard({ season, track, category, sessions, round }: { season: numbe
         </span>
       </div>
 
-      <div className="flex flex-col gap-1.5 px-4 pb-3.5 pt-14 sm:gap-2 sm:pb-4 sm:pt-16">
+      <div className="flex flex-col gap-1.5 px-3 pb-3 pt-12 sm:px-3.5 sm:pt-14">
         <div className="flex items-center gap-2">
           <span className="text-xl leading-none">{trackFlag(track)}</span>
-          <span className="truncate text-xl font-black uppercase italic tracking-tight drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)] sm:text-2xl">{display}</span>
+          <span className="truncate text-lg font-black uppercase italic tracking-tight drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)] sm:text-xl">{display}</span>
         </div>
         {fin ? (
           <div className="flex items-end justify-between">
             <div className="flex items-baseline gap-2 font-mono">
               {start && <span className="text-sm text-white/45">P{start}</span>}
               {start && <span className="text-white/30">→</span>}
-              <span className={"text-3xl font-black leading-none sm:text-4xl " + (fin === 1 ? "text-yellow-400" : fin <= 3 ? "text-orange-300" : "text-white")}>
+              <span className={"text-3xl font-black leading-none " + (fin === 1 ? "text-yellow-400" : fin <= 3 ? "text-orange-300" : "text-white")}>
                 P{fin}
               </span>
             </div>
@@ -432,7 +402,7 @@ function TrackCard({ season, track, category, sessions, round }: { season: numbe
             <div className="flex items-baseline gap-2 font-mono">
               {dnfStart && <span className="text-sm text-white/45">P{dnfStart}</span>}
               {dnfStart && <span className="text-white/30">→</span>}
-              <span className="text-3xl font-black leading-none text-red-400 sm:text-4xl">DNF</span>
+              <span className="text-3xl font-black leading-none text-red-400">DNF</span>
             </div>
             {dnfLaps && (
               <span className="rounded bg-red-500/15 px-1.5 py-0.5 font-mono text-xs font-bold text-red-400">

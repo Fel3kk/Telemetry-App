@@ -2,7 +2,7 @@
 // follows the driver across devices. Browser-only; RLS limits rows to the owner.
 import { supabase } from "./supabase";
 
-export type TrackDataKind = "racing_line" | "ers";
+export type TrackDataKind = "racing_line" | "ers" | "quali_sim";
 
 async function userId(): Promise<string | null> {
   const { data } = await supabase.auth.getSession();

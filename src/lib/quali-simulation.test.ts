@@ -1,6 +1,6 @@
 import { describe, test } from "vitest";
 import { strict as assert } from "node:assert";
-import { lapProgress, liveGap, pointOnLine, replayPair } from "./quali-simulation";
+import { lapProgress, liveGap, pointOnLine, replayPair, trailOnLine } from "./quali-simulation";
 
 describe("qualifying comparison", () => {
   const results = [
@@ -24,6 +24,12 @@ describe("qualifying comparison", () => {
   test("the racing line closes at the starting point", () => {
     const line = [{x:0,y:0},{x:1,y:0},{x:1,y:1}];
     assert.deepEqual(pointOnLine(line,1), line[0]);
+  });
+  test("the motion trail follows corners in the racing line", () => {
+    const line = [{x:0,y:0},{x:1,y:0},{x:1,y:1}];
+    const trail = trailOnLine(line, 0.45, 0.25, 40);
+    assert.ok(trail.every((p) => Math.abs(p.y) < 1e-9 || Math.abs(p.x - 1) < 1e-9));
+    assert.ok(trail.some((p) => Math.hypot(p.x - 1, p.y) < 0.03));
   });
   test("sector times pace each third of the lap", () => {
     assert.equal(lapProgress(20, 60, [20, 10, 30]), 1 / 3);

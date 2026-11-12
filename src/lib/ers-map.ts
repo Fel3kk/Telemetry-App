@@ -6,6 +6,7 @@ import type { Point } from "./quali-simulation";
 export type ErsMode = "race" | "quali";
 export type ErsColor = { id: string; name: string; color: string };
 export type ErsSegment = { id: string; colorId: string; start: number; end: number };
+export type ErsTrackNote = { id: string; progress: number; text: string };
 export type ErsSlotMeta = { id: string; name: string };
 
 const ASPECT = 608 / 1080;
@@ -136,9 +137,22 @@ export const ersKeys = {
   slots: (slug: string, mode: ErsMode) => `f1.ers.slots.v1.${slug}.${mode}`,
   activeSlot: (slug: string, mode: ErsMode) => `f1.ers.active.v1.${slug}.${mode}`,
   map: (slug: string, mode: ErsMode, slotId: string) => `f1.ers.maps.v1.${slug}.${mode}.${slotId}`,
+  notes: (slug: string, mode: ErsMode, slotId: string) => `f1.ers.notes.v1.${slug}.${mode}.${slotId}`,
 };
 
 export function isValidSegment(s: unknown): s is ErsSegment {
   const v = s as ErsSegment;
   return !!v && typeof v.id === "string" && typeof v.colorId === "string" && Number.isFinite(v.start) && Number.isFinite(v.end) && v.start >= 0 && v.start <= 1 && v.end >= 0 && v.end <= 1;
+}
+
+export function isValidTrackNote(note: unknown): note is ErsTrackNote {
+  const value = note as ErsTrackNote;
+  return !!value
+    && typeof value.id === "string"
+    && Number.isFinite(value.progress)
+    && value.progress >= 0
+    && value.progress <= 1
+    && typeof value.text === "string"
+    && value.text.trim().length > 0
+    && value.text.length <= 240;
 }
