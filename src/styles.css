@@ -53,6 +53,10 @@
   --color-chart-5: var(--chart-5);
   --color-replay-player: var(--replay-player);
   --color-replay-rival: var(--replay-rival);
+  --color-speed-braking: var(--speed-braking);
+  --color-speed-apex: var(--speed-apex);
+  --color-speed-straight: var(--speed-straight);
+  --color-speed-flat: var(--speed-flat);
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);
@@ -64,6 +68,10 @@
 }
 
 :root {
+  --speed-braking: oklch(0.65 0.23 28);
+  --speed-apex: oklch(0.86 0.17 90);
+  --speed-straight: oklch(0.76 0.19 150);
+  --speed-flat: oklch(0.82 0.14 195);
   --replay-player: oklch(0.65 0.23 28);
   --replay-rival: oklch(0.82 0.14 195);
   --radius: 0.5rem;
