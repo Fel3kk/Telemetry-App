@@ -255,6 +255,10 @@ export function appEmbedUrl(params: { season: number; track: string; view: strin
 export function appManageUrl() {
   return `${BASE}app/embed.html`;
 }
+export function appUploadUrl(season: number) {
+  const qp = new URLSearchParams({ season: String(season), view: "upload" });
+  return `${BASE}app/embed.html?${qp.toString()}`;
+}
 
 const TRACK_FLAGS: Record<string, string> = {
   melbourne: "🇦🇺", shanghai: "🇨🇳", suzuka: "🇯🇵", sakhir: "🇧🇭",

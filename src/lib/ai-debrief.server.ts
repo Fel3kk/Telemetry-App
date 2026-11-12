@@ -73,8 +73,17 @@ async function callOwnGemini(
   system: string,
   image?: { mimeType: string; data: string },
 ): Promise<GeminiResult> {
-  const key = process.env["GEMINI_API_KEY"];
-  if (!key) return { ok: false, error: "The Google AI key isn't set up on the server." };
+  const key =
+    process.env["GEMINI_API_KEY"]?.trim() ||
+    process.env["GOOGLE_AI_API_KEY"]?.trim() ||
+    process.env["GOOGLE_API_KEY"]?.trim();
+  if (!key) {
+    return {
+      ok: false,
+      error:
+        "Set GEMINI_API_KEY, GOOGLE_AI_API_KEY, or GOOGLE_API_KEY as a server-side secret.",
+    };
+  }
   let lastError = "The AI engineer is unavailable right now. Try again in a minute.";
   for (const model of MODELS) {
     let res: Response;

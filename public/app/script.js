@@ -567,14 +567,22 @@ window.addEventListener("DOMContentLoaded", () => {
   const themeToggle = document.getElementById("themeToggle");
   const savedTheme = localStorage.getItem("theme");
 
-  if (savedTheme === "light") {
-    document.body.classList.add("light-theme");
-  }
+  const applyTheme = (isLight) => {
+    document.body.classList.toggle("light-theme", isLight);
+    const action = isLight ? "Switch to dark mode" : "Switch to light mode";
+    themeToggle.setAttribute("aria-label", action);
+    themeToggle.title = action;
+    themeToggle.textContent = isLight ? "🌙" : "☀️";
+  };
 
+  applyTheme(savedTheme === "light");
   themeToggle.addEventListener("click", () => {
-    document.body.classList.toggle("light-theme");
-    const isLight = document.body.classList.contains("light-theme");
+    const isLight = !document.body.classList.contains("light-theme");
+    applyTheme(isLight);
     localStorage.setItem("theme", isLight ? "light" : "dark");
+  });
+  window.addEventListener("storage", (event) => {
+    if (event.key === "theme") applyTheme(event.newValue === "light");
   });
 
   renderSeasonSelector();
@@ -1404,9 +1412,172 @@ function normalizeSessionSummary(o) {
     starting_fuel: num(o.starting_fuel),
     stints: Array.isArray(o.stints) ? o.stints : [],
     lap_history: Array.isArray(o.lap_history) ? o.lap_history : [],
+    other_driver_lap_histories: Array.isArray(o.other_driver_lap_histories)
+      ? o.other_driver_lap_histories
+      : [],
     results,
     race_story,
   };
+}
+
+function buildDriverLapHistory(driver, stints, redFlagPeriods) {
+  const sessionHistory = driver["session-history"] || {};
+  const lapTimes = sessionHistory["lap-history-data"] || [];
+  const perLapInfo = driver["per-lap-info"] || [];
+  const pitLapsFromStints = {};
+  (stints || []).forEach((stint, index) => {
+    if (index < stints.length - 1) pitLapsFromStints[stint["end-lap"]] = 1;
+  });
+
+  const lapZero = perLapInfo.find((lap) => lap["lap-number"] === 0);
+  const startingFuel = lapZero
+    ? Number((lapZero["car-status-data"]?.["fuel-in-tank"] || 0).toFixed(2))
+    : null;
+  const perLapByNum = new Map();
+  perLapInfo.forEach((lap) => {
+    const number = Number(lap["lap-number"]);
+    if (Number.isFinite(number)) perLapByNum.set(number, lap);
+  });
+  const maxPerLap = perLapByNum.size
+    ? Math.max(...perLapByNum.keys())
+    : 0;
+  const totalLapsSeen = Math.max(
+    maxPerLap,
+    lapTimes.filter((lap) => Number(lap?.["lap-time-in-ms"]) > 0).length,
+  );
+  const filledPerLap = [];
+  let previousLap = perLapByNum.get(0) || null;
+
+  for (let number = 1; number <= totalLapsSeen; number++) {
+    let lap = perLapByNum.get(number);
+    if (!lap) {
+      lap = { ...(previousLap || {}), "lap-number": number };
+      const stint = (stints || []).find(
+        (item) =>
+          number >= Number(item["start-lap"]) &&
+          number <= Number(item["end-lap"]),
+      );
+      if (stint && lap["car-status-data"]) {
+        lap["car-status-data"] = {
+          ...lap["car-status-data"],
+          "visual-tyre-compound":
+            stint["tyre-set-data"]?.["visual-tyre-compound"] ||
+            lap["car-status-data"]["visual-tyre-compound"],
+        };
+      }
+    }
+    filledPerLap.push(lap);
+    previousLap = lap;
+  }
+
+  const scMap = {
+    SAFETY_CAR: 1,
+    FULL_SAFETY_CAR: 1,
+    SC: 1,
+    VIRTUAL_SAFETY_CAR: 2,
+    VSC: 2,
+    RED_FLAG: 3,
+    RED: 3,
+  };
+  const pitMap = {
+    PITTING: 1,
+    PIT: 1,
+    IN_PITS: 2,
+    PIT_LANE: 2,
+    IN_PIT_LANE: 2,
+  };
+  const lapHistory = filledPerLap
+    .filter((lap) => lap["lap-number"] !== 0)
+    .map((lap) => {
+      const lapNumber = lap["lap-number"];
+      const status = lap["car-status-data"] || {};
+      const damage = lap["car-damage-data"] || {};
+      const ers = lap["ers-stats"] || {};
+      const lapData = lap["lap-data"] || {};
+      const timeData = lapTimes[lapNumber - 1] || {};
+      const scRaw = String(
+        lap["max-safety-car-status"] ||
+          lapData["safety-car-status"] ||
+          lapData.sc_status ||
+          "0",
+      ).toUpperCase();
+      const pitRaw = String(
+        lapData["pit-status"] || lapData.pit_status || "0",
+      ).toUpperCase();
+      const fiaFlags = String(
+        status["vehicle-fia-flags"] ||
+          status["fia-flags"] ||
+          lapData["fia-flags"] ||
+          "NONE",
+      ).toUpperCase();
+      let scStatus =
+        scMap[scRaw] || (isNaN(parseInt(scRaw)) ? 0 : parseInt(scRaw));
+      let pitStatus =
+        pitMap[pitRaw] || (isNaN(parseInt(pitRaw)) ? 0 : parseInt(pitRaw));
+      if (pitLapsFromStints[lapNumber]) pitStatus = 1;
+      if (fiaFlags === "4" || fiaFlags === "5" || fiaFlags === "RED")
+        scStatus = 3;
+
+      const tyreWear = damage["tyres-wear"] || [0, 0, 0, 0];
+      return {
+        lap: lapNumber,
+        pit_status: pitStatus,
+        sc_status: scStatus,
+        lap_time: timeData["lap-time-str"] || "00:00.000",
+        s1: timeData["sector-1-time-str"] || "0.000",
+        s2: timeData["sector-2-time-str"] || "0.000",
+        s3: timeData["sector-3-time-str"] || "0.000",
+        current_tyre_compound: status["visual-tyre-compound"],
+        fuel_kg: Number((status["fuel-in-tank"] || 0).toFixed(2)),
+        tyre_wear: {
+          FL: Number((tyreWear[0] || 0).toFixed(2)),
+          FR: Number((tyreWear[1] || 0).toFixed(2)),
+          RL: Number((tyreWear[2] || 0).toFixed(2)),
+          RR: Number((tyreWear[3] || 0).toFixed(2)),
+        },
+        ers_deployed_j: Number((ers["ers-deployed-j"] || 0).toFixed(0)),
+        ers_remaining_j: Number(
+          (status["ers-store-energy"] || 0).toFixed(0),
+        ),
+        damage: {
+          fl_wing: damage["front-left-wing-damage"] || 0,
+          fr_wing: damage["front-right-wing-damage"] || 0,
+          rear_wing: damage["rear-wing-damage"] || 0,
+          floor: damage["floor-damage"] || 0,
+          diffuser: damage["diffuser-damage"] || 0,
+          sidepod: damage["sidepod-damage"] || 0,
+          gearbox: damage["gear-box-damage"] || 0,
+          engine: damage["engine-damage"] || 0,
+          drs_fault: !!damage["drs-fault"],
+          ers_fault: !!damage["ers-fault"],
+        },
+      };
+    });
+
+  if (redFlagPeriods > 0) {
+    const milliseconds = (time) => {
+      const match = String(time || "").match(/^(?:(\d+):)?(\d+(?:\.\d+)?)$/);
+      return match
+        ? (Number(match[1] || 0) * 60 + Number(match[2])) * 1000
+        : 0;
+    };
+    const times = lapHistory
+      .map((lap) => milliseconds(lap.lap_time))
+      .filter((value) => value > 0)
+      .sort((a, b) => a - b);
+    const median = times[Math.floor(times.length / 2)] || 0;
+    if (median > 0) {
+      lapHistory.forEach((lap) => {
+        if (
+          milliseconds(lap.lap_time) > median * 1.8 &&
+          lap.sc_status === 0
+        )
+          lap.sc_status = 3;
+      });
+    }
+  }
+
+  return { starting_fuel: startingFuel, lap_history: lapHistory };
 }
 
 function processTelemetryData(data) {
@@ -1469,7 +1640,6 @@ function processTelemetryData(data) {
 
         // Extract player-specific stints from global V2 history
         let player_stints_data = [];
-        let pit_laps_from_stints = {};
         if (Array.isArray(tyre_stints_v2)) {
           const entry = tyre_stints_v2.find(
             (e) => String(e.name || "").trim().toUpperCase() === driver_name,
@@ -1477,12 +1647,6 @@ function processTelemetryData(data) {
 
           if (entry) {
             player_stints_data = entry["tyre-stint-history"] || [];
-            player_stints_data.forEach((stint, i) => {
-              // Mark pit stops: if a stint ends and another follows, they pitted on end-lap
-              if (i < player_stints_data.length - 1) {
-                pit_laps_from_stints[stint["end-lap"]] = 1;
-              }
-            });
           }
         }
 
@@ -1545,11 +1709,9 @@ function processTelemetryData(data) {
                   }))
                 : [],
           lap_history: [],
+          other_driver_lap_histories: [],
         };
 
-        const session_history = obj["session-history"] || {};
-        const lap_times_list = session_history["lap-history-data"] || [];
-        const per_lap_info = obj["per-lap-info"] || [];
         const final_classification = obj["final-classification"] || {};
         const lap_data = obj["lap-data"] || {};
 
@@ -1582,164 +1744,48 @@ function processTelemetryData(data) {
         }
 
 
-        const lap0 = per_lap_info.find((l) => l["lap-number"] === 0);
-        if (lap0) {
-          summary.starting_fuel = Number(
-            (lap0["car-status-data"]?.["fuel-in-tank"] || 0).toFixed(2),
-          );
-        }
-
-        // per-lap-info can skip laps (e.g. the lap a red flag is shown), which
-        // shifted every following row in race story / practice tables. Build a
-        // gap-free list covering every timed lap, carrying the previous lap's
-        // car state into any missing lap.
-        const perLapByNum = new Map();
-        per_lap_info.forEach((l) => {
-          const n = Number(l["lap-number"]);
-          if (Number.isFinite(n)) perLapByNum.set(n, l);
-        });
-        const maxPerLap = perLapByNum.size ? Math.max(...perLapByNum.keys()) : 0;
-        const totalLapsSeen = Math.max(maxPerLap, lap_times_list.filter((t) => Number(t?.["lap-time-in-ms"]) > 0).length);
-        const filledPerLap = [];
-        let prevLapInfo = perLapByNum.get(0) || null;
-        for (let n = 1; n <= totalLapsSeen; n++) {
-          let l = perLapByNum.get(n);
-          if (!l) {
-            l = { ...(prevLapInfo || {}), "lap-number": n };
-            const st = player_stints_data.find((s) => n >= Number(s["start-lap"]) && n <= Number(s["end-lap"]));
-            if (st && l["car-status-data"]) {
-              l["car-status-data"] = {
-                ...l["car-status-data"],
-                "visual-tyre-compound": st["tyre-set-data"]?.["visual-tyre-compound"] || l["car-status-data"]["visual-tyre-compound"],
-              };
-            }
-          }
-          filledPerLap.push(l);
-          prevLapInfo = l;
-        }
-
-        filledPerLap.forEach((lap) => {
-          const lap_num = lap["lap-number"];
-          if (lap_num === 0 || lap_num === undefined || lap_num === null) {
-            return;
-          }
-
-          const status = lap["car-status-data"] || {};
-          const damage = lap["car-damage-data"] || {};
-          const ers = lap["ers-stats"] || {};
-          const ldata = lap["lap-data"] || {};
-
-          let time_data = {};
-          if (lap_num > 0 && lap_num - 1 < lap_times_list.length) {
-            time_data = lap_times_list[lap_num - 1] || {};
-          }
-
-          // Robust mapping for SC/VSC/Red Flag strings
-          const scMap = {
-            SAFETY_CAR: 1,
-            FULL_SAFETY_CAR: 1,
-            SC: 1,
-            VIRTUAL_SAFETY_CAR: 2,
-            VSC: 2,
-            RED_FLAG: 3,
-            RED: 3,
-          };
-          // Robust mapping for Pit strings
-          const pitMap = {
-            PITTING: 1,
-            PIT: 1,
-            IN_PITS: 2,
-            PIT_LANE: 2,
-            IN_PIT_LANE: 2,
-          };
-
-          const scRaw = String(
-            lap["max-safety-car-status"] ||
-              ldata["safety-car-status"] ||
-              ldata["sc_status"] ||
-              "0",
-          ).toUpperCase();
-          const pitRaw = String(
-            ldata["pit-status"] || ldata["pit_status"] || "0",
-          ).toUpperCase();
-
-          // Check multiple possible keys for FIA flags
-          const fiaFlags = String(
-            status["vehicle-fia-flags"] ||
-              status["fia-flags"] ||
-              ldata["fia-flags"] ||
-              "NONE",
-          ).toUpperCase();
-
-          let sc_status =
-            scMap[scRaw] || (isNaN(parseInt(scRaw)) ? 0 : parseInt(scRaw));
-          let pit_status =
-            pitMap[pitRaw] || (isNaN(parseInt(pitRaw)) ? 0 : parseInt(pitRaw));
-
-          // Override pit status using explicit stint history data
-          if (pit_laps_from_stints[lap_num]) {
-            pit_status = 1;
-          }
-
-          // Red Flag logic from FIA flags (Value 5 or "RED")
-          if (fiaFlags === "4" || fiaFlags === "5" || fiaFlags === "RED") {
-            sc_status = 3;
-          }
-
-          const tyre_wear_values = damage["tyres-wear"] || [0, 0, 0, 0];
-
-          summary.lap_history.push({
-            lap: lap_num,
-            pit_status: pit_status,
-            sc_status: sc_status,
-            lap_time: time_data["lap-time-str"] || "00:00.000",
-            s1: time_data["sector-1-time-str"] || "0.000",
-            s2: time_data["sector-2-time-str"] || "0.000",
-            s3: time_data["sector-3-time-str"] || "0.000",
-            current_tyre_compound: status["visual-tyre-compound"],
-            fuel_kg: Number((status["fuel-in-tank"] || 0).toFixed(2)),
-            tyre_wear: {
-              FL: Number((tyre_wear_values[0] || 0).toFixed(2)),
-              FR: Number((tyre_wear_values[1] || 0).toFixed(2)),
-              RL: Number((tyre_wear_values[2] || 0).toFixed(2)),
-              RR: Number((tyre_wear_values[3] || 0).toFixed(2)),
-            },
-            ers_deployed_j: Number((ers["ers-deployed-j"] || 0).toFixed(0)),
-            ers_remaining_j: Number(
-              (status["ers-store-energy"] || 0).toFixed(0),
-            ),
-            damage: {
-              fl_wing: damage["front-left-wing-damage"] || 0,
-              fr_wing: damage["front-right-wing-damage"] || 0,
-              rear_wing: damage["rear-wing-damage"] || 0,
-              floor: damage["floor-damage"] || 0,
-              diffuser: damage["diffuser-damage"] || 0,
-              sidepod: damage["sidepod-damage"] || 0,
-              gearbox: damage["gear-box-damage"] || 0,
-              engine: damage["engine-damage"] || 0,
-              drs_fault: !!damage["drs-fault"],
-              ers_fault: !!damage["ers-fault"],
-            },
-          });
-        });
-
-        // Red flags are often not reported per lap. When the session had one,
-        // flag the abnormally slow non-pit laps so they are excluded from pace.
-        const redFlags = Number(data?.["session-info"]?.["num-red-flag-periods"] || 0);
-        if (redFlags > 0) {
-          const ms = (t) => {
-            const m = String(t || "").match(/^(?:(\d+):)?(\d+(?:\.\d+)?)$/);
-            return m ? (Number(m[1] || 0) * 60 + Number(m[2])) * 1000 : 0;
-          };
-          const times = summary.lap_history.map((l) => ms(l.lap_time)).filter((v) => v > 0).sort((a, b) => a - b);
-          const median = times[Math.floor(times.length / 2)] || 0;
-          if (median > 0) {
-            summary.lap_history.forEach((l) => {
-              if (ms(l.lap_time) > median * 1.8 && l.sc_status === 0) l.sc_status = 3;
-            });
-          }
-        }
-
+        const sessionInfo =
+          dataList.find((entry) => entry?.["session-info"])?.["session-info"] || {};
+        const redFlagPeriods = Number(sessionInfo["num-red-flag-periods"] || 0);
+        const playerHistory = buildDriverLapHistory(
+          obj,
+          player_stints_data,
+          redFlagPeriods,
+        );
+        summary.starting_fuel = playerHistory.starting_fuel;
+        summary.lap_history = playerHistory.lap_history;
+        summary.other_driver_lap_histories = classification_data
+          .map((entry) => {
+            const name = String(entry["driver-name"] || entry.name || "")
+              .trim()
+              .toUpperCase();
+            if (!name || name === driver_name) return null;
+            const stintEntry = (Array.isArray(tyre_stints_v2) ? tyre_stints_v2 : []).find(
+              (item) =>
+                String(item.name || item.driver_name || "")
+                  .trim()
+                  .toUpperCase() === name,
+            );
+            const stints = stintEntry?.["tyre-stint-history"] || [];
+            const driverHistory = buildDriverLapHistory(
+              entry,
+              stints,
+              redFlagPeriods,
+            );
+            if (!driverHistory.lap_history.length) return null;
+            return {
+              name,
+              team: entry.team || entry["team-name"] || "",
+              position:
+                entry["final-classification"]?.position ??
+                entry["track-position"] ??
+                null,
+              starting_fuel: driverHistory.starting_fuel,
+              stints,
+              lap_history: driverHistory.lap_history,
+            };
+          })
+          .filter(Boolean);
 
         summary.race_story = buildRaceStory(
           data,
@@ -1799,6 +1845,7 @@ async function loadSavedSessions() {
         stints: s.stints || [],
         results: s.results || [],
         race_story: s.race_story || null,
+        other_driver_lap_histories: s.other_driver_lap_histories || [],
       }));
 
       // Custom sorting: Season -> F1 2026 Calendar -> Date
@@ -1861,6 +1908,7 @@ async function saveSessions(sessions) {
     stints: session.stints,
     results: session.results,
     race_story: session.race_story || null,
+    other_driver_lap_histories: session.other_driver_lap_histories || [],
     user_id: uid,
     career_slot: getCareerSlot(),
   }));
@@ -3436,7 +3484,242 @@ function renderStints() {
   });
 }
 
+const DRIVER_COMPARISON_PALETTE = [
+  { name: "Sky blue", color: "#38bdf8" },
+  { name: "Amber", color: "#f59e0b" },
+  { name: "Violet", color: "#a78bfa" },
+  { name: "Rose", color: "#fb7185" },
+  { name: "Emerald", color: "#34d399" },
+  { name: "Orange", color: "#f97316" },
+  { name: "Fuchsia", color: "#e879f9" },
+  { name: "Lime", color: "#a3e635" },
+  { name: "Yellow", color: "#facc15" },
+];
+const DRIVER_COMPARISON_COLORS = DRIVER_COMPARISON_PALETTE.map(
+  ({ color }) => color,
+);
+const MAX_COMPARED_DRIVERS = 3;
+const COMPARISON_COLOR_STORAGE_KEY = "f1.comparisonDriverColors.v1";
+let selectedComparisonDrivers = new Set();
+let comparisonSessionKey = null;
+
+function comparisonDriverColorKey(driver) {
+  return String(driver?.name || "").trim().toUpperCase();
+}
+
+function loadComparisonDriverColorOverrides() {
+  try {
+    const saved = JSON.parse(
+      localStorage.getItem(COMPARISON_COLOR_STORAGE_KEY) || "{}",
+    );
+    if (!saved || typeof saved !== "object" || Array.isArray(saved)) {
+      return {};
+    }
+    return Object.fromEntries(
+      Object.entries(saved).filter(([, color]) =>
+        DRIVER_COMPARISON_COLORS.includes(color),
+      ),
+    );
+  } catch (error) {
+    console.warn("Unable to load saved driver comparison colors.", error);
+    return {};
+  }
+}
+
+let comparisonDriverColorOverrides = loadComparisonDriverColorOverrides();
+
+function getComparisonDriverColor(driver) {
+  const key = comparisonDriverColorKey(driver);
+  const savedColor = comparisonDriverColorOverrides[key];
+  if (DRIVER_COMPARISON_COLORS.includes(savedColor)) return savedColor;
+
+  const driverIndex = getAvailableComparisonDrivers().findIndex(
+    (availableDriver) =>
+      comparisonDriverColorKey(availableDriver) === key,
+  );
+  return DRIVER_COMPARISON_COLORS[
+    Math.max(0, driverIndex) % DRIVER_COMPARISON_COLORS.length
+  ];
+}
+
+function setComparisonDriverColor(driver, color) {
+  if (!DRIVER_COMPARISON_COLORS.includes(color)) return;
+  const key = comparisonDriverColorKey(driver);
+  if (!key) return;
+
+  comparisonDriverColorOverrides[key] = color;
+  try {
+    localStorage.setItem(
+      COMPARISON_COLOR_STORAGE_KEY,
+      JSON.stringify(comparisonDriverColorOverrides),
+    );
+  } catch (error) {
+    console.warn("Unable to save driver comparison colors.", error);
+  }
+}
+
+function getAvailableComparisonDrivers() {
+  return (currentData?.other_driver_lap_histories || []).filter(
+    (driver) =>
+      driver &&
+      driver.name &&
+      Array.isArray(driver.lap_history) &&
+      driver.lap_history.length > 0,
+  );
+}
+
+function getSelectedComparisonDrivers() {
+  return getAvailableComparisonDrivers().filter((driver) =>
+    selectedComparisonDrivers.has(driver.name),
+  );
+}
+
+function renderDriverComparisonControls() {
+  const sessionKey = currentData?.id || currentData?.created_at || null;
+  if (sessionKey !== comparisonSessionKey) {
+    comparisonSessionKey = sessionKey;
+    selectedComparisonDrivers = new Set();
+  }
+
+  const availableDrivers = getAvailableComparisonDrivers();
+  const selectedDrivers = getSelectedComparisonDrivers();
+  document
+    .querySelectorAll("#graphsDriverComparison, #lapsDriverComparison")
+    .forEach((container) => {
+      container.replaceChildren();
+      const heading = document.createElement("span");
+      heading.className = "driver-comparison-label";
+      heading.textContent = "Compare drivers";
+      container.appendChild(heading);
+
+      if (!availableDrivers.length) {
+        const message = document.createElement("span");
+        message.className = "driver-comparison-empty";
+        message.textContent =
+          "Detailed opponent telemetry is not saved for this session. Re-upload its original file to enable comparisons.";
+        container.appendChild(message);
+        return;
+      }
+
+      const choices = document.createElement("div");
+      choices.className = "driver-comparison-choices";
+      availableDrivers.forEach((driver) => {
+        const button = document.createElement("button");
+        const selected = selectedComparisonDrivers.has(driver.name);
+        const atLimit =
+          !selected &&
+          selectedComparisonDrivers.size >= MAX_COMPARED_DRIVERS;
+        const position = Number(driver.position);
+        button.type = "button";
+        button.className = `driver-comparison-button${selected ? " is-selected" : ""}`;
+        button.textContent = `${Number.isFinite(position) && position > 0 ? `P${position} · ` : ""}${driver.name}`;
+        button.setAttribute("aria-pressed", String(selected));
+        button.disabled = atLimit;
+        if (selected) {
+          button.style.setProperty(
+            "--driver-comparison-color",
+            getComparisonDriverColor(driver),
+          );
+        }
+        if (driver.team) button.title = driver.team;
+        button.addEventListener("click", () => {
+          if (selectedComparisonDrivers.has(driver.name)) {
+            selectedComparisonDrivers.delete(driver.name);
+          } else if (
+            selectedComparisonDrivers.size < MAX_COMPARED_DRIVERS
+          ) {
+            selectedComparisonDrivers.add(driver.name);
+          }
+          renderContent();
+        });
+        choices.appendChild(button);
+      });
+      container.appendChild(choices);
+
+      if (container.id === "graphsDriverComparison" && selectedDrivers.length) {
+        const palettePanel = document.createElement("div");
+        palettePanel.className = "driver-comparison-palette-panel";
+        const paletteHeading = document.createElement("span");
+        paletteHeading.className = "driver-comparison-palette-heading";
+        paletteHeading.textContent = "Graph colors · choose a swatch";
+        palettePanel.appendChild(paletteHeading);
+
+        selectedDrivers.forEach((driver) => {
+          const colorRow = document.createElement("div");
+          colorRow.className = "driver-comparison-color-row";
+          const driverLabel = document.createElement("span");
+          driverLabel.className = "driver-comparison-color-name";
+          driverLabel.textContent = driver.name;
+          colorRow.appendChild(driverLabel);
+
+          const swatches = document.createElement("div");
+          swatches.className = "driver-comparison-swatches";
+          swatches.setAttribute("role", "group");
+          swatches.setAttribute(
+            "aria-label",
+            `Graph color for ${driver.name}`,
+          );
+          const selectedColor = getComparisonDriverColor(driver);
+          DRIVER_COMPARISON_PALETTE.forEach(({ name, color }) => {
+            const swatch = document.createElement("button");
+            swatch.type = "button";
+            swatch.className = "driver-comparison-swatch";
+            swatch.style.backgroundColor = color;
+            swatch.setAttribute("aria-pressed", String(color === selectedColor));
+            swatch.setAttribute(
+              "aria-label",
+              `Use ${name} for ${driver.name}`,
+            );
+            swatch.title = `${name} · ${driver.name}`;
+            if (color === selectedColor) swatch.classList.add("is-selected");
+            swatch.addEventListener("click", () => {
+              setComparisonDriverColor(driver, color);
+              renderContent();
+            });
+            swatches.appendChild(swatch);
+          });
+          colorRow.appendChild(swatches);
+          palettePanel.appendChild(colorRow);
+        });
+        container.appendChild(palettePanel);
+      }
+
+      const hint = document.createElement("span");
+      hint.className = "driver-comparison-hint";
+      hint.textContent =
+        container.id === "lapsDriverComparison"
+          ? `Choose up to ${MAX_COMPARED_DRIVERS} opponents · Δ = opponent − player · + slower / − faster`
+          : `Select up to ${MAX_COMPARED_DRIVERS} opponents · choose a swatch to change graph colors`;
+      container.appendChild(hint);
+    });
+}
+
+function comparisonLineDatasets(lapNumbers, label, valueForLap) {
+  return getSelectedComparisonDrivers().map((driver) => {
+    const color = getComparisonDriverColor(driver);
+    return {
+      label: `${driver.name} · ${label}`,
+      data: lapNumbers.map((lapNumber) => {
+        const lap = driver.lap_history.find(
+          (entry) => Number(entry.lap) === Number(lapNumber),
+        );
+        if (!lap) return null;
+        const value = valueForLap(lap);
+        return Number.isFinite(value) ? value : null;
+      }),
+      borderColor: color,
+      backgroundColor: `${color}22`,
+      tension: 0.4,
+      fill: false,
+      spanGaps: false,
+      borderWidth: 2,
+      pointRadius: 1,
+    };
+  });
+}
+
 function renderCharts() {
+  renderDriverComparisonControls();
   const laps = currentData.lap_history;
 
   if (!laps || laps.length === 0) {
@@ -3468,7 +3751,14 @@ function renderCharts() {
     fastestLapLap = lapNumbers[bestIdx];
   }
 
-  const validLapTimes = lapTimes.filter((v) => typeof v === "number" && v > 0);
+  const comparisonLapTimes = getSelectedComparisonDrivers().flatMap((driver) =>
+    driver.lap_history
+      .map((lap) => timeStringToSeconds(lap.lap_time))
+      .filter((value) => Number.isFinite(value) && value > 0),
+  );
+  const validLapTimes = [...lapTimes, ...comparisonLapTimes].filter(
+    (value) => typeof value === "number" && value > 0,
+  );
 
   // Compute average and stddev to derive a sensible min/max around the mean
   let avgLapSeconds = null;
@@ -3511,6 +3801,9 @@ function renderCharts() {
           fill: true,
           spanGaps: false,
         },
+        ...comparisonLineDatasets(lapNumbers, "lap time", (lap) =>
+          timeStringToSeconds(lap.lap_time),
+        ),
       ],
     },
     true,
@@ -3544,6 +3837,12 @@ function renderCharts() {
   const fuelValues = laps
     .map((l) => l.fuel_kg)
     .filter((v) => typeof v === "number" && !isNaN(v));
+  getSelectedComparisonDrivers().forEach((driver) => {
+    driver.lap_history.forEach((lap) => {
+      const fuel = Number(lap.fuel_kg);
+      if (Number.isFinite(fuel)) fuelValues.push(fuel);
+    });
+  });
   if (fuelValues.length > 0) {
     const sumFuel = fuelValues.reduce((a, b) => a + b, 0);
     const avgFuel = sumFuel / fuelValues.length;
@@ -3571,6 +3870,11 @@ function renderCharts() {
           tension: 0.4,
           fill: true,
         },
+        ...comparisonLineDatasets(
+          lapNumbers,
+          "fuel",
+          (lap) => Number(lap.fuel_kg),
+        ),
       ],
     },
     false,
@@ -3601,6 +3905,34 @@ function renderCharts() {
     const consumed = Math.max(0, prevFuel - laps[i].fuel_kg);
     fuelConsumption.push(parseFloat(consumed.toFixed(2)));
   }
+  const comparisonFuelConsumption = getSelectedComparisonDrivers().map(
+    (driver) => {
+      const byLap = new Map();
+      const history = driver.lap_history;
+      let previousFuel =
+        Number(driver.starting_fuel) ||
+        (history.length > 0 ? Number(history[0].fuel_kg) : 0);
+      history.forEach((lap) => {
+        const fuel = Number(lap.fuel_kg);
+        byLap.set(
+          Number(lap.lap),
+          Number.isFinite(fuel) ? Number(Math.max(0, previousFuel - fuel).toFixed(2)) : null,
+        );
+        if (Number.isFinite(fuel)) previousFuel = fuel;
+      });
+      const color = getComparisonDriverColor(driver);
+      return {
+        label: `${driver.name} · Fuel consumed`,
+        data: lapNumbers.map((lapNumber) => byLap.get(Number(lapNumber)) ?? null),
+        borderColor: color,
+        backgroundColor: `${color}22`,
+        tension: 0.4,
+        fill: false,
+        spanGaps: false,
+        borderWidth: 2,
+      };
+    },
+  );
 
   createChart(
     "fuelConsumptionChart",
@@ -3616,6 +3948,7 @@ function renderCharts() {
           tension: 0.4,
           fill: true,
         },
+        ...comparisonFuelConsumption,
       ],
     },
     false,
@@ -3624,6 +3957,13 @@ function renderCharts() {
       const valid = fuelConsumption.filter(
         (v) => typeof v === "number" && !isNaN(v) && v > 0,
       );
+      comparisonFuelConsumption.forEach((dataset) => {
+        dataset.data.forEach((value) => {
+          if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+            valid.push(value);
+          }
+        });
+      });
       let minF = null;
       let maxF = null;
       if (valid.length > 0) {
@@ -3729,6 +4069,14 @@ function renderCharts() {
           segment: { borderColor: (context) => wearColor(context.p1.parsed.y, "#f4f4f5") },
           pointBackgroundColor: (context) => wearColor(context.parsed.y, "#f4f4f5"),
         },
+        ...comparisonLineDatasets(lapNumbers, "average tyre wear", (lap) => {
+          const values = Object.values(lap.tyre_wear || {})
+            .map(Number)
+            .filter(Number.isFinite);
+          return values.length
+            ? values.reduce((sum, value) => sum + value, 0) / values.length
+            : null;
+        }),
       ],
     },
     false,
@@ -3751,6 +4099,14 @@ function renderCharts() {
   const sectorValues = []
     .concat(s1, s2, s3)
     .filter((v) => typeof v === "number" && v > 0);
+  getSelectedComparisonDrivers().forEach((driver) => {
+    driver.lap_history.forEach((lap) => {
+      ["s1", "s2", "s3"].forEach((sector) => {
+        const value = timeStringToSeconds(lap[sector]);
+        if (Number.isFinite(value) && value > 0) sectorValues.push(value);
+      });
+    });
+  });
   let sectorMin = null;
   let sectorMax = null;
   if (sectorValues.length > 0) {
@@ -3815,6 +4171,26 @@ function renderCharts() {
           spanGaps: false,
           borderWidth: 2,
         },
+        ...getSelectedComparisonDrivers().flatMap((driver) => {
+          const color = getComparisonDriverColor(driver);
+          return ["s1", "s2", "s3"].map((sector, sectorIndex) => ({
+            label: `${driver.name} · S${sectorIndex + 1}`,
+            data: lapNumbers.map((lapNumber) => {
+              const lap = driver.lap_history.find(
+                (entry) => Number(entry.lap) === Number(lapNumber),
+              );
+              const value = lap ? timeStringToSeconds(lap[sector]) : null;
+              return Number.isFinite(value) && value > 0 ? value : null;
+            }),
+            borderColor: color,
+            backgroundColor: `${color}22`,
+            tension: 0.4,
+            fill: false,
+            spanGaps: false,
+            borderWidth: 1.5,
+            borderDash: [4, 3],
+          }));
+        }),
       ],
     },
     true,
@@ -3860,6 +4236,35 @@ function renderCharts() {
           backgroundColor: "rgba(255, 107, 107, 0.75)",
           borderWidth: 1,
         },
+        ...getSelectedComparisonDrivers().flatMap((driver) => {
+          const color = getComparisonDriverColor(driver);
+          return [
+            {
+              label: `${driver.name} · Deployed`,
+              data: lapNumbers.map((lapNumber) => {
+                const lap = driver.lap_history.find(
+                  (entry) => Number(entry.lap) === Number(lapNumber),
+                );
+                return lap ? Number(lap.ers_deployed_j) / 1000000 : null;
+              }),
+              backgroundColor: `${color}aa`,
+              borderColor: color,
+              borderWidth: 1,
+            },
+            {
+              label: `${driver.name} · Remaining`,
+              data: lapNumbers.map((lapNumber) => {
+                const lap = driver.lap_history.find(
+                  (entry) => Number(entry.lap) === Number(lapNumber),
+                );
+                return lap ? Number(lap.ers_remaining_j) / 1000000 : null;
+              }),
+              backgroundColor: `${color}55`,
+              borderColor: color,
+              borderWidth: 1,
+            },
+          ];
+        }),
       ],
     },
     false,
@@ -4389,51 +4794,94 @@ function createChart(
 }
 
 function renderTable() {
+  renderDriverComparisonControls();
   const tbody = document.getElementById("lapTableBody");
   const table = tbody.closest("table");
-  if (table) {
-    table.classList.add("table-sm");
-    table.style.fontSize = "0.85rem";
-  }
   tbody.innerHTML = "";
 
-  const startFuel =
-    currentData.starting_fuel ||
-    (currentData.lap_history.length > 0
-      ? currentData.lap_history[0].fuel_kg
-      : 0);
-
-  const lapTimes = currentData.lap_history.map((lap) =>
-    timeStringToSeconds(lap.lap_time),
-  );
-  const validLapTimes = lapTimes.filter((v) => typeof v === "number" && v > 0);
-  const fastestLapSeconds =
-    validLapTimes.length > 0 ? Math.min(...validLapTimes) : null;
-  const fastestLapIndex =
-    fastestLapSeconds !== null ? lapTimes.indexOf(fastestLapSeconds) : -1;
-
-  const hist = currentData.lap_history;
-  const tableLapTimes = hist.map((lap) => timeStringToSeconds(lap.lap_time));
-  const tableValidIndices = tableLapTimes.reduce((acc, v, i) => {
-    if (typeof v === "number" && v > 0 && Number(hist[i].sc_status) !== 3) {
-      acc.push(i);
-    }
-    return acc;
-  }, []);
-
-  let tableFastestLapNumber = null;
-  if (tableValidIndices.length > 0) {
-    const minT = Math.min(...tableValidIndices.map((i) => tableLapTimes[i]));
-    const bestI = tableValidIndices.find((i) => tableLapTimes[i] === minT);
-    tableFastestLapNumber = hist[bestI].lap;
+  const selectedDrivers = getSelectedComparisonDrivers();
+  const showDriverColumns = selectedDrivers.length > 0;
+  if (table) {
+    table.classList.add("table-sm");
+    table.classList.toggle("has-driver-comparisons", showDriverColumns);
+    table.style.fontSize = showDriverColumns ? "0.9rem" : "0.85rem";
   }
+  table
+    ?.querySelectorAll(".comparison-column")
+    .forEach((column) => (column.hidden = !showDriverColumns));
 
-  let lastCompound = null;
-  hist.forEach((lap, index) => {
-    const prevFuel =
-      index === 0 ? startFuel : currentData.lap_history[index - 1].fuel_kg;
-    const fuelConsumed = Math.max(0, prevFuel - lap.fuel_kg);
+  const histories = [
+    {
+      name: currentData.driver_name || "Player",
+      starting_fuel: currentData.starting_fuel,
+      lap_history: currentData.lap_history || [],
+      isPlayer: true,
+    },
+    ...selectedDrivers,
+  ];
+  const playerLapTimes = new Map(
+    (currentData.lap_history || []).map((lap) => [
+      Number(lap.lap),
+      timeStringToSeconds(lap.lap_time),
+    ]),
+  );
+  const rows = [];
+  histories.forEach((driver, driverOrder) => {
+    const history = driver.lap_history || [];
+    const firstFuel = Number(history[0]?.fuel_kg) || 0;
+    const startFuel = Number(driver.starting_fuel) || firstFuel;
+    const validTimes = history
+      .filter((lap) => Number(lap.sc_status) !== 3)
+      .map((lap) => timeStringToSeconds(lap.lap_time))
+      .filter((value) => Number.isFinite(value) && value > 0);
+    const fastestLapSeconds = validTimes.length ? Math.min(...validTimes) : null;
+    const fastestLap = history.find(
+      (lap) =>
+        Number(lap.sc_status) !== 3 &&
+        timeStringToSeconds(lap.lap_time) === fastestLapSeconds,
+    )?.lap;
+    let lastCompound = null;
 
+    history.forEach((lap, index) => {
+      const fuel = Number(lap.fuel_kg) || 0;
+      const previousFuel =
+        index === 0 ? startFuel : Number(history[index - 1].fuel_kg) || 0;
+      const currentCompound = String(lap.current_tyre_compound || "").toUpperCase();
+      const stintBoundary =
+        index > 0 &&
+        (currentCompound !== lastCompound ||
+          Number(history[index - 1].pit_status) === 1);
+      const opponentLapTime = timeStringToSeconds(lap.lap_time);
+      const playerLapTime = playerLapTimes.get(Number(lap.lap));
+      const delta =
+        !driver.isPlayer &&
+        Number.isFinite(opponentLapTime) &&
+        opponentLapTime > 0 &&
+        Number.isFinite(playerLapTime) &&
+        playerLapTime > 0
+          ? opponentLapTime - playerLapTime
+          : null;
+
+      rows.push({
+        lap,
+        driver,
+        driverOrder,
+        index,
+        fuelConsumed: Math.max(0, previousFuel - fuel),
+        isFastest: lap.lap === fastestLap,
+        stintBoundary,
+        delta,
+      });
+      lastCompound = currentCompound;
+    });
+  });
+  rows.sort(
+    (a, b) =>
+      Number(a.lap.lap) - Number(b.lap.lap) ||
+      a.driverOrder - b.driverOrder,
+  );
+
+  rows.forEach(({ lap, driver, driverOrder, fuelConsumed, isFastest, stintBoundary, delta }) => {
     const pitStatus = Number(lap.pit_status || 0);
     const scStatus = Number(lap.sc_status || 0);
     let statusLabel = "";
@@ -4448,30 +4896,32 @@ function renderTable() {
       val >= 80 ? "wear-critical" : val >= 60 ? "wear-warning" : "";
 
     const row = document.createElement("tr");
-    if (lap.lap === tableFastestLapNumber) {
-      row.classList.add("fastest-lap-row");
+    const driverColor = driver.isPlayer
+      ? "#e10600"
+      : getComparisonDriverColor(driver);
+    if (showDriverColumns) {
+      row.classList.add(
+        driver.isPlayer ? "comparison-row-player" : "comparison-row-opponent",
+      );
+      row.style.setProperty("--driver-comparison-color", driverColor);
     }
+    if (isFastest) row.classList.add("fastest-lap-row");
+    if (stintBoundary) row.classList.add("stint-boundary");
 
-    // Stint Boundary Grouping
-    const currentComp = String(lap.current_tyre_compound).toUpperCase();
-    if (
-      index > 0 &&
-      (currentComp !== lastCompound ||
-        Number(currentData.lap_history[index - 1].pit_status) === 1)
-    ) {
-      row.classList.add("stint-boundary");
-    }
-    lastCompound = currentComp;
-
-    const rtCompKey = String(lap.current_tyre_compound).toUpperCase();
+    const compound = lap.current_tyre_compound || "Unknown";
+    const rtCompKey = String(compound).toUpperCase();
     const rtDotColor = COMPOUND_COLORS[rtCompKey] || "#888";
     const rtRgba = (hex, a) => {
       const r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
       return `rgba(${r},${g},${b},${a})`;
     };
-    const rtCompoundBadge = `<span class="compound-badge" style="background:${rtRgba(rtDotColor, 0.12)};border-color:${rtRgba(rtDotColor, 0.45)};color:${rtDotColor}"><span class="compound-dot" style="background-color:${rtDotColor}"></span>${lap.current_tyre_compound}</span>`;
+    const rtCompoundBadge = `<span class="compound-badge" style="background:${rtRgba(rtDotColor, 0.12)};border-color:${rtRgba(rtDotColor, 0.45)};color:${rtDotColor}"><span class="compound-dot" style="background-color:${rtDotColor}"></span>${escapeHtml(compound)}</span>`;
+    const driverCells = showDriverColumns
+      ? `<td class="text-center comparison-column"><span class="comparison-driver-badge ${driver.isPlayer ? "is-player" : ""}" style="--driver-comparison-color:${driverColor}">${escapeHtml(driver.name)}</span></td><td class="text-center comparison-column ${delta === null ? "" : delta > 0 ? "comparison-delta-slower" : delta < 0 ? "comparison-delta-faster" : "comparison-delta-even"}">${delta === null ? "—" : `${delta > 0 ? "+" : ""}${delta.toFixed(3)}s`}</td>`
+      : "";
 
     row.innerHTML = `
+            ${driverCells}
             <td class="text-center" style="padding: 8px 4px;">${lap.lap}</td>
             <td class="text-center" style="padding: 8px 4px;">${statusLabel}</td>
             <td class="text-center" style="padding: 8px 4px;">${lap.lap_time}</td>
@@ -4479,14 +4929,14 @@ function renderTable() {
             <td class="text-center" style="padding: 8px 4px;">${lap.s2}</td>
             <td class="text-center group-end" style="padding: 8px 4px;">${lap.s3}</td>
             <td class="text-center" style="padding: 8px 4px;">${rtCompoundBadge}</td>
-            <td class="text-center" style="padding: 8px 4px;">${lap.fuel_kg.toFixed(2)}</td>
+            <td class="text-center" style="padding: 8px 4px;">${Number(lap.fuel_kg || 0).toFixed(2)}</td>
             <td class="text-center" style="padding: 8px 4px;">${fuelConsumed.toFixed(2)}</td>
-            <td class="text-center group-start ${getWearClass(lap.tyre_wear.FL)}" style="padding: 8px 4px;">${lap.tyre_wear.FL.toFixed(2)}</td>
-            <td class="text-center ${getWearClass(lap.tyre_wear.FR)}" style="padding: 8px 4px;">${lap.tyre_wear.FR.toFixed(2)}</td>
-            <td class="text-center ${getWearClass(lap.tyre_wear.RL)}" style="padding: 8px 4px;">${lap.tyre_wear.RL.toFixed(2)}</td>
-            <td class="text-center group-end ${getWearClass(lap.tyre_wear.RR)}" style="padding: 8px 4px;">${lap.tyre_wear.RR.toFixed(2)}</td>
-            <td class="text-center" style="padding: 8px 4px;">${(lap.ers_deployed_j / 1000000).toFixed(2)}</td>
-            <td class="text-center" style="padding: 8px 4px;">${(lap.ers_remaining_j / 1000000).toFixed(2)}</td>
+            <td class="text-center group-start ${getWearClass(Number(lap.tyre_wear?.FL || 0))}" style="padding: 8px 4px;">${Number(lap.tyre_wear?.FL || 0).toFixed(2)}</td>
+            <td class="text-center ${getWearClass(Number(lap.tyre_wear?.FR || 0))}" style="padding: 8px 4px;">${Number(lap.tyre_wear?.FR || 0).toFixed(2)}</td>
+            <td class="text-center ${getWearClass(Number(lap.tyre_wear?.RL || 0))}" style="padding: 8px 4px;">${Number(lap.tyre_wear?.RL || 0).toFixed(2)}</td>
+            <td class="text-center group-end ${getWearClass(Number(lap.tyre_wear?.RR || 0))}" style="padding: 8px 4px;">${Number(lap.tyre_wear?.RR || 0).toFixed(2)}</td>
+            <td class="text-center" style="padding: 8px 4px;">${(Number(lap.ers_deployed_j || 0) / 1000000).toFixed(2)}</td>
+            <td class="text-center" style="padding: 8px 4px;">${(Number(lap.ers_remaining_j || 0) / 1000000).toFixed(2)}</td>
         `;
     tbody.appendChild(row);
   });
@@ -6407,13 +6857,37 @@ function renderCompareCharts(playerEntry, opponentName) {
   const summary = document.getElementById("compareSummary");
   if (summary) {
     const diff = (totalYou - totalOpp) / 1000;
-    summary.innerHTML = `Avg delta: <b style="color:${avgDelta < 0 ? "#2ecc71" : "#e10600"}">${avgDelta > 0 ? "+" : ""}${avgDelta.toFixed(3)}s</b> · Total over ${commonLaps} common lap${commonLaps === 1 ? "" : "s"}: <b>${fmtLapMs(totalYou)}</b> vs <b>${fmtLapMs(totalOpp)}</b> (<b style="color:${diff < 0 ? "#2ecc71" : "#e10600"}">${diff > 0 ? "+" : ""}${diff.toFixed(3)}s</b>)`;
+    const avgDeltaClass =
+      avgDelta < 0
+        ? "compare-result-faster"
+        : avgDelta > 0
+          ? "compare-result-slower"
+          : "compare-result-even";
+    const totalDeltaClass =
+      diff < 0
+        ? "compare-result-faster"
+        : diff > 0
+          ? "compare-result-slower"
+          : "compare-result-even";
+    summary.innerHTML = `Avg Δ (You − Opp.): <b class="${avgDeltaClass}">${avgDelta > 0 ? "+" : ""}${avgDelta.toFixed(3)}s</b> · Total over ${commonLaps} common lap${commonLaps === 1 ? "" : "s"}: <b>${fmtLapMs(totalYou)}</b> vs <b>${fmtLapMs(totalOpp)}</b> (<b class="${totalDeltaClass}">${diff > 0 ? "+" : ""}${diff.toFixed(3)}s</b>)`;
   }
 
+  const playerColor = "#ff5b56";
+  const oppColor = getComparisonDriverColor(opp);
   const thYou = document.getElementById("compareThYou");
   const thOpp = document.getElementById("compareThOpp");
-  if (thYou) thYou.textContent = `You (${playerEntry.name})`;
-  if (thOpp) thOpp.textContent = opp.name;
+  if (thYou) {
+    thYou.textContent = `You (${playerEntry.name})`;
+    thYou.style.color = playerColor;
+    thYou.style.borderBottomColor = playerColor;
+  }
+  if (thOpp) {
+    thOpp.textContent = opp.name;
+    thOpp.style.color = oppColor;
+    thOpp.style.borderBottomColor = oppColor;
+  }
+  const opponentLegend = document.querySelector(".compare-opponent-key");
+  if (opponentLegend) opponentLegend.style.color = oppColor;
 
   // Delta bar chart
   const deltaCtx = document.getElementById("compareDeltaChart");
@@ -6427,7 +6901,13 @@ function renderCompareCharts(playerEntry, opponentName) {
           label: "Delta (s) — negative = you were faster",
           data: deltas,
           backgroundColor: deltas.map((d) =>
-            d === null ? "rgba(120,120,120,0.3)" : d < 0 ? "rgba(46,204,113,0.85)" : "rgba(225,6,0,0.85)"
+            d === null
+              ? "rgba(120,120,120,0.4)"
+              : d < 0
+                ? "rgba(74,222,128,0.95)"
+                : d > 0
+                  ? "rgba(255,87,87,0.95)"
+                  : "rgba(226,232,240,0.8)",
           ),
         }],
       },
@@ -6447,12 +6927,7 @@ function renderCompareCharts(playerEntry, opponentName) {
   const overlayCtx = document.getElementById("compareOverlayChart");
   if (overlayCtx) {
     if (charts.compareOverlayChart) charts.compareOverlayChart.destroy();
-    // Player is always red so it stays consistent across comparisons;
-    // opponent uses their team color, falling back to a distinct cyan
-    // and to another distinct hue if the opponent team also maps to red.
-    const playerColor = "#e10600";
-    let oppColor = teamColorFor(opp.team) || "#00b8d4";
-    if (oppColor.toLowerCase() === playerColor.toLowerCase()) oppColor = "#00b8d4";
+    // Keep the player fixed in red and use the opponent's saved palette color.
     charts.compareOverlayChart = new Chart(overlayCtx.getContext("2d"), {
       type: "line",
       data: {
@@ -6465,6 +6940,10 @@ function renderCompareCharts(playerEntry, opponentName) {
             backgroundColor: playerColor + "33",
             tension: 0.2,
             spanGaps: true,
+            borderWidth: 3,
+            pointRadius: 2,
+            pointHoverRadius: 5,
+            pointBackgroundColor: playerColor,
           },
           {
             label: opp.name,
@@ -6473,6 +6952,10 @@ function renderCompareCharts(playerEntry, opponentName) {
             backgroundColor: oppColor + "33",
             tension: 0.2,
             spanGaps: true,
+            borderWidth: 3,
+            pointRadius: 2,
+            pointHoverRadius: 5,
+            pointBackgroundColor: oppColor,
           },
         ],
       },
@@ -6505,11 +6988,18 @@ function renderCompareCharts(playerEntry, opponentName) {
     tbody.innerHTML = labels
       .map((lap, i) => {
         const d = deltas[i];
-        const cls = d === null ? "" : d < 0 ? "delta-pos" : "delta-neg";
+        const cls =
+          d === null
+            ? ""
+            : d < 0
+              ? "delta-pos"
+              : d > 0
+                ? "delta-neg"
+                : "delta-even";
         return `<tr>
           <td class="text-center">${lap}</td>
-          <td class="text-center">${fmtLapMs(youMs[i])}</td>
-          <td class="text-center">${fmtLapMs(oppMs[i])}</td>
+          <td class="text-center" style="color:${playerColor}">${fmtLapMs(youMs[i])}</td>
+          <td class="text-center" style="color:${oppColor}">${fmtLapMs(oppMs[i])}</td>
           <td class="text-center ${cls}">${d === null ? "—" : (d > 0 ? "+" : "") + d.toFixed(3)}</td>
         </tr>`;
       })

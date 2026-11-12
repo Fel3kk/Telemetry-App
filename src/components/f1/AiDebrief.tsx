@@ -2,15 +2,135 @@ import { useEffect, useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/lib/supabase";
 import { getActiveCareer } from "@/lib/career";
+import { trackSlug } from "@/lib/f1-shell";
 import { buildDebriefFacts } from "@/lib/race-debrief";
 import { fetchDebriefSessions, type DebriefSessionRow } from "@/lib/debrief-sessions";
 import { Button } from "@/components/ui/button";
 import { generateDebrief, type Debrief } from "@/lib/ai-debrief.functions";
 
-type Row = DebriefSessionRow;
 type QA = { q: string; a: string };
+type LocalSessionSnapshot = {
+  season: number;
+  career: string | null;
+  track_name: string;
+  category: string;
+  session_type?: string | null;
+  driver_name?: string;
+  starting_position?: number | null;
+  finishing_position?: number | null;
+  created_at?: string;
+};
+type CachedDebrief = {
+  debrief?: Debrief | null;
+  qa?: QA[];
+  session?: LocalSessionSnapshot;
+  savedAt?: string;
+};
+type Row = DebriefSessionRow & { localOnly?: boolean };
 
-const cacheKey = (id: string) => `f1.debrief.v1.${id}`;
+const CACHE_PREFIX = "f1.debrief.v1.";
+const cacheKey = (id: string) => `${CACHE_PREFIX}${id}`;
+
+function localSessionSnapshot(
+  session: Row,
+  season: number,
+  career: string | null,
+): LocalSessionSnapshot {
+  return {
+    season,
+    career,
+    track_name: session.track_name,
+    category: session.category,
+    session_type: session.session_type,
+    driver_name: session.driver_name,
+    starting_position: session.starting_position,
+    finishing_position: session.finishing_position,
+    created_at: session.created_at,
+  };
+}
+
+function readLocalDebriefSessions(options: {
+  season: number;
+  track: string;
+  cat: string;
+  career: string | null;
+}): Row[] {
+  const rows: Row[] = [];
+  try {
+    for (let index = 0; index < localStorage.length; index++) {
+      const key = localStorage.key(index);
+      if (!key?.startsWith(CACHE_PREFIX)) continue;
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+
+      let cached: CachedDebrief;
+      try {
+        cached = JSON.parse(raw) as CachedDebrief;
+      } catch (error) {
+        console.warn("Skipping an unreadable local AI debrief.", error);
+        continue;
+      }
+
+      if (!cached || typeof cached !== "object" || Array.isArray(cached)) {
+        continue;
+      }
+      const metadata = cached.session;
+      if (
+        !cached.debrief ||
+        !metadata ||
+        Number(metadata.season) !== options.season ||
+        metadata.career !== options.career ||
+        trackSlug(metadata.track_name) !== trackSlug(options.track)
+      ) {
+        continue;
+      }
+      const isSprint = /sprint|shootout/i.test(
+        `${metadata.category} ${metadata.session_type ?? ""}`,
+      );
+      if (options.cat === "Sprint" ? !isSprint : isSprint) continue;
+
+      const id = key.slice(CACHE_PREFIX.length);
+      if (!id) continue;
+      rows.push({
+        ...metadata,
+        id,
+        lap_history: [],
+        localOnly: true,
+      });
+    }
+  } catch (error) {
+    console.warn("Unable to read locally saved AI debriefs.", error);
+  }
+  return rows.sort((a, b) =>
+    String(b.created_at ?? "").localeCompare(String(a.created_at ?? "")),
+  );
+}
+
+function attachSessionMetadata(
+  rows: DebriefSessionRow[],
+  season: number,
+  career: string | null,
+) {
+  rows.forEach((session) => {
+    try {
+      const key = cacheKey(session.id);
+      const raw = localStorage.getItem(key);
+      if (!raw) return;
+      const cached = JSON.parse(raw) as CachedDebrief;
+      if (!cached.debrief || cached.session) return;
+      localStorage.setItem(
+        key,
+        JSON.stringify({
+          ...cached,
+          session: localSessionSnapshot(session, season, career),
+          savedAt: new Date().toISOString(),
+        }),
+      );
+    } catch (error) {
+      console.warn("Unable to add session details to a saved AI debrief.", error);
+    }
+  });
+}
 
 export function AiDebrief({ season, track, cat = "Race" }: { season: number; track: string; cat?: string }) {
   const run = useServerFn(generateDebrief);
@@ -20,6 +140,8 @@ export function AiDebrief({ season, track, cat = "Race" }: { season: number; tra
   const [loadFailed, setLoadFailed] = useState(false);
   const [reload, setReload] = useState(0);
   const [debrief, setDebrief] = useState<Debrief | null>(null);
+  const [savedLocally, setSavedLocally] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [qa, setQa] = useState<QA[]>([]);
@@ -31,17 +153,49 @@ export function AiDebrief({ season, track, cat = "Race" }: { season: number; tra
     setLoadFailed(false);
     setSessions([]);
     setSelected("");
+    const career = getActiveCareer();
+    const localRows = readLocalDebriefSessions({
+      season,
+      track,
+      cat,
+      career,
+    });
     (async () => {
       try {
-        const rows = await fetchDebriefSessions(supabase, { season, track, cat, career: getActiveCareer() });
+        const rows = await fetchDebriefSessions(supabase, { season, track, cat, career });
         if (!active) return;
-        setSessions(rows);
-        setSelected(rows[0]?.id ?? "");
-        setStatus(rows.length ? "" : "No sessions uploaded for this weekend yet.");
-      } catch {
+        attachSessionMetadata(rows, season, career);
+        const cachedRows = readLocalDebriefSessions({
+          season,
+          track,
+          cat,
+          career,
+        });
+        const serverIds = new Set(rows.map((row) => row.id));
+        const combinedRows = [
+          ...rows,
+          ...cachedRows.filter((row) => !serverIds.has(row.id)),
+        ];
+        setSessions(combinedRows);
+        setSelected(rows[0]?.id ?? combinedRows[0]?.id ?? "");
+        setStatus(
+          rows.length
+            ? ""
+            : cachedRows.length
+              ? "Showing debriefs saved on this device. Session data is unavailable for new analysis."
+              : "No sessions uploaded for this weekend yet.",
+        );
+      } catch (loadError) {
+        console.error("Unable to load sessions for the AI debrief.", loadError);
         if (active) {
+          setSessions(localRows);
+          setSelected(localRows[0]?.id ?? "");
           setLoadFailed(true);
-          setStatus("Saved sessions couldn't be loaded. Check your connection and try again.");
+          setStatus(
+            localRows.length
+              ? "Sessions couldn't be loaded. Showing debriefs saved on this device; reconnect to analyze or ask follow-up questions."
+              : "Saved sessions couldn't be loaded. Check your connection and try again.",
+          );
         }
       }
     })();
@@ -49,19 +203,72 @@ export function AiDebrief({ season, track, cat = "Race" }: { season: number; tra
   }, [season, track, cat, reload]);
 
   const session = sessions.find((s) => s.id === selected);
-  const facts = useMemo(() => (session ? buildDebriefFacts(session) : null), [session]);
+  const facts = useMemo(
+    () => (session && !session.localOnly ? buildDebriefFacts(session) : null),
+    [session],
+  );
 
   useEffect(() => {
-    setError(""); setQa([]); setDebrief(null);
+    setError("");
+    setSaveError("");
+    setSavedLocally(false);
+    setQa([]);
+    setDebrief(null);
     if (!selected) return;
     try {
       const raw = localStorage.getItem(cacheKey(selected));
-      if (raw) { const c = JSON.parse(raw); setDebrief(c.debrief ?? null); setQa(c.qa ?? []); }
-    } catch { /* ignore */ }
-  }, [selected]);
+      if (!raw) return;
+      const cached = JSON.parse(raw) as CachedDebrief;
+      const cachedQa = Array.isArray(cached.qa)
+        ? cached.qa.filter(
+            (item): item is QA =>
+              !!item &&
+              typeof item.q === "string" &&
+              typeof item.a === "string",
+          )
+        : [];
+      setDebrief(cached.debrief ?? null);
+      setQa(cachedQa);
+      setSavedLocally(!!cached.debrief);
+
+      if (cached.debrief && session && !session.localOnly && !cached.session) {
+        localStorage.setItem(
+          cacheKey(selected),
+          JSON.stringify({
+            ...cached,
+            session: localSessionSnapshot(session, season, getActiveCareer()),
+            savedAt: new Date().toISOString(),
+          }),
+        );
+      }
+    } catch (cacheLoadError) {
+      console.error("Unable to restore the locally saved AI debrief.", cacheLoadError);
+      setSaveError("The saved debrief on this device couldn't be read.");
+    }
+  }, [selected, session, season]);
 
   const save = (d: Debrief | null, q: QA[]) => {
-    try { localStorage.setItem(cacheKey(selected), JSON.stringify({ debrief: d, qa: q })); } catch { /* ignore */ }
+    if (!selected) return;
+    try {
+      localStorage.setItem(
+        cacheKey(selected),
+        JSON.stringify({
+          debrief: d,
+          qa: q,
+          session:
+            session && !session.localOnly
+              ? localSessionSnapshot(session, season, getActiveCareer())
+              : undefined,
+          savedAt: d ? new Date().toISOString() : undefined,
+        } satisfies CachedDebrief),
+      );
+      setSavedLocally(!!d);
+      setSaveError("");
+    } catch (cacheSaveError) {
+      console.error("Unable to save the AI debrief on this device.", cacheSaveError);
+      setSavedLocally(false);
+      setSaveError("This debrief couldn't be saved on this device.");
+    }
   };
 
   async function generate() {
@@ -99,17 +306,22 @@ export function AiDebrief({ season, track, cat = "Race" }: { season: number; tra
       {sessions.length > 0 && (
         <div className="flex flex-wrap items-center gap-2">
           <select value={selected} onChange={(e) => setSelected(e.target.value)} className="rounded-md border border-border bg-card px-3 py-2 text-sm">
-            {sessions.map((s) => <option key={s.id} value={s.id}>{s.session_type || s.category}</option>)}
+            {sessions.map((s) => <option key={s.id} value={s.id}>{s.session_type || s.category}{s.localOnly ? " · saved on device" : ""}</option>)}
           </select>
           {typeof c?.score === "number" && (
             <span className="rounded-md bg-primary/15 px-3 py-2 text-sm font-semibold text-primary">Consistency {Math.round(c.score)}/100</span>
           )}
-          <button onClick={generate} disabled={busy || !facts} className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50">
-            {busy && !debrief ? "Engineer is reviewing…" : debrief ? "Regenerate debrief" : "Get debrief"}
-          </button>
+          {session?.localOnly ? (
+            <span className="text-xs text-muted-foreground">Local copy · session data unavailable</span>
+          ) : (
+            <button onClick={generate} disabled={busy || !facts} className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50">
+              {busy && !debrief ? "Engineer is reviewing…" : debrief ? "Regenerate debrief" : "Get debrief"}
+            </button>
+          )}
         </div>
       )}
       {error && <p className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
+      {saveError && <p role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{saveError}</p>}
 
       {debrief && (
         <div className="space-y-4 rounded-lg border border-border bg-card p-4">
@@ -118,6 +330,7 @@ export function AiDebrief({ season, track, cat = "Race" }: { season: number; tra
             <div className="min-w-0">
               <h3 className="text-lg font-bold">{debrief.headline}</h3>
               <p className="mt-1 border-l-2 border-primary pl-3 text-sm italic text-muted-foreground">📻 “{debrief.radio}”</p>
+              {savedLocally && <p className="mt-2 text-xs font-medium text-muted-foreground">Saved on this device</p>}
             </div>
           </div>
           <p className="text-sm">{debrief.summary}</p>

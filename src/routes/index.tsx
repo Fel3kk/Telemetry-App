@@ -1,15 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { CircleX, Flag, Gauge, Share2, Timer, Trophy, Upload, Zap } from "lucide-react";
 import {
-  CircleX,
-  Flag,
-  Gauge,
-  Share2,
-  Timer,
-  Trophy,
-  Zap,
-} from "lucide-react";
-import {
+  appUploadUrl,
   fetchSessions,
   loadCachedSessions,
   cacheIsFresh,
@@ -31,6 +24,13 @@ import {
 import { ShellHeader, ShellPage } from "@/components/f1/ShellHeader";
 import { shareSeasonStats } from "@/lib/share-stats";
 import { seasonSummary } from "@/lib/f1-stats";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -57,6 +57,8 @@ function MainPage() {
   const [sessions, setSessions] = useState<Session[]>(cached ?? []);
   const [loading, setLoading] = useState(!cached);
   const [err, setErr] = useState<string | null>(null);
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const uploadFrameRef = useRef<HTMLIFrameElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -78,6 +80,27 @@ function MainPage() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const onMessage = (event: MessageEvent) => {
+      if (
+        event.origin !== window.location.origin ||
+        event.source !== uploadFrameRef.current?.contentWindow ||
+        event.data?.type !== "f1-sessions-updated" ||
+        event.data?.reason !== "upload"
+      ) {
+        return;
+      }
+
+      setUploadOpen(false);
+      setErr(null);
+      fetchSessions()
+        .then(setSessions)
+        .catch((error) => setErr(String(error)));
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
   }, []);
 
   useEffect(() => {
@@ -144,7 +167,7 @@ function MainPage() {
                 ))}
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-1.5 sm:flex sm:justify-end sm:gap-2">
+            <div className="grid grid-cols-4 gap-1.5 sm:flex sm:justify-end sm:gap-2">
               <Link
                 to="/season/$season/title"
                 params={{ season: String(season) }}
@@ -162,6 +185,15 @@ function MainPage() {
                 <Timer size={14} aria-hidden="true" />
                 <span className="truncate">Records</span>
               </Link>
+              <button
+                type="button"
+                onClick={() => setUploadOpen(true)}
+                className={ACTION_CLS + " border-primary/40 bg-primary/10"}
+                title="Upload telemetry for this season"
+              >
+                <Upload size={14} aria-hidden="true" />
+                <span className="truncate">Upload</span>
+              </button>
               <ShareButton season={season} sessions={seasonSessions} />
             </div>
           </div>
@@ -206,6 +238,23 @@ function MainPage() {
           ))}
         </div>
       </ShellPage>
+      <Dialog open={uploadOpen} onOpenChange={setUploadOpen}>
+        <DialogContent className="max-h-[90vh] max-w-xl overflow-hidden p-4 sm:p-6">
+          <DialogHeader>
+            <DialogTitle>Upload telemetry</DialogTitle>
+            <DialogDescription>
+              Choose one or more original telemetry JSON files for Season {season}. The
+              dashboard refreshes after they save.
+            </DialogDescription>
+          </DialogHeader>
+          <iframe
+            ref={uploadFrameRef}
+            title="Upload telemetry files"
+            src={appUploadUrl(season)}
+            className="h-[220px] w-full rounded-md border border-border bg-background"
+          />
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

@@ -7,7 +7,9 @@ storage.
 
 To enable AI tracing, set these server-side environment variables:
 
-- `GEMINI_API_KEY`: Google AI Studio key (the same key used by the AI debrief).
+- `GEMINI_API_KEY` (or `GOOGLE_AI_API_KEY` / `GOOGLE_API_KEY`): Google AI
+  Studio key used by both AI tracing and the AI debrief. Keep it server-side;
+  never use a `VITE_` variable for this secret.
 - `RACING_LINES_ADMIN_USER_ID`: the Supabase Auth UUID of the site owner allowed
   to request AI drafts.
 

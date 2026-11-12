@@ -13,7 +13,8 @@
       <button
         id="themeToggle"
         class="theme-toggle"
-        title="Toggle Light/Dark Mode"
+        title="Switch to light mode"
+        aria-label="Switch to light mode"
       >
         🌓
       </button>
@@ -281,13 +282,18 @@
                 <canvas id="compareOverlayChart"></canvas>
               </div>
               <div class="table-container" style="margin-top:16px">
+                <div class="compare-table-key" aria-label="Comparison table legend">
+                  <span class="compare-table-key-item compare-you-key">You</span>
+                  <span class="compare-table-key-item compare-opponent-key">Opponent</span>
+                  <span class="compare-table-key-note">Δ = You − Opponent; negative means you were faster</span>
+                </div>
                 <table id="compareTable">
                   <thead>
                     <tr>
                       <th>Lap</th>
                       <th id="compareThYou">You</th>
                       <th id="compareThOpp">Opponent</th>
-                      <th>Δ</th>
+                      <th>Δ (You − Opp.)</th>
                     </tr>
                   </thead>
                   <tbody id="compareTableBody"></tbody>
@@ -309,6 +315,7 @@
 
               <div class="charts-section">
                 <h2 class="section-title">📊 Performance Metrics</h2>
+                <div id="graphsDriverComparison" class="driver-comparison" aria-label="Graph driver comparison"></div>
                 <div class="overlay-guide" aria-label="Chart overlay legend">
                   <div class="overlay-guide-title">Overlay guide</div>
                   <div class="overlay-guide-items">
@@ -372,6 +379,7 @@
             </h2>
           </div>
           <div class="section-body">
+            <div id="lapsDriverComparison" class="driver-comparison" aria-label="Lap table driver comparison"></div>
             <div id="stintSection" style="display: none; margin-bottom: 40px">
               <h2 class="section-title">👟 Stint Summary</h2>
               <div class="table-container">
@@ -402,6 +410,8 @@
               <table id="lapTable">
                 <thead>
                   <tr>
+                    <th rowspan="2" class="text-center comparison-column" hidden>Driver</th>
+                    <th rowspan="2" class="text-center comparison-column" hidden>Δ vs Player</th>
                     <th rowspan="2" class="text-center">Lap</th>
                     <th rowspan="2" class="text-center">Status</th>
                     <th rowspan="2" class="text-center">Lap Time</th>

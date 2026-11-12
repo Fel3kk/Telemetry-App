@@ -2,7 +2,7 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
 import { supabase, displayNameFromSession } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
-import { Gauge, Home, LogOut } from "lucide-react";
+import { Gauge, Home, LogOut, Moon, Sun } from "lucide-react";
 
 export function titleCase(name: string) {
   return (name || "")
@@ -37,6 +37,7 @@ export function ShellHeader({ crumbs }: { crumbs: { label: string; to?: any; par
           </nav>
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
+          <ThemeToggle />
           <CareerChip />
           <Button asChild variant="ghost" size="icon" className="h-11 w-11 shrink-0"><Link to="/" aria-label="Home" title="Home"><Home /></Link></Button>
           <UserMenu />
@@ -44,6 +45,46 @@ export function ShellHeader({ crumbs }: { crumbs: { label: string; to?: any; par
       </div>
     </header>
 
+  );
+}
+
+function ThemeToggle() {
+  const [isLight, setIsLight] = useState(false);
+
+  useEffect(() => {
+    let light = false;
+    try {
+      light = window.localStorage.getItem("theme") === "light";
+    } catch (error) {
+      console.warn("Unable to load the saved theme preference.", error);
+    }
+    document.documentElement.classList.toggle("light-theme", light);
+    setIsLight(light);
+  }, []);
+
+  function toggleTheme() {
+    const nextIsLight = !isLight;
+    document.documentElement.classList.toggle("light-theme", nextIsLight);
+    setIsLight(nextIsLight);
+    try {
+      window.localStorage.setItem("theme", nextIsLight ? "light" : "dark");
+    } catch (error) {
+      console.warn("Unable to save the theme preference.", error);
+    }
+  }
+
+  const action = isLight ? "Switch to dark mode" : "Switch to light mode";
+  return (
+    <Button
+      onClick={toggleTheme}
+      variant="ghost"
+      size="icon"
+      className="h-11 w-11 shrink-0"
+      aria-label={action}
+      title={action}
+    >
+      {isLight ? <Moon /> : <Sun />}
+    </Button>
   );
 }
 
