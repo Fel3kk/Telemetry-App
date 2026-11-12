@@ -146,3 +146,9 @@
     color: var(--color-foreground);
   }
 }
+
+@media (max-width: 639px) {
+  .ers-editor button { min-height: 44px; }
+  .ers-editor button:has(> svg):not(:has(> span)) { min-width: 44px; }
+  .ers-editor input:not([type="color"]), .ers-editor select { min-height: 44px; font-size: 16px; }
+}

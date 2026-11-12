@@ -13,3 +13,5 @@
 - Keep racing-line points normalized and calibrated per track in one owner-published site collection shared by Qualifying and ERS; device storage is export-only and replacement artwork requires independent calibration.
 - Load AI debrief sessions through the tested browser query helper with explicit database-column aliases, so stored position names cannot diverge from analysis fields.
 - Keep legacy constructor lookup regression tests against the analyzer's actual helper code; explicit session seasons prevent cross-season fallback and grid-backfill contamination.
+- ERS touch input uses SVG coordinate transforms and rejects scrolling gestures; zoom scrolls the map rather than changing calibrated points.
+- Account track saves read back the owner-scoped row before confirming success, so a failed write cannot appear synced.

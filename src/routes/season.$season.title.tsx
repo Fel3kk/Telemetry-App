@@ -27,6 +27,8 @@ export const Route = createFileRoute("/season/$season/title")({
       { name: "description", content: "Championship permutations: points needed per remaining race to win the title." },
       { property: "og:title", content: "Title Race · F1 Telemetry Analyzer" },
       { property: "og:description", content: "Championship permutations: points needed per remaining race to win the title." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: TitlePage,

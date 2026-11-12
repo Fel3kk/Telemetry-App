@@ -70,13 +70,13 @@ function ViewPage() {
         ]}
       />
       <ShellPage>
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="mb-3 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 sm:flex sm:justify-between">
           <h1 className="min-w-0 truncate text-xl font-black sm:text-2xl">{label}</h1>
           <Link
             to="/season/$season/track/$track"
             params={{ season, track }}
             search={{ cat }}
-            className="shrink-0 rounded-md border border-white/15 px-3 py-1.5 text-[11px] font-semibold hover:bg-white/5 sm:text-xs"
+            className="max-w-40 truncate rounded-md border border-border px-3 py-3 text-[11px] font-semibold hover:bg-accent sm:max-w-none sm:text-xs"
           >
             ← Back to {trackDisplay}
           </Link>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { coverage, projectOnLine, segmentSpan, sliceLine, nudge } from "./ers-map";
+import { coverage, projectOnLine, segmentSpan, sliceLine, nudge, isMapTap } from "./ers-map";
 
 // A square on a 1080x608 map scaled so every side has equal real length.
 const h = 0.4;
@@ -12,6 +12,10 @@ const SQUARE = [
 ];
 
 describe("ERS map geometry", () => {
+  it("does not paint when a finger scrolls across the map", () => {
+    expect(isMapTap({ x: 100, y: 100 }, { x: 104, y: 103 })).toBe(true);
+    expect(isMapTap({ x: 100, y: 100 }, { x: 100, y: 140 })).toBe(false);
+  });
   it("measures a segment that wraps past the finish line", () => {
     expect(segmentSpan(0.9, 0.1)).toBeCloseTo(0.2, 6);
     expect(segmentSpan(0.2, 0.5)).toBeCloseTo(0.3, 6);
@@ -28,7 +32,7 @@ describe("ERS map geometry", () => {
     const path = sliceLine(SQUARE, 0.875, 0.125);
     expect(path[0].x).toBeCloseTo(0.3, 4);
     expect(path.some((p) => p.x === SQUARE[0].x && p.y === SQUARE[0].y)).toBe(true);
-    expect(path.at(-1)!.x).toBeCloseTo(0.3 + w / 2, 4);
+    expect(path.at(-1)?.x).toBeCloseTo(0.3 + w / 2, 4);
   });
 
   it("lets a later segment paint over an earlier one", () => {

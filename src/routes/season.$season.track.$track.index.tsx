@@ -431,6 +431,9 @@ function TrackPage() {
     const byView = new Map(OPTIONS.map((o) => [o.view, o]));
     return order.map((v) => byView.get(v)).filter(Boolean) as Opt[];
   }, [order]);
+  const visibleOptions = orderedOptions.filter((o) =>
+    (GROUPS.find((g) => g.id === group)?.views as readonly string[]).includes(o.view),
+  );
 
   function reorder(from: string, to: string) {
     if (from === to) return;
@@ -591,21 +594,25 @@ function TrackPage() {
           </h2>
           <span className="hidden text-[11px] text-white/40 sm:inline">Drag cards to reorder</span>
         </div>
-        <div className="mb-3 flex flex-wrap gap-2" role="tablist">
+        <div className="mb-3 grid w-full grid-cols-1 gap-2 sm:grid-cols-3" role="tablist">
           {GROUPS.map((g) => (
             <button
               key={g.id}
               role="tab"
               aria-selected={group === g.id}
               onClick={() => pickGroup(g.id)}
-              className={"rounded-full border px-3 py-1.5 text-xs font-semibold transition " + (group === g.id ? "border-red-500 bg-red-500/20 text-white" : "border-white/10 bg-white/5 text-white/60 hover:text-white")}
+              className={"w-full rounded-lg border px-3 py-2.5 text-center text-xs font-semibold transition " + (group === g.id ? "border-red-500 bg-red-500/20 text-white" : "border-white/10 bg-white/5 text-white/60 hover:text-white")}
             >
               {g.label}
             </button>
           ))}
         </div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-          {orderedOptions.filter((o) => (GROUPS.find((g) => g.id === group)?.views as readonly string[]).includes(o.view)).map((o) => {
+        <div className="-mx-1 overflow-x-auto px-1 pb-2">
+          <div
+            className="grid gap-3"
+            style={{ gridTemplateColumns: `repeat(${visibleOptions.length}, minmax(150px, 1fr))` }}
+          >
+          {visibleOptions.map((o) => {
             const accent = ACCENTS[o.view] ?? "#ef3340";
             const linkProps =
               o.view === "teammate"
@@ -639,12 +646,12 @@ function TrackPage() {
                   e.preventDefault();
                   if (dragging) reorder(dragging, o.view);
                 }}
-                className={"flex transition " + (dragging === o.view ? "opacity-40" : "")}
+                className={"flex min-w-0 transition " + (dragging === o.view ? "opacity-40" : "")}
               >
                 <Link
                   {...(linkProps as any)}
                   style={{ ["--accent" as any]: accent }}
-                  className="group relative flex h-full w-full items-start gap-2 overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br from-white/[0.06] to-white/[0.02] p-3 pl-4 shadow-[0_2px_10px_rgba(0,0,0,0.35)] transition duration-200 hover:-translate-y-1 hover:border-[color:var(--accent)] hover:shadow-[0_10px_28px_-10px_var(--accent)] cursor-grab active:cursor-grabbing"
+                  className="group relative flex h-full min-h-[78px] w-full items-start gap-2 overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br from-white/[0.06] to-white/[0.02] p-3 pl-4 shadow-[0_2px_10px_rgba(0,0,0,0.35)] transition duration-200 hover:-translate-y-1 hover:border-[color:var(--accent)] hover:shadow-[0_10px_28px_-10px_var(--accent)] cursor-grab active:cursor-grabbing"
                 >
                   <span
                     className="absolute inset-y-0 left-0 w-[3px] opacity-60 transition group-hover:opacity-100"
@@ -668,6 +675,7 @@ function TrackPage() {
               </div>
             );
           })}
+          </div>
         </div>
 
       </ShellPage>

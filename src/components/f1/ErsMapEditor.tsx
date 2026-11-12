@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { Copy, Download, Minus, Pencil, Plus, Trash2, Upload, X, Check } from "lucide-react";
+import { Copy, Download, Minus, Pencil, Plus, Trash2, Upload, X, Check, Undo2, Cloud, CloudOff, ZoomIn, ZoomOut, MousePointer2, CloudUpload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { trackMapUrl, trackMapFallbackUrl, trackSlug } from "@/lib/f1-shell";
-import { ZANDVOORT_LINE, type Point } from "@/lib/quali-simulation";
+import type { Point } from "@/lib/quali-simulation";
+import { resolveRacingLine, sharedRacingLine } from "@/lib/racing-lines";
+import { loadTrackData, saveTrackData } from "@/lib/track-cloud";
+import { RacingLineActions } from "./RacingLineActions";
 import {
-  coverage, ersKeys, isValidSegment, lapOrder, nudge, pointAtProgress, projectOnLine, segmentSpan, sliceLine,
+  coverage, ersKeys, isValidSegment, isMapTap, lapOrder, nudge, pointAtProgress, projectOnLine, segmentSpan, sliceLine,
   type ErsColor, type ErsMode, type ErsSegment, type ErsSlotMeta,
 } from "@/lib/ers-map";
 
@@ -28,16 +31,39 @@ function readJson<T>(key: string, fallback: T): T {
 }
 
 function loadLine(track: string): Point[] {
-  const fallback = trackSlug(track) === "zandvoort" ? ZANDVOORT_LINE : [];
-  const saved = readJson<Point[] | null>(`f1.quali.line.v1.${trackSlug(track)}`, null);
-  if (Array.isArray(saved) && saved.length >= 3 && saved.every((p) => Number.isFinite(p.x) && Number.isFinite(p.y))) return saved;
-  return fallback;
+  return sharedRacingLine(track);
 }
 
 function loadSlots(slug: string, mode: ErsMode): ErsSlotMeta[] {
   const slots = readJson<ErsSlotMeta[]>(ersKeys.slots(slug, mode), []);
   const valid = Array.isArray(slots) ? slots.filter((s) => s && typeof s.id === "string" && typeof s.name === "string") : [];
   return valid.length ? valid : [{ id: "slot1", name: "Slot 1" }];
+}
+
+type ErsBundle = { version: 1; palette: ErsColor[]; modes: Record<ErsMode, (ErsSlotMeta & { segments: ErsSegment[] })[]> };
+
+function bundleFromDevice(slug: string): ErsBundle {
+  const modes = {} as ErsBundle["modes"];
+  for (const m of ["race", "quali"] as ErsMode[]) modes[m] = loadSlots(slug, m).map((s) => ({ ...s, segments: loadSegments(slug, m, s.id) }));
+  return { version: 1, palette: readJson<ErsColor[]>(ersKeys.palette, []), modes };
+}
+
+function writeBundleToDevice(slug: string, data: any) {
+  if (!data || typeof data !== "object" || typeof data.modes !== "object") return;
+  const incoming: ErsColor[] = Array.isArray(data.palette) ? data.palette.filter((c: ErsColor) => c?.id && c?.name && /^#[0-9a-f]{6}$/i.test(c.color)) : [];
+  const local = readJson<ErsColor[]>(ersKeys.palette, []);
+  const merged = [...(Array.isArray(local) ? local : []), ...incoming.filter((c) => !local.some?.((p) => p.id === c.id))];
+  localStorage.setItem(ersKeys.palette, JSON.stringify(merged));
+  for (const m of ["race", "quali"] as ErsMode[]) {
+    const list = Array.isArray(data.modes[m]) ? data.modes[m] : [];
+    const metas: ErsSlotMeta[] = [];
+    for (const s of list) {
+      if (!s || typeof s.id !== "string" || typeof s.name !== "string") continue;
+      metas.push({ id: s.id, name: s.name.slice(0, 40) });
+      localStorage.setItem(ersKeys.map(slug, m, s.id), JSON.stringify((Array.isArray(s.segments) ? s.segments : []).filter(isValidSegment)));
+    }
+    if (metas.length) localStorage.setItem(ersKeys.slots(slug, m), JSON.stringify(metas));
+  }
 }
 
 function loadSegments(slug: string, mode: ErsMode, slotId: string): ErsSegment[] {
@@ -65,6 +91,14 @@ export function ErsMapEditor({ season, track, cat }: { season: number; track: st
   const [slotName, setSlotName] = useState<{ mode: "new" | "rename"; value: string } | null>(null);
   const [error, setError] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
+  const [history, setHistory] = useState<ErsSegment[][]>([]);
+  const [sync, setSync] = useState<"local" | "loading" | "saved" | "saving" | "error">("loading");
+  const pushTimer = useRef<number | undefined>(undefined);
+  const [cloudTick, setCloudTick] = useState(0);
+  const [zoom, setZoom] = useState(1);
+  const [tool, setTool] = useState<"paint" | "select">("paint");
+  const pointerStart = useRef<Point | null>(null);
+  const syncReady = useRef(false);
 
   // Load palette + racing line on mount / track change (browser only).
   useEffect(() => {
@@ -75,16 +109,34 @@ export function ErsMapEditor({ season, track, cat }: { season: number; track: st
     setLine(loadLine(track));
     setImage(trackMapUrl(track));
     setImageFailed(false);
-  }, [track]);
-
-  // Keep in sync with the qualifying simulator's racing line (same saved line).
-  useEffect(() => {
-    const refresh = () => setLine(loadLine(track));
-    window.addEventListener("storage", refresh);
-    window.addEventListener("focus", refresh);
-    document.addEventListener("visibilitychange", refresh);
-    return () => { window.removeEventListener("storage", refresh); window.removeEventListener("focus", refresh); document.removeEventListener("visibilitychange", refresh); };
-  }, [track]);
+    let live = true;
+    syncReady.current = false;
+    setZoom(1);
+    setSync("loading");
+    (async () => {
+      try {
+        const [savedLine, bundle] = await Promise.all([
+          loadTrackData("racing_line", slug),
+          loadTrackData("ers", slug),
+        ]);
+        if (!live) return;
+        if (savedLine) setLine(resolveRacingLine(track, savedLine));
+        if (bundle) {
+          writeBundleToDevice(slug, bundle);
+          const p2 = readJson<ErsColor[]>(ersKeys.palette, []);
+          setPalette(p2);
+          setActiveColor((cur) => cur || p2[0]?.id || "");
+          setCloudTick((t) => t + 1);
+        }
+        const { supabase } = await import("@/lib/supabase");
+        const { data } = await supabase.auth.getSession();
+        if (live) { syncReady.current = true; setSync(data.session ? "saved" : "local"); }
+      } catch {
+        if (live) setSync("error");
+      }
+    })();
+    return () => { live = false; syncReady.current = false; window.clearTimeout(pushTimer.current); };
+  }, [track, slug]);
 
   // Load slots for this track + mode.
   useEffect(() => {
@@ -97,12 +149,43 @@ export function ErsMapEditor({ season, track, cat }: { season: number; track: st
     setPending(null);
     setSelectedSeg(null);
     setReady(true);
-  }, [slug, mode]);
+    setHistory([]);
+  }, [slug, mode, cloudTick]);
+
+  function scheduleCloudPush() {
+    if (!syncReady.current || sync === "local") return;
+    window.clearTimeout(pushTimer.current);
+    pushTimer.current = window.setTimeout(async () => {
+      setSync("saving");
+      try {
+        const ok = await saveTrackData("ers", slug, bundleFromDevice(slug));
+        setSync(ok ? "saved" : "local");
+      } catch {
+        setSync("error");
+      }
+    }, 800);
+  }
+
+  async function saveNow() {
+    window.clearTimeout(pushTimer.current);
+    setSync("saving");
+    setError("");
+    try {
+      const ok = await saveTrackData("ers", slug, bundleFromDevice(slug));
+      syncReady.current = ok;
+      setSync(ok ? "saved" : "local");
+      if (!ok) setError("Sign in to save your maps across devices.");
+    } catch {
+      setSync("error");
+      setError("Account saving is unavailable. Your map remains on this device; you can retry or export it.");
+    }
+  }
 
   function persist(key: string, value: unknown) {
     try {
       localStorage.setItem(key, JSON.stringify(value));
       setError("");
+      scheduleCloudPush();
     } catch {
       setError("Couldn't save on this device — storage may be full.");
     }
@@ -110,13 +193,25 @@ export function ErsMapEditor({ season, track, cat }: { season: number; track: st
 
   function savePalette(next: ErsColor[]) { setPalette(next); persist(ersKeys.palette, next); }
   function saveSlots(next: ErsSlotMeta[]) { setSlots(next); persist(ersKeys.slots(slug, mode), next); }
-  function saveSegments(next: ErsSegment[]) { setSegments(next); persist(ersKeys.map(slug, mode, slotId), next); }
+  function saveSegments(next: ErsSegment[], undoable = true) {
+    if (undoable) setHistory((h) => [...h.slice(-29), segments]);
+    setSegments(next);
+    persist(ersKeys.map(slug, mode, slotId), next);
+  }
+  function undo() {
+    const prev = history[history.length - 1];
+    if (!prev) return;
+    setHistory((h) => h.slice(0, -1));
+    saveSegments(prev, false);
+    setSelectedSeg(null);
+  }
 
   function switchSlot(id: string) {
     setSlotId(id);
     setSegments(loadSegments(slug, mode, id));
     setPending(null);
     setSelectedSeg(null);
+    setHistory([]);
     persist(ersKeys.activeSlot(slug, mode), id);
   }
 
@@ -173,13 +268,23 @@ export function ErsMapEditor({ season, track, cat }: { season: number; track: st
     if (activeColor === id) setActiveColor(palette.find((x) => x.id !== id)?.id ?? "");
   }
 
-  function onMapClick(e: React.MouseEvent<SVGSVGElement>) {
+  function onMapTap(e: React.PointerEvent<SVGSVGElement>) {
+    const start = pointerStart.current;
+    pointerStart.current = null;
+    if (!start || !isMapTap(start, { x: e.clientX, y: e.clientY })) return;
     if (line.length < 3) return;
-    if (!activeColor) { setHint("Add a colour first, then tap the track."); return; }
-    const box = e.currentTarget.getBoundingClientRect();
-    const p = { x: (e.clientX - box.left) / box.width, y: (e.clientY - box.top) / box.height };
+    const matrix = e.currentTarget.getScreenCTM();
+    if (!matrix) return;
+    const local = new DOMPoint(e.clientX, e.clientY).matrixTransform(matrix.inverse());
+    const p = { x: local.x / 1080, y: local.y / 608 };
     const hit = projectOnLine(line, p);
     if (hit.distance > SNAP) { setHint("Tap closer to the racing line."); return; }
+    if (tool === "select") {
+      const found = [...segments].reverse().find((s) => segmentSpan(s.start, hit.progress) <= segmentSpan(s.start, s.end));
+      setSelectedSeg(found?.id ?? null);
+      return;
+    }
+    if (!activeColor) { setHint("Add a colour first, then tap the track."); return; }
     setHint("");
     if (pending === null) { setPending(hit.progress); setSelectedSeg(null); return; }
     if (segmentSpan(pending, hit.progress) < 0.002) { setPending(null); return; }
@@ -233,6 +338,17 @@ export function ErsMapEditor({ season, track, cat }: { season: number; track: st
     }
   }
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement;
+      if (/INPUT|SELECT|TEXTAREA/.test(t.tagName)) return;
+      if (e.key === "Escape") { setPending(null); setSelectedSeg(null); }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") { e.preventDefault(); undo(); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+
   const colorOf = (id: string) => palette.find((c) => c.id === id);
   const ordered = useMemo(() => lapOrder(segments), [segments]);
   const cover = useMemo(() => coverage(segments), [segments]);
@@ -241,8 +357,8 @@ export function ErsMapEditor({ season, track, cat }: { season: number; track: st
   const activeSlotName = slots.find((s) => s.id === slotId)?.name ?? "";
 
   return (
-    <section className="w-full" aria-label="ERS map editor">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+    <section className="ers-editor w-full min-w-0" aria-label="ERS map editor">
+      <div className="mb-4 grid min-w-0 grid-cols-1 gap-3 sm:flex sm:flex-wrap sm:justify-between">
         <div className="inline-flex rounded-md border border-border p-0.5" role="group" aria-label="Map type">
           {(["race", "quali"] as ErsMode[]).map((m) => (
             <Button key={m} size="sm" variant={mode === m ? "default" : "ghost"} aria-pressed={mode === m} onClick={() => setMode(m)}>
@@ -250,31 +366,60 @@ export function ErsMapEditor({ season, track, cat }: { season: number; track: st
             </Button>
           ))}
         </div>
-        <span className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-          Saved on this device for every season at this track
-          <Link to="/season/$season/track/$track/$view" params={{ season: String(season), track, view: "quali-simulation" }} search={{ cat }} className="font-semibold text-primary underline-offset-2 hover:underline">Edit racing line (shared with Qualifying)</Link>
+        <span className="flex min-w-0 flex-wrap items-center gap-3 text-xs text-muted-foreground">
+          <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-semibold ${sync === "error" ? "border-destructive/50 text-destructive" : sync === "local" ? "border-border" : "border-primary/40 text-foreground"}`} role="status">
+            {sync === "local" || sync === "error" ? <CloudOff className="h-3.5 w-3.5" /> : <Cloud className="h-3.5 w-3.5" />}
+            {sync === "loading" ? "Loading your maps…" : sync === "saving" ? "Saving…" : sync === "saved" ? "Synced to your account" : sync === "error" ? "Sync failed — saved on this device" : "This device only — sign in to sync"}
+          </span>
+          <Button variant="outline" size="sm" disabled={sync === "loading" || sync === "saving"} onClick={saveNow}><CloudUpload />{sync === "error" ? "Retry saving" : "Save now"}</Button>
+          <Link to="/season/$season/track/$track/$view" params={{ season: String(season), track, view: "quali-simulation" }} search={{ cat }} className="font-semibold text-primary underline-offset-2 hover:underline">Racing line</Link>
         </span>
       </div>
 
       <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(300px,360px)] lg:items-start">
         <div className="min-w-0">
-          <div className="relative aspect-[1080/608] w-full overflow-hidden rounded-md border border-border bg-background">
+          <div className="mb-2 flex flex-wrap items-center gap-1 border-b border-border pb-2" aria-label="Map tools">
+            <Button variant={tool === "paint" ? "default" : "ghost"} size="sm" aria-pressed={tool === "paint"} onClick={() => { setTool("paint"); setPending(null); }}><Pencil />Paint</Button>
+            <Button variant={tool === "select" ? "default" : "ghost"} size="sm" aria-pressed={tool === "select"} onClick={() => { setTool("select"); setPending(null); }}><MousePointer2 />Select</Button>
+            <Button variant="ghost" size="icon" disabled={!history.length} onClick={undo} aria-label="Undo" title="Undo"><Undo2 /></Button>
+            <Button variant="ghost" size="icon" disabled={zoom === 1} onClick={() => setZoom((z) => z - 1)} aria-label="Zoom out" title="Zoom out"><ZoomOut /></Button>
+            <Button variant="ghost" size="icon" disabled={zoom === 3} onClick={() => setZoom((z) => z + 1)} aria-label="Zoom in" title="Zoom in"><ZoomIn /></Button>
+            <span className="text-xs tabular-nums text-muted-foreground">{zoom}×</span>
+            {pending !== null && <Button variant="ghost" size="icon" onClick={() => setPending(null)} aria-label="Cancel section" title="Cancel section"><X /></Button>}
+          </div>
+          {palette.length > 0 && <div className="mb-2 flex gap-2 overflow-x-auto pb-1" aria-label="Paint colour">{palette.map((c) => <Button key={c.id} size="sm" variant={activeColor === c.id ? "secondary" : "outline"} aria-pressed={activeColor === c.id} className="max-w-48 shrink-0" onClick={() => setActiveColor(c.id)}><span className="h-4 w-4 shrink-0 rounded-full" style={{ background: c.color }} /><span className="truncate">{c.name}</span></Button>)}</div>}
+          <div className="max-h-[60svh] min-h-48 overflow-auto overscroll-contain rounded-lg border border-border bg-card" aria-label="Zoomable circuit">
+          <div className={`relative aspect-[1080/608] min-h-48 ${zoom === 3 ? "w-[300%]" : zoom === 2 ? "w-[200%]" : "w-full"}`}>
             {!imageFailed && (
-              <img src={image} alt={`${track} circuit`} className="absolute inset-0 h-full w-full object-fill opacity-60" onError={() => {
+              <img src={image} alt={`${track} circuit`} className="absolute inset-0 h-full w-full object-fill opacity-40" onError={() => {
                 if (image !== trackMapFallbackUrl(track)) setImage(trackMapFallbackUrl(track)); else setImageFailed(true);
               }} />
             )}
             {hasLine ? (
-              <svg viewBox="0 0 1080 608" className="absolute inset-0 h-full w-full cursor-crosshair touch-manipulation" role="img" aria-label="ERS map — tap a start point, then an end point" onClick={onMapClick}>
-                <polyline points={toSvg([...line, line[0]])} fill="none" stroke="currentColor" strokeOpacity="0.35" strokeWidth="6" strokeLinejoin="round" className="text-foreground" />
+              <svg viewBox="0 0 1080 608" preserveAspectRatio="none" className="absolute inset-0 h-full w-full cursor-crosshair touch-pan-x touch-pan-y" role="img" aria-label="ERS map — tap a start point, then an end point" onPointerDown={(e) => { if (e.isPrimary) pointerStart.current = { x: e.clientX, y: e.clientY }; }} onPointerUp={onMapTap} onPointerCancel={() => { pointerStart.current = null; }}>
+                <polyline points={toSvg([...line, line[0]])} fill="none" stroke="currentColor" strokeOpacity="0.12" strokeWidth="18" strokeLinejoin="round" className="text-foreground" />
+                <polyline points={toSvg([...line, line[0]])} fill="none" stroke="currentColor" strokeOpacity="0.45" strokeWidth="5" strokeLinejoin="round" strokeDasharray="2 10" strokeLinecap="round" className="text-foreground" />
                 {segments.map((s) => {
                   const c = colorOf(s.colorId);
                   if (!c) return null;
                   const sel = s.id === selectedSeg;
                   return (
-                    <polyline key={s.id} points={toSvg(sliceLine(line, s.start, s.end))} fill="none" stroke={c.color}
-                      strokeWidth={sel ? 14 : 10} strokeLinecap="round" strokeLinejoin="round" strokeOpacity={selectedSeg && !sel ? 0.75 : 1} />
+                    <g key={s.id} className="cursor-pointer">
+                      <polyline points={toSvg(sliceLine(line, s.start, s.end))} fill="none" stroke={c.color}
+                        strokeWidth={sel ? 26 : 20} strokeOpacity="0.18" strokeLinecap="round" strokeLinejoin="round" />
+                      <polyline points={toSvg(sliceLine(line, s.start, s.end))} fill="none" stroke={c.color}
+                        strokeWidth={sel ? 13 : 9} strokeLinecap="round" strokeLinejoin="round" strokeOpacity={selectedSeg && !sel ? 0.6 : 1} />
+                    </g>
                   );
+                })}
+                {ordered.map((s, i) => {
+                  const c = colorOf(s.colorId);
+                  if (!c) return null;
+                  const p = pointAtProgress(line, (s.start + segmentSpan(s.start, s.end) / 2) % 1);
+                  return <g key={`l-${s.id}`} transform={`translate(${p.x * 1080} ${p.y * 608})`} className="pointer-events-none">
+                    <circle r="13" fill="var(--background)" stroke={c.color} strokeWidth="3" />
+                    <text textAnchor="middle" dy="5" fontSize="14" fontWeight="700" fill="currentColor" className="text-foreground">{i + 1}</text>
+                  </g>;
                 })}
                 {(() => { const p = pointAtProgress(line, 0); return <g transform={`translate(${p.x * 1080} ${p.y * 608})`}><rect x="-4" y="-14" width="8" height="28" rx="2" fill="currentColor" className="text-foreground" /></g>; })()}
                 {selectedSeg && (() => {
@@ -295,8 +440,9 @@ export function ErsMapEditor({ season, track, cat }: { season: number; track: st
               </div>
             )}
           </div>
+          </div>
           <p className="mt-2 min-h-5 text-sm text-muted-foreground" role="status">
-            {hint || (pending !== null ? `Start set at ${pct(pending)} — now tap the end point.` : hasLine ? "Pick a colour, tap where the section starts, then where it ends. Sections follow the driving direction." : "")}
+            {hint || (pending !== null ? `Start: ${pct(pending)}` : selectedSeg ? "Section selected" : "")}
           </p>
 
           {segments.length > 0 && (
@@ -314,7 +460,14 @@ export function ErsMapEditor({ season, track, cat }: { season: number; track: st
           )}
         </div>
 
-        <aside className="flex min-w-0 flex-col gap-4 rounded-md border border-border bg-card/40 p-3" aria-label="ERS map controls">
+        <aside className="flex min-w-0 flex-col gap-4 border-t border-border pt-4 lg:border-t-0 lg:border-l lg:pl-4 lg:pt-0" aria-label="ERS map controls">
+          <details className="order-last border-t border-border pt-3"><summary className="cursor-pointer py-2 text-sm font-semibold">Racing line tools</summary><RacingLineActions
+            track={track}
+            mapUrl={image}
+            line={line}
+            onDraft={(points) => { setLine(points); setPending(null); setSelectedSeg(null); setHint("AI draft ready. Review the route and start/finish position before exporting."); }}
+          /></details>
+
           {/* Save slots */}
           <div>
             <div className="mb-1.5 text-[11px] uppercase tracking-wider text-muted-foreground">Save slot</div>
@@ -325,9 +478,9 @@ export function ErsMapEditor({ season, track, cat }: { season: number; track: st
                 <Button type="button" variant="ghost" size="icon" aria-label="Cancel" onClick={() => setSlotName(null)}><X /></Button>
               </form>
             ) : (
-              <div className="flex items-center gap-1">
+              <div className="grid grid-cols-4 gap-1">
                 <select aria-label="Save slot" value={slotId} onChange={(e) => switchSlot(e.target.value)} disabled={!ready}
-                  className="h-9 min-w-0 flex-1 rounded-md border border-input bg-background px-2 text-sm">
+                  className="col-span-4 h-11 min-w-0 rounded-md border border-input bg-background px-2 text-base">
                   {slots.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
                 <Button variant="ghost" size="icon" title="New slot" aria-label="New slot" onClick={() => setSlotName({ mode: "new", value: `Slot ${slots.length + 1}` })}><Plus /></Button>
@@ -360,10 +513,10 @@ export function ErsMapEditor({ season, track, cat }: { season: number; track: st
                     </form>
                   ) : (
                     <>
-                      <button type="button" className="flex min-w-0 flex-1 items-center gap-2 text-left" aria-pressed={activeColor === c.id} onClick={() => setActiveColor(c.id)}>
+                      <Button variant="ghost" className="flex min-w-0 flex-1 justify-start gap-2 px-0 text-left" aria-pressed={activeColor === c.id} onClick={() => setActiveColor(c.id)}>
                         <span className="h-4 w-4 shrink-0 rounded-full border border-border" style={{ background: c.color }} />
                         <span className="truncate text-sm font-semibold">{c.name}</span>
-                      </button>
+                      </Button>
                       <Button variant="ghost" size="icon" className="h-7 w-7" aria-label={`Edit ${c.name}`} onClick={() => setEditingColor(c.id)}><Pencil /></Button>
                       <Button variant="ghost" size="icon" className="h-7 w-7" aria-label={`Remove ${c.name}`} onClick={() => removeColor(c.id)}><Trash2 /></Button>
                     </>
@@ -374,8 +527,8 @@ export function ErsMapEditor({ season, track, cat }: { season: number; track: st
             <form className="mt-2 flex flex-col gap-2" onSubmit={(e) => { e.preventDefault(); addColor(); }}>
               <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Colour choices">
                 {SWATCHES.map((s) => (
-                  <button key={s} type="button" aria-label={`Use ${s}`} aria-pressed={newColor.color === s} onClick={() => setNewColor({ ...newColor, color: s })}
-                    className={`h-6 w-6 rounded-full border-2 ${newColor.color === s ? "border-foreground" : "border-transparent"}`} style={{ background: s }} />
+                  <Button key={s} type="button" variant="ghost" size="icon" aria-label={`Use ${s}`} aria-pressed={newColor.color === s} onClick={() => setNewColor({ ...newColor, color: s })}
+                    className={newColor.color === s ? "border border-foreground" : "border border-transparent"}><span className="h-6 w-6 rounded-full" style={{ background: s }} /></Button>
                 ))}
                 <input type="color" aria-label="Custom colour" value={newColor.color} onChange={(e) => setNewColor({ ...newColor, color: e.target.value })} className="h-6 w-8 cursor-pointer rounded border border-input bg-transparent" />
               </div>
@@ -394,17 +547,16 @@ export function ErsMapEditor({ season, track, cat }: { season: number; track: st
             </div>
             {segments.length === 0 && <p className="text-sm text-muted-foreground">No sections painted yet.</p>}
             <ul className="flex flex-col gap-1.5">
-              {ordered.map((s) => {
+              {ordered.map((s, idx) => {
                 const c = colorOf(s.colorId);
                 const sel = s.id === selectedSeg;
                 return (
                   <li key={s.id} className={`rounded-md border p-2 ${sel ? "border-primary bg-primary/5" : "border-border"}`}>
                     <div className="flex items-center gap-2">
-                      <button type="button" className="flex min-w-0 flex-1 items-center gap-2 text-left" onClick={() => setSelectedSeg(sel ? null : s.id)} aria-expanded={sel}>
-                        <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: c?.color }} />
-                        <span className="truncate text-sm font-semibold">{c?.name ?? "Removed colour"}</span>
-                        <span className="ml-auto shrink-0 font-mono text-xs tabular-nums text-muted-foreground">{pct(s.start)} → {pct(s.end)} · {pct(segmentSpan(s.start, s.end))}</span>
-                      </button>
+                      <Button variant="ghost" className="h-auto min-w-0 flex-1 justify-start gap-2 px-0 text-left" onClick={() => setSelectedSeg(sel ? null : s.id)} aria-expanded={sel}>
+                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-background" style={{ background: c?.color }}>{idx + 1}</span>
+                        <span className="min-w-0"><span className="block truncate text-sm font-semibold">{c?.name ?? "Removed colour"}</span><span className="block font-mono text-xs tabular-nums text-muted-foreground">{pct(s.start)} → {pct(s.end)} · {pct(segmentSpan(s.start, s.end))}</span></span>
+                      </Button>
                       <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="Delete section" onClick={() => { saveSegments(segments.filter((x) => x.id !== s.id)); if (sel) setSelectedSeg(null); }}><Trash2 /></Button>
                     </div>
                     {sel && (

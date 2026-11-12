@@ -1,0 +1,524 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>F1 Telemetry Analyzer</title>
+    <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script async src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" onload="window.dispatchEvent(new Event('supabase-ready'))"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Titillium+Web:wght@300;400;600;700;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet"><link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <nav id="topNav">
+      <button
+        id="themeToggle"
+        class="theme-toggle"
+        title="Toggle Light/Dark Mode"
+      >
+        🌓
+      </button>
+    </nav>
+    <div class="app-shell" id="appShell">
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar-brand">
+          <div class="brand-mark">🏎️</div>
+          <div class="brand-text">
+            <div class="brand-title">F1 Telemetry</div>
+            <div class="brand-sub">Analyzer</div>
+          </div>
+          <button id="sidebarToggle" class="sidebar-toggle" title="Collapse sidebar" aria-label="Toggle sidebar">⟨</button>
+        </div>
+
+        <details class="sidebar-block" open>
+          <summary>📁 Upload</summary>
+          <div class="sidebar-block-body">
+            <div class="error" id="error"></div>
+            <div class="loading" id="loading">
+              <div class="spinner"></div>
+              <p>Processing...</p>
+            </div>
+            <label for="fileInput" class="file-input-label compact">
+              <span class="file-input-icon">📁</span>
+              <span class="file-input-text">
+                <span class="file-input-main">Choose telemetry JSON</span>
+                <span class="file-input-hint">or drag &amp; drop files here</span>
+              </span>
+            </label>
+            <input type="file" id="fileInput" accept=".json" multiple />
+            <div class="sidebar-template-row">
+              <button id="downloadTemplateBtn" class="download-btn small" title="Download a race telemetry template to fill in">📥 Race template</button>
+              <button id="downloadQualiTemplateBtn" class="download-btn small" title="Download a qualifying telemetry template to fill in">📥 Quali template</button>
+            </div>
+          </div>
+        </details>
+
+        <div class="sidebar-block season-block">
+          <div class="sidebar-block-title">Season</div>
+          <div id="seasonSelector" class="season-selector compact"></div>
+        </div>
+
+        <div class="sidebar-block sessions-block" id="savedSessions" style="display:none">
+          <div class="sidebar-block-title">Saved Sessions</div>
+          <div id="savedSessionsGrid" class="session-list"></div>
+        </div>
+      </aside>
+      <div class="sidebar-backdrop" id="sidebarBackdrop" aria-hidden="true"></div>
+
+      <div class="main-pane">
+      <div class="header compact-header">
+        <button id="sidebarExpand" class="sidebar-expand" title="Show sidebar" aria-label="Show sidebar">⟩</button>
+        <h1>🏎️ F1 Telemetry Analyzer</h1>
+        <p>Detailed stats &amp; graphs from your telemetry uploads</p>
+      </div>
+
+      <div id="seasonStatsHost" class="season-stats-host"></div>
+
+
+      <div class="collapsible-tabs sticky-tabs">
+        <button class="section-tab active" data-target="section-standings">
+          🏆 Standings
+        </button>
+        <button class="section-tab" data-target="section-records">
+          📚 Records
+        </button>
+        <button class="section-tab" data-target="section-progress">
+          📈 Season Progress
+        </button>
+        <button class="section-tab" data-target="section-quali-results">
+          ⏱️ Qualifying
+        </button>
+        <button class="section-tab" data-target="section-grid">
+          🚦 Starting Grid
+        </button>
+        <button class="section-tab" data-target="section-assignments">
+          🏎️ Teams
+        </button>
+        <button class="section-tab" data-target="section-notes">
+          📝 Notes
+        </button>
+        <button class="section-tab" data-target="section-race-story">
+          🎬 Race Story
+        </button>
+        <button class="section-tab" data-target="section-compare">
+          🆚 Compare
+        </button>
+        <button class="section-tab" data-target="section-graphs">
+          📊 Graphs
+        </button>
+        <button class="section-tab" data-target="section-data">
+          📋 Laps
+        </button>
+        <button class="section-tab" data-target="section-practice">
+          🏁 Practice
+        </button>
+      </div>
+
+
+      <div class="collapsible-content">
+        <div class="collapsible-section" id="section-standings">
+          <div class="section-header">
+            <h2 style="margin: 0; font-size: 1.05rem">🏆 Season Standings</h2>
+          </div>
+          <div class="section-body">
+            <div id="standings-container"></div>
+          </div>
+        </div>
+
+        <div class="collapsible-section" id="section-records">
+          <div class="section-header">
+            <h2 style="margin: 0; font-size: 1.05rem">📚 All-Time Records</h2>
+          </div>
+          <div class="section-body">
+            <div id="records-container"></div>
+          </div>
+        </div>
+
+        <div class="collapsible-section" id="section-progress">
+          <div class="section-header">
+            <h2 style="margin: 0; font-size: 1.05rem">📈 Season Progress</h2>
+            <div class="progress-scope-tabs" style="margin-left:14px;display:flex;gap:8px">
+              <button class="download-btn progress-scope active" data-scope="drivers">Drivers</button>
+              <button class="download-btn progress-scope" data-scope="teams">Teams</button>
+            </div>
+          </div>
+          <div class="section-body">
+            <div id="progressEmpty" class="race-story-empty" style="display:none">
+              Upload race or sprint sessions for this season to see the progression.
+            </div>
+            <div id="progressContent">
+              <div id="progressToggles" class="progress-toggles"></div>
+              <div class="chart-container full-width">
+                <div class="chart-title">Points progression</div>
+                <canvas id="progressPointsChart"></canvas>
+              </div>
+              <div class="chart-container full-width">
+                <div class="chart-title">Championship position by round</div>
+                <canvas id="progressPositionChart"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="collapsible-section" id="section-quali-results">
+          <div class="section-header">
+            <h2 style="margin: 0; font-size: 1.05rem">
+              ⏱️ Qualifying / Shootout Results
+            </h2>
+            <button
+              id="qualiGapToggleBtn"
+              class="download-btn"
+              style="margin-left: 14px"
+            >
+              Switch to Gap to Next
+            </button>
+            <button
+              id="qualiSectorToggleBtn"
+              class="download-btn"
+              style="margin-left: 8px"
+            >
+              Show Sectors
+            </button>
+          </div>
+          <div class="section-body" id="quali-results-container"></div>
+        </div>
+
+        <div class="collapsible-section" id="section-grid">
+          <div class="section-header">
+            <h2 style="margin: 0; font-size: 1.05rem">🚦 Starting Grid</h2>
+          </div>
+          <div class="section-body">
+            <div id="startingGridContainer"></div>
+          </div>
+        </div>
+
+        <div class="collapsible-section" id="section-assignments">
+          <div class="section-header">
+            <h2 style="margin: 0; font-size: 1.05rem">
+              🏎️ Driver Team Assignments
+            </h2>
+          </div>
+          <div class="section-body">
+            <div
+              id="driver-assignments-container"
+              style="margin-top: 16px"
+            ></div>
+          </div>
+        </div>
+
+        <div class="collapsible-section" id="section-notes">
+          <div class="section-header">
+            <h2 style="margin: 0; font-size: 1.05rem">📝 Track Notes</h2>
+            <span id="notesStatus" class="notes-status" style="margin-left:12px;font-size:.8rem;color:var(--secondary-text)"></span>
+          </div>
+          <div class="section-body">
+            <div id="notesGrid" class="notes-grid"></div>
+          </div>
+        </div>
+
+        <div class="collapsible-section" id="section-race-story">
+
+          <div class="section-header">
+            <h2 style="margin: 0; font-size: 1.05rem">🎬 Race Story</h2>
+          </div>
+          <div class="section-body">
+            <div id="raceStoryEmpty" class="race-story-empty" style="display:none">
+              Race Story is available for freshly uploaded race telemetry. Re-upload the JSON to view position changes, overtakes, and pace deltas for this session.
+            </div>
+            <div id="raceStoryContent" style="display:none">
+              <div class="race-story-headline" id="raceStoryHeadline"></div>
+              <div class="charts-grid">
+                <div class="chart-container full-width">
+                  <div class="chart-title">📈 Position Changes Through the Race</div>
+                  <canvas id="positionChart"></canvas>
+                </div>
+                <div class="chart-container full-width auto-height">
+                  <div class="chart-title">⚔️ Overtakes Timeline</div>
+                  <div class="rs-canvas-wrap"><canvas id="overtakesChart"></canvas></div>
+                  <div id="overtakesSummary" class="race-story-list"></div>
+                </div>
+                <div class="chart-container full-width auto-height">
+                  <div class="chart-title">🛞 Tyre Stint Strategy</div>
+                  <div id="stintStrip" class="stint-strip"></div>
+                </div>
+                <div class="chart-container full-width auto-height">
+                  <div class="chart-title">🔧 Damage Progression</div>
+                  <div id="damageSection" class="damage-section"></div>
+                </div>
+                <div class="chart-container full-width auto-height">
+                  <div class="chart-title">🚀 Speed Trap Leaderboard</div>
+                  <div id="topSpeedList" class="speed-trap-list"></div>
+                </div>
+                <div class="chart-container full-width auto-height">
+                  <div class="chart-title">🏁 Final Classification</div>
+                  <div id="finalClassification" class="final-classification"></div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <div class="collapsible-section" id="section-compare">
+          <div class="section-header">
+            <h2 style="margin: 0; font-size: 1.05rem">🆚 Compare Lap Times</h2>
+          </div>
+          <div class="section-body">
+            <div id="compareEmpty" class="race-story-empty" style="display:none">
+              Compare is available for freshly uploaded race telemetry with all-driver lap history.
+            </div>
+            <div id="compareContent" style="display:none">
+              <div class="compare-controls" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
+                <label style="font-size:.85rem;color:var(--secondary-text)">Compare against</label>
+                <select id="compareDriverSelect" class="download-btn" style="padding:6px 10px"></select>
+                <span id="compareSummary" style="font-size:.85rem;color:var(--secondary-text)"></span>
+              </div>
+              <div class="chart-container full-width">
+                <div class="chart-title">Lap Time Delta (You − Opponent, seconds)</div>
+                <canvas id="compareDeltaChart"></canvas>
+              </div>
+              <div class="chart-container full-width">
+                <div class="chart-title">Lap Times Overlay</div>
+                <canvas id="compareOverlayChart"></canvas>
+              </div>
+              <div class="table-container" style="margin-top:16px">
+                <table id="compareTable">
+                  <thead>
+                    <tr>
+                      <th>Lap</th>
+                      <th id="compareThYou">You</th>
+                      <th id="compareThOpp">Opponent</th>
+                      <th>Δ</th>
+                    </tr>
+                  </thead>
+                  <tbody id="compareTableBody"></tbody>
+                </table>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <div class="collapsible-section" id="section-graphs">
+
+          <div class="section-header">
+            <h2 style="margin: 0; font-size: 1.05rem">📊 Graphs & Metrics</h2>
+          </div>
+          <div class="section-body">
+            <div class="content" id="content">
+              <div class="session-info" id="sessionInfo"></div>
+
+              <div class="charts-section">
+                <h2 class="section-title">📊 Performance Metrics</h2>
+                <div class="overlay-guide" aria-label="Chart overlay legend">
+                  <div class="overlay-guide-title">Overlay guide</div>
+                  <div class="overlay-guide-items">
+                    <span class="og-item"><span class="og-swatch" style="background:rgba(173,216,230,0.35);border-color:rgba(120,180,230,0.7)"></span>Safety Car</span>
+                    <span class="og-item"><span class="og-swatch" style="background:rgba(255,215,0,0.28);border-color:rgba(255,200,0,0.7)"></span>VSC</span>
+                    <span class="og-item"><span class="og-swatch" style="background:rgba(255,60,60,0.32);border-color:rgba(255,80,80,0.8)"></span>Red Flag</span>
+                    <span class="og-item"><span class="og-line" style="background:#fff"></span>Pit stop</span>
+                    <span class="og-sep"></span>
+                    <span class="og-item"><span class="og-line" style="background:#ffb020"></span>ERS fault</span>
+                    <span class="og-item"><span class="og-line" style="background:#5ad1ff"></span>DRS fault</span>
+                    <span class="og-item"><span class="og-line" style="background:#ff5252"></span>Engine</span>
+                    <span class="og-item"><span class="og-line" style="background:#c084fc"></span>Gearbox</span>
+                    <span class="og-item"><span class="og-line" style="background:#9aff9a"></span>Aero</span>
+                  </div>
+                </div>
+                <div class="charts-grid">
+                  <div class="chart-container">
+                    <div class="chart-title">Lap Times</div>
+                    <canvas id="lapTimesChart"></canvas>
+                  </div>
+                  <div class="chart-container">
+                    <div class="chart-title">Pace vs Field Median (Δ seconds)</div>
+                    <canvas id="paceDeltaChart"></canvas>
+                  </div>
+
+                  <div class="chart-container">
+                    <div class="chart-title">Fuel Level</div>
+                    <canvas id="fuelChart"></canvas>
+                  </div>
+                  <div class="chart-container">
+                    <div class="chart-title">Fuel Consumed Per Lap</div>
+                    <canvas id="fuelConsumptionChart"></canvas>
+                  </div>
+                  <div class="chart-container full-width">
+                    <div class="chart-title">ERS Deployment</div>
+                    <canvas id="ersChart"></canvas>
+                  </div>
+                  <div class="chart-container full-width">
+                    <div class="chart-title">Tyre Wear by Wheel &amp; Average</div>
+                    <canvas id="tireWearChart"></canvas>
+                  </div>
+                  <div class="chart-container full-width">
+                    <div class="chart-title">Sector Times Comparison</div>
+                    <canvas id="sectorChart"></canvas>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Download template moved to upload section -->
+            </div>
+            <!-- end content -->
+          </div>
+          <!-- end section-body -->
+        </div>
+        <!-- end section-graphs -->
+
+        <div class="collapsible-section" id="section-data">
+          <div class="section-header">
+            <h2 style="margin: 0; font-size: 1.05rem">
+              📋 Stint Summary & Lap Table
+            </h2>
+          </div>
+          <div class="section-body">
+            <div id="stintSection" style="display: none; margin-bottom: 40px">
+              <h2 class="section-title">👟 Stint Summary</h2>
+              <div class="table-container">
+                <table id="stintTable">
+                  <thead>
+                    <tr>
+                      <th rowspan="2" class="text-center">Stint</th>
+                      <th rowspan="2" class="text-center">Compound</th>
+                      <th rowspan="2" class="text-center">Laps</th>
+                      <th rowspan="2" class="text-center">Avg Lap Time</th>
+                      <th rowspan="2" class="text-center">Avg Fuel/Lap</th>
+                      <th rowspan="2" class="text-center">Status</th>
+                      <th colspan="4" class="text-center">Avg Tire Wear (%)</th>
+                    </tr>
+                    <tr>
+                      <th class="group-start">FL</th>
+                      <th>FR</th>
+                      <th>RL</th>
+                      <th class="group-end">RR</th>
+                    </tr>
+                  </thead>
+                  <tbody id="stintTableBody"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="table-container">
+              <table id="lapTable">
+                <thead>
+                  <tr>
+                    <th rowspan="2" class="text-center">Lap</th>
+                    <th rowspan="2" class="text-center">Status</th>
+                    <th rowspan="2" class="text-center">Lap Time</th>
+                    <th colspan="3" class="text-center">Sectors</th>
+                    <th rowspan="2" class="text-center">Compound</th>
+                    <th rowspan="2" class="text-center">Fuel</th>
+                    <th rowspan="2" class="text-center">Fuel Used</th>
+                    <th colspan="4" class="text-center">Tire Wear (%)</th>
+                    <th colspan="2" class="text-center">ERS (MJ)</th>
+                  </tr>
+                  <tr>
+                    <th class="group-start">S1</th>
+                    <th>S2</th>
+                    <th class="group-end">S3</th>
+                    <th class="group-start">FL</th>
+                    <th>FR</th>
+                    <th>RL</th>
+                    <th class="group-end">RR</th>
+                    <th>Dep.</th>
+                    <th>Rem.</th>
+                  </tr>
+                </thead>
+                <tbody id="lapTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="collapsible-section" id="section-practice">
+          <div class="section-header">
+            <h2 style="margin: 0; font-size: 1.05rem">🏁 Practice Review</h2>
+          </div>
+          <div class="section-body">
+            <div
+              id="practiceNotice"
+              style="
+                margin-top: 20px;
+                padding: 18px;
+                background: rgba(255, 255, 255, 0.05);
+                border: 1px solid var(--border-color);
+                border-radius: 10px;
+                color: var(--secondary-text);
+              "
+            >
+              Select a Practice session from the list above to view the detailed
+              Practice Review with stint summary and fuel analysis.
+            </div>
+
+            <div
+              id="practiceStintSection"
+              style="display: none; margin-bottom: 40px"
+            >
+              <h2 class="section-title">👟 Stint Summary</h2>
+              <div class="table-container">
+                <table id="practiceStintTable">
+                  <thead>
+                    <tr>
+                      <th rowspan="2" class="text-center">Stint</th>
+                      <th rowspan="2" class="text-center">Compound</th>
+                      <th rowspan="2" class="text-center">Laps</th>
+                      <th rowspan="2" class="text-center">Avg Lap Time</th>
+                      <th rowspan="2" class="text-center">Avg Fuel/Lap</th>
+                      <th rowspan="2" class="text-center">Status</th>
+                      <th colspan="4" class="text-center">Avg Tire Wear (%)</th>
+                    </tr>
+                    <tr>
+                      <th class="group-start">FL</th>
+                      <th>FR</th>
+                      <th>RL</th>
+                      <th class="group-end">RR</th>
+                    </tr>
+                  </thead>
+                  <tbody id="practiceStintTableBody"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <div
+              class="table-container"
+              id="practiceLapContainer"
+              style="display: none"
+            >
+              <table id="practiceLapTable">
+                <thead>
+                  <tr>
+                    <th rowspan="2" class="text-center">Lap</th>
+                    <th rowspan="2" class="text-center">Status</th>
+                    <th rowspan="2" class="text-center">Lap Time</th>
+                    <th colspan="3" class="text-center">Sectors</th>
+                    <th rowspan="2" class="text-center">Compound</th>
+                    <th rowspan="2" class="text-center">Fuel</th>
+                    <th rowspan="2" class="text-center">Fuel Used</th>
+                    <th colspan="4" class="text-center">Tire Wear (%)</th>
+                    <th colspan="2" class="text-center">ERS (MJ)</th>
+                  </tr>
+                  <tr>
+                    <th class="group-start">S1</th>
+                    <th>S2</th>
+                    <th class="group-end">S3</th>
+                    <th class="group-start">FL</th>
+                    <th>FR</th>
+                    <th>RL</th>
+                    <th class="group-end">RR</th>
+                    <th>Dep.</th>
+                    <th>Rem.</th>
+                  </tr>
+                </thead>
+                <tbody id="practiceLapTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+      </div><!-- main-pane -->
+    </div><!-- app-shell -->
+
+    <script defer src="chart-theme.js"></script>
+    <script defer src="script.js"></script>
+  </body>
+</html>

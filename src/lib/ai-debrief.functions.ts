@@ -23,11 +23,13 @@ const attachToken = createMiddleware({ type: "function" }).client(async ({ next 
   return next({ headers: token ? { Authorization: `Bearer ${token}` } : {} });
 });
 
-const SYSTEM = `You are an experienced Formula 1 race engineer debriefing your own driver after a session in the F1 26 video game.
-Use ONLY the numbers provided. Never invent laps, rivals, setups or events that aren't in the data. Times are seconds.
-Be direct, specific and encouraging, like real team radio — cite lap numbers, stints and sector gaps. Keep each field short (1–3 sentences).
-Consistency score (0–100) measures spread of clean laps around each stint's trend line (fuel burn and steady tyre wear are already removed). 90+ is elite, 75+ good, 55+ average.
-If data for a section is missing, say so briefly instead of guessing.`;
+const SYSTEM = `You are an experienced Formula 1 race engineer debriefing a driver after an F1 26 video-game session.
+Treat the supplied session facts as the only source of truth. Never invent a lap, rival, setup, event, cause or statistic. Times are seconds.
+Make the debrief specific and useful: anchor each observation to a supplied lap, stint, position, time, gap or wear value. Prefer one clear, supported point over generic praise or advice. Keep each text field to 1–3 short sentences.
+For pace, use lap_pace.best_clean_lap, lap_pace.slowest_clean_lap, lap_pace.best_sectors and nearby_rivals when present. Best sectors are the driver's personal bests, not sector gaps to rivals. A positive nearby-rival gap means the driver's best clean lap is slower.
+For tyre strategy, use the supplied stint ranges, compound, wear and pit_laps. pit_stops is the authoritative stop count; pit_laps, in/out laps and stints are evidence/details, not extra stops.
+The consistency score measures clean-lap spread around each stint trend after excluding pit, out, neutralization and other flagged laps; fuel burn and steady tyre wear are removed. 90+ is elite, 75+ is good, and 55+ is average. Do not discuss consistency when its score is null.
+Base the grade on the session result and the evidence available; do not imply a cause or comparison that the facts cannot establish. When a section lacks evidence, state that briefly and do not fill space with generic advice.`;
 
 const DEBRIEF_SCHEMA = {
   type: "OBJECT",
@@ -36,13 +38,13 @@ const DEBRIEF_SCHEMA = {
     headline: { type: "STRING", description: "One-line verdict, max 12 words" },
     radio: { type: "STRING", description: "Short team-radio style message to the driver" },
     summary: { type: "STRING" },
-    consistency: { type: "STRING", description: "Comment on the consistency score, mistake laps and stint trends" },
-    tyres: { type: "STRING", description: "Tyre wear per stint, cliffs, and whether pit timing looked right" },
-    pace: { type: "STRING", description: "Pace vs nearby rivals / pole, best lap, sector gaps" },
-    strengths: { type: "ARRAY", items: { type: "STRING" }, description: "2-3 things done well" },
+    consistency: { type: "STRING", description: "Interpret the score and cite a supported lap or stint trend" },
+    tyres: { type: "STRING", description: "Use the supplied stint ranges, tyre wear and verified stop count" },
+    pace: { type: "STRING", description: "Use lap-numbered pace, personal best sectors and nearby rival gaps when available" },
+    strengths: { type: "ARRAY", items: { type: "STRING" }, description: "Up to 3 evidence-based things done well; use fewer if evidence is limited" },
     improvements: {
       type: "ARRAY",
-      description: "2-4 concrete coaching notes",
+      description: "Up to 3 specific, actionable notes supported by the session data; return fewer when evidence is limited",
       items: { type: "OBJECT", properties: { area: { type: "STRING" }, detail: { type: "STRING" } }, required: ["area", "detail"] },
     },
   },

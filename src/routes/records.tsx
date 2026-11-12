@@ -17,6 +17,8 @@ export const Route = createFileRoute("/records")({
       { name: "description", content: "Your fastest lap on every track across all seasons." },
       { property: "og:title", content: "Personal Records · F1 Telemetry Analyzer" },
       { property: "og:description", content: "Your fastest lap on every track across all seasons." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: RecordsPage,
@@ -172,34 +174,40 @@ function RecordsPage() {
                         {delta != null && delta > 0 ? ` · −${(delta / 1000).toFixed(3)}s vs next best` : ""}
                       </span>
                     </div>
-                    <div className="mb-1 text-[10px] uppercase tracking-widest text-white/40">By season</div>
-                    <ul className="space-y-1">
-                      {r.seasons.map((s) => (
-                        <li
-                          key={s.season}
-                          className="grid grid-cols-[auto_1fr_auto_auto] items-center gap-2 text-[11px]"
-                        >
-                          <span className="font-bold text-white/70">S{s.season}</span>
-                          <span className="truncate text-white/50">{s.team || "—"}</span>
-                          <span className={`font-mono ${s.ms === r.bestMs ? "text-purple-300" : "text-white/80"}`}>
-                            {formatLapMs(s.ms)}
-                          </span>
-                          <span
-                            className={`w-14 text-right font-mono ${
-                              s.deltaPrevMs == null
-                                ? "text-white/30"
-                                : s.deltaPrevMs < 0
-                                  ? "text-emerald-400"
-                                  : "text-red-400"
-                            }`}
-                          >
-                            {s.deltaPrevMs == null
-                              ? "—"
-                              : `${s.deltaPrevMs < 0 ? "−" : "+"}${(Math.abs(s.deltaPrevMs) / 1000).toFixed(3)}`}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
+                    {r.seasons.length > 0 && (
+                      <div className="mt-3 border-t border-white/10 pt-2">
+                        <div className="mb-1 text-[10px] uppercase tracking-widest text-white/40">
+                          By season
+                        </div>
+                        <ul className="space-y-1">
+                          {r.seasons.map((s) => (
+                            <li
+                              key={s.season}
+                              className="grid grid-cols-[auto_1fr_auto_auto] items-center gap-2 text-[11px]"
+                            >
+                              <span className="font-bold text-white/70">S{s.season}</span>
+                              <span className="truncate text-white/50">{s.team || "—"}</span>
+                              <span className={`font-mono ${s.ms === r.bestMs ? "text-purple-300" : "text-white/80"}`}>
+                                {formatLapMs(s.ms)}
+                              </span>
+                              <span
+                                className={`w-14 text-right font-mono ${
+                                  s.deltaPrevMs == null
+                                    ? "text-white/30"
+                                    : s.deltaPrevMs < 0
+                                      ? "text-emerald-400"
+                                      : "text-red-400"
+                                }`}
+                              >
+                                {s.deltaPrevMs == null
+                                  ? "—"
+                                  : `${s.deltaPrevMs < 0 ? "−" : "+"}${(Math.abs(s.deltaPrevMs) / 1000).toFixed(3)}`}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                   </div>
                   </div>
                 </div>

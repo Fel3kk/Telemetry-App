@@ -8,15 +8,30 @@ function laps(times: number[], extra: (i: number) => Partial<DebriefLap> = () =>
 
 describe("race consistency", () => {
   it("scores the published reference points", () => {
-    expect(scoreFromSpread(0.1)).toBeCloseTo(94.9, 0);
-    expect(scoreFromSpread(0.3)).toBeCloseTo(78.1, 0);
-    expect(scoreFromSpread(0.7)).toBe(50);
-    expect(scoreFromSpread(1)).toBeCloseTo(37, 0);
+    expect(scoreFromSpread(0.2)).toBeCloseTo(91.8, 0);
+    expect(scoreFromSpread(0.5)).toBeCloseTo(73.9, 0);
+    expect(scoreFromSpread(1)).toBe(50);
+    expect(scoreFromSpread(2)).toBeCloseTo(26.1, 0);
   });
 
   it("does not punish steady fuel burn: laps 0.08 s quicker every lap score ~100", () => {
     const c = raceConsistency(laps(Array.from({ length: 20 }, (_, i) => 95 - i * 0.08)));
     expect(c.score).toBeGreaterThan(99);
+  });
+
+  it("does not penalize accelerating tyre degradation on a long stint", () => {
+    const degradingPace = Array.from({ length: 18 }, (_, i) => 95 - i * 0.08 + i * i * 0.018);
+    const c = raceConsistency(laps(degradingPace));
+    expect(c.score).toBeGreaterThan(99);
+    expect(c.stints[0].trend).toBeGreaterThan(0);
+  });
+
+  it("a tidy race with normal traffic laps no longer lands around 50", () => {
+    const noise = [0.2, -0.3, 0.1, -0.1, 0.3, -0.2, 0.0, 0.2, -0.3, 0.1, -0.1, 0.25, -0.15, 0.05, -0.2, 0.1, 0.0, -0.1];
+    const pace = noise.map((n, i) => 92 - i * 0.05 + n);
+    pace[7] += 1.2; pace[13] += 1.3; // stuck behind a car twice
+    const c = raceConsistency(laps(pace));
+    expect(c.score).toBeGreaterThan(65);
   });
 
   it("an 8 s spread scores far below a 2 s spread", () => {
@@ -42,6 +57,40 @@ describe("race consistency", () => {
 });
 
 describe("debrief facts", () => {
+  it("counts pitting and in-pits status for the same stop once", () => {
+    const data = laps([90, 90, 90, 90, 90, 90], (n) => ({
+      pit_status: n === 2 ? 1 : n === 3 ? 2 : 0,
+    }));
+    const facts = buildDebriefFacts({ track_name: "Spa", category: "Race", lap_history: data });
+    expect(verifiedPitLaps(data)).toEqual([2]);
+    expect(splitStints(data)).toHaveLength(2);
+    expect(facts.pit_laps).toEqual([2]);
+    expect(facts.pit_stops).toBe(1);
+  });
+  it("does not split one recorded stop twice when the tyre compound changes", () => {
+    const data = laps([90, 90, 110, 95, 94, 93], (n) => ({
+      pit_status: n === 3 ? 1 : n === 4 ? 2 : 0,
+      current_tyre_compound: n >= 4 ? "Hard" : "Medium",
+    }));
+    expect(verifiedPitLaps(data)).toEqual([3]);
+    expect(splitStints(data).map((stint) => [stint[0].lap, stint.at(-1)?.lap])).toEqual([[1, 3], [4, 6]]);
+    expect(buildDebriefFacts({ track_name: "Spa", category: "Race", lap_history: data }).pit_stops).toBe(1);
+  });
+  it("counts a continuous multi-lap pit-status signal as one stop", () => {
+    const data = laps([90, 110, 109, 95, 94], (n) => ({
+      pit_status: n === 2 || n === 3 ? 1 : n === 4 ? 2 : 0,
+    }));
+    expect(verifiedPitLaps(data)).toEqual([2]);
+    expect(buildDebriefFacts({ track_name: "Spa", category: "Race", lap_history: data }).pit_stops).toBe(1);
+  });
+  it("still counts separate recorded stops independently", () => {
+    const data = laps([90, 110, 95, 94, 110, 95, 94], (n) => ({
+      pit_status: n === 2 || n === 5 ? 1 : n === 3 || n === 6 ? 2 : 0,
+    }));
+    expect(verifiedPitLaps(data)).toEqual([2, 5]);
+    expect(buildDebriefFacts({ track_name: "Spa", category: "Race", lap_history: data }).pit_stops).toBe(2);
+  });
+
   it("accepts exactly 108% as push pace, not slower cooldown laps", () => {
     expect(classifyQualifyingLaps(laps([100, 108, 108.001])).map((l) => l.role)).toEqual(["push", "push", "cooldown/recharge"]);
   });
@@ -54,9 +103,9 @@ describe("debrief facts", () => {
     expect(verifiedPitLaps(data)).toEqual([]);
     expect(buildDebriefFacts({ track_name: "Melbourne", category: "Race", lap_history: data }).stints[0].compound).toBe("Medium");
   });
-  it("accepts sustained compound changes and recorded pit_status > 0", () => {
+  it("accepts sustained compound changes and recorded pit_status 1", () => {
     expect(verifiedPitLaps(laps([90, 90, 90, 90], (n) => ({ current_tyre_compound: n >= 3 ? "Hard" : "Medium" })))).toEqual([2]);
-    expect(verifiedPitLaps(laps([90, 90, 90], (n) => ({ pit_status: n === 2 ? 2 : 0 })))).toEqual([2]);
+    expect(verifiedPitLaps(laps([90, 90, 90], (n) => ({ pit_status: n === 2 ? 1 : 0 })))).toEqual([2]);
   });
   it("summarises quali gaps to pole by sector", () => {
     const f = buildDebriefFacts({
@@ -69,5 +118,19 @@ describe("debrief facts", () => {
     expect((f.quali as any).gap_to_pole_s).toBe(0.3);
     expect((f.quali as any).sector_gap_to_pole_s).toEqual([0.1, 0, 0.2]);
     expect(f.consistency).toBeNull();
+  });
+  it("gives the debrief lap-numbered pace and sector evidence", () => {
+    const data = laps([90, 91, 89, 90], (n) => ({
+      s1: `${29 + n / 1000}`,
+      s2: "30.000",
+      s3: "30.000",
+    }));
+    const facts = buildDebriefFacts({ track_name: "Spa", category: "Race", lap_history: data });
+    expect(facts.lap_pace.best_clean_lap).toEqual({ lap: 3, time_s: 89 });
+    expect(facts.lap_pace.slowest_clean_lap).toEqual({ lap: 2, time_s: 91 });
+    expect(facts.lap_pace.best_sectors).toHaveProperty("s1");
+    expect(facts.lap_pace.best_sectors).toHaveProperty("s2");
+    expect(facts.lap_pace.best_sectors).toHaveProperty("s3");
+    expect(facts.lap_pace.best_sectors.s1).toEqual({ lap: 2, time_s: 29.002 });
   });
 });

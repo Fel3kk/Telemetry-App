@@ -10,6 +10,11 @@ export type ErsSlotMeta = { id: string; name: string };
 
 const ASPECT = 608 / 1080;
 
+/** A scroll gesture must never paint a new section. */
+export function isMapTap(start: Point, end: Point): boolean {
+  return Math.hypot(end.x - start.x, end.y - start.y) <= 10;
+}
+
 function lengths(points: Point[]): number[] {
   const closed = [...points, points[0]];
   return closed.slice(1).map((p, i) => Math.hypot(p.x - closed[i].x, (p.y - closed[i].y) * ASPECT));

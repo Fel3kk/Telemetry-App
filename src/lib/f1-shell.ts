@@ -248,10 +248,10 @@ export function appEmbedUrl(params: { season: number; track: string; view: strin
   qp.set("track", params.track);
   qp.set("view", params.view);
   if (params.cat) qp.set("cat", params.cat);
-  return `${BASE}app/index.html?${qp.toString()}`;
+  return `${BASE}app/embed.html?${qp.toString()}`;
 }
 export function appManageUrl() {
-  return `${BASE}app/index.html`;
+  return `${BASE}app/embed.html`;
 }
 
 const TRACK_FLAGS: Record<string, string> = {

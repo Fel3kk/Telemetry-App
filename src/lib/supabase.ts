@@ -1,7 +1,7 @@
 import { createClient, type Session } from "@supabase/supabase-js";
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./f1-shell";
 
-// Shared browser client. Same origin as /app/index.html iframe, so both
+// Shared browser client. Same origin as /app/embed.html iframe, so both
 // the React shell and the legacy analyzer share one localStorage session.
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {

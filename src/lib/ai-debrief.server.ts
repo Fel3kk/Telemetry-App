@@ -18,7 +18,61 @@ export async function verifyUser(authHeader: string | undefined): Promise<string
 
 export type GeminiResult = { ok: true; json: unknown; model: string } | { ok: false; error: string };
 
-export async function callGemini(prompt: string, schema: object, system: string): Promise<GeminiResult> {
+/** Gemini first (own key); if it is missing, rejected or out of quota, use the built-in Lovable AI. */
+export async function callGemini(
+  prompt: string,
+  schema: object,
+  system: string,
+  image?: { mimeType: string; data: string },
+): Promise<GeminiResult> {
+  const first = await callOwnGemini(prompt, schema, system, image);
+  if (first.ok || !process.env["LOVABLE_API_KEY"]) return first;
+  const fallback = await callLovableAI(prompt, schema, system, image);
+  return fallback.ok ? fallback : first;
+}
+
+async function callLovableAI(
+  prompt: string,
+  schema: object,
+  system: string,
+  image?: { mimeType: string; data: string },
+): Promise<GeminiResult> {
+  const model = "openai/gpt-6-astra";
+  try {
+    const { generateResponse, GatewayError } = await import("@lovable.dev/ai-gateway");
+    try {
+      const res = await generateResponse({
+        model,
+        instructions: `${system}\n\nReply with only a JSON object matching this schema:\n${JSON.stringify(schema)}`,
+        input: [{ role: "user", content: [
+          { type: "input_text", text: prompt },
+          ...(image ? [{ type: "input_image" as const, image_url: `data:${image.mimeType};base64,${image.data}`, detail: "auto" as const }] : []),
+        ] }],
+      });
+      const text = (res.output ?? []).flatMap((o: any) => o.type === "message" ? o.content : [])
+        .map((c: any) => c.type === "output_text" ? c.text : "").join("")
+        .replace(/^```(?:json)?\s*|\s*```$/g, "");
+      return { ok: true, json: JSON.parse(text), model };
+    } catch (e) {
+      if (e instanceof GatewayError) {
+        console.error("Lovable AI error", e.code, e.httpStatus, e.ids);
+        if (e.httpStatus === 402) return { ok: false, error: "AI credits are used up for this workspace." };
+        if (e.httpStatus === 429) return { ok: false, error: "The AI engineer is busy. Try again in a minute." };
+      } else console.error("Lovable AI failure", e);
+      return { ok: false, error: "The AI engineer is unavailable right now. Try again in a minute." };
+    }
+  } catch (e) {
+    console.error("Lovable AI import failure", e);
+    return { ok: false, error: "The AI engineer is unavailable right now. Try again in a minute." };
+  }
+}
+
+async function callOwnGemini(
+  prompt: string,
+  schema: object,
+  system: string,
+  image?: { mimeType: string; data: string },
+): Promise<GeminiResult> {
   const key = process.env["GEMINI_API_KEY"];
   if (!key) return { ok: false, error: "The Google AI key isn't set up on the server." };
   let lastError = "The AI engineer is unavailable right now. Try again in a minute.";
@@ -31,7 +85,10 @@ export async function callGemini(prompt: string, schema: object, system: string)
         headers: { "content-type": "application/json", "x-goog-api-key": key },
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: system }] },
-          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          contents: [{ role: "user", parts: [
+            { text: prompt },
+            ...(image ? [{ inlineData: { mimeType: image.mimeType, data: image.data } }] : []),
+          ] }],
           generationConfig: { responseMimeType: "application/json", responseSchema: schema, temperature: 0.4 },
         }),
       });
