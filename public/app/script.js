@@ -5416,16 +5416,46 @@ function showDriverProfile(button) {
   if (!dialog.open) dialog.showModal();
 }
 
-function renderDriverProfileTile(name, team, season, rank, titles = 0, seasonsActive = 0) {
-  return `<button type="button" data-driver="${escapeHtml(name)}" data-team="${escapeHtml(team)}"
+function renderDriverProfileTile(name, team, season, rank, titles = 0, seasonsActive = 0, stats = {}) {
+  const color = teamColorFor(team);
+  return `<button type="button" data-driver="${escapeHtml(name)}" data-name="${escapeHtml(name.toLowerCase())}" data-team="${escapeHtml(normalizeTeamName(team).toLowerCase())}"
     data-season="${season}" data-rank="${rank}" data-titles="${titles}" data-seasons="${seasonsActive}"
+    data-points="${Number(stats.points) || 0}" data-wins="${Number(stats.wins) || 0}"
+    data-podiums="${Number(stats.podiums) || 0}"
+    data-poles="${(Number(stats.gp_poles) || 0) + (Number(stats.sprint_poles) || 0)}"
     onclick="showDriverProfile(this)"
-    style="display:flex;min-width:0;min-height:145px;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:14px;border:1px solid #333;border-radius:14px;background:#151515;color:#f5f5f5;cursor:pointer;">
-    <span role="img" aria-label="Blank profile picture placeholder"
-      style="display:block;width:68px;height:68px;border:1px solid #555;border-radius:50%;background:#202020;"></span>
-    <strong style="max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(name.toUpperCase())}</strong>
-    <small style="max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#999;">${escapeHtml(team || "Unassigned")}</small>
+    style="position:relative;display:flex;aspect-ratio:1;min-width:0;min-height:0;overflow:hidden;align-items:flex-end;justify-content:flex-start;padding:8px;border:1px solid rgba(255,255,255,.2);border-radius:12px;background:${color};color:#fff;cursor:pointer;text-align:left;">
+    <span aria-hidden="true" style="position:absolute;inset:25% 0 0;background:linear-gradient(transparent,rgba(0,0,0,.85));pointer-events:none;"></span>
+    <strong style="position:absolute;inset-inline:0;bottom:0;overflow:hidden;padding:8px;text-overflow:ellipsis;white-space:nowrap;font-size:12px;">${escapeHtml(name.toUpperCase())}</strong>
   </button>`;
+}
+
+function renderDriverProfileSort(isCareer = false) {
+  return `<label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:10px;font-weight:bold;letter-spacing:.12em;text-transform:uppercase;color:#999;">
+    Sort
+    <select aria-label="Sort driver profiles" onchange="sortDriverProfileTiles(this)"
+      style="border:1px solid #444;border-radius:6px;background:#151515;padding:5px 8px;color:#f5f5f5;font-size:12px;letter-spacing:normal;text-transform:none;">
+      <option value="points">Points</option><option value="team">Team</option><option value="name">Name</option>
+      <option value="wins">Wins</option><option value="podiums">Podiums</option><option value="poles">Poles</option>
+      ${isCareer ? '<option value="titles">Titles</option><option value="seasons">Seasons active</option>' : ""}
+    </select>
+  </label>`;
+}
+
+function sortDriverProfileTiles(select) {
+  const grid = select.closest(".driver-profile-section")?.querySelector(".driver-profile-grid");
+  if (!grid) return;
+  const key = select.value;
+  const tiles = Array.from(grid.querySelectorAll("button[data-driver]"));
+  tiles.sort((a, b) => {
+    const aValue = a.dataset[key] || "";
+    const bValue = b.dataset[key] || "";
+    if (key === "team" || key === "name") {
+      return aValue.localeCompare(bValue) || a.dataset.name.localeCompare(b.dataset.name);
+    }
+    return Number(bValue) - Number(aValue) || a.dataset.name.localeCompare(b.dataset.name);
+  });
+  tiles.forEach((tile) => grid.appendChild(tile));
 }
 
 function renderSeasonStatsTable() {
@@ -5441,19 +5471,25 @@ function renderSeasonStatsTable() {
   const teams = getTeamsForSeason(season);
   const drivers = Object.entries(standings).sort((a, b) => b[1].points - a[1].points);
   const tiles = drivers
-    .map(([name], index) =>
+    .map(([name, stats], index) =>
       renderDriverProfileTile(
         name,
         teamForDriver(teams, name, season) || "Unassigned",
         season,
         index + 1,
+        0,
+        0,
+        stats,
       ),
     )
     .join("");
   container.innerHTML = `
     <p class="records-legend">Season ${season} · Select a driver to view their full season profile.</p>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px;">
-      ${tiles || `<p class="rec-empty">No driver stats for this season yet.</p>`}
+    <div class="driver-profile-section">
+      ${renderDriverProfileSort()}
+      <div class="driver-profile-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(105px,1fr));gap:8px;">
+        ${tiles || `<p class="rec-empty">No driver stats for this season yet.</p>`}
+      </div>
     </div>`;
 }
 
@@ -5643,6 +5679,7 @@ function renderRecordsTable() {
         index + 1,
         driver.titles,
         driver.seasons.size,
+        driver,
       ),
     )
     .join("");
@@ -5705,8 +5742,11 @@ function renderRecordsTable() {
       <div class="records-block">
         <h3 class="records-title">All-Time Stats</h3>
         <p class="records-legend">Select a driver tile to open their complete career profile.</p>
-        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px;">
-          ${driverTiles || `<p class="rec-empty">No race results yet.</p>`}
+        <div class="driver-profile-section">
+          ${renderDriverProfileSort(true)}
+          <div class="driver-profile-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(105px,1fr));gap:8px;">
+            ${driverTiles || `<p class="rec-empty">No race results yet.</p>`}
+          </div>
         </div>
       </div>
 
