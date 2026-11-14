@@ -261,7 +261,7 @@ export function QualifyingSimulation({ season, track, cat }: { season: number; t
         </p>
       )}
       <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,340px)] lg:items-start">
-        <div className="relative aspect-[1080/608] w-full min-w-0 overflow-hidden rounded-md border border-border bg-background">
+        <div className="relative mx-auto aspect-[1080/608] w-full min-w-0 max-w-[115.46svh] overflow-hidden rounded-md border border-border bg-background">
           {!imageFailed && (
             <img
               src={image}

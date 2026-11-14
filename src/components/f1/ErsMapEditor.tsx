@@ -472,8 +472,8 @@ export function ErsMapEditor({ season, track, cat }: { season: number; track: st
             {pending !== null && <Button variant="ghost" size="icon" onClick={() => setPending(null)} aria-label="Cancel section" title="Cancel section"><X /></Button>}
           </div>
           {palette.length > 0 && <div className="mb-2 flex gap-2 overflow-x-auto pb-1" aria-label="Paint colour">{palette.map((c) => <Button key={c.id} size="sm" variant={activeColor === c.id ? "secondary" : "outline"} aria-pressed={activeColor === c.id} className="max-w-48 shrink-0" onClick={() => setActiveColor(c.id)}><span className="h-4 w-4 shrink-0 rounded-full" style={{ background: c.color }} /><span className="truncate">{c.name}</span></Button>)}</div>}
-          <div className="max-h-[60svh] min-h-48 overflow-auto overscroll-contain rounded-lg border border-border bg-card" aria-label="Zoomable circuit">
-          <div className={`relative aspect-[1080/608] min-h-48 ${zoom === 3 ? "w-[300%]" : zoom === 2 ? "w-[200%]" : "w-full"}`}>
+          <div className="mx-auto max-h-[65svh] w-full max-w-[115.46svh] overflow-auto overscroll-contain rounded-lg border border-border bg-card" aria-label="Zoomable circuit">
+          <div className={`relative aspect-[1080/608] ${zoom === 3 ? "w-[300%]" : zoom === 2 ? "w-[200%]" : "w-full"}`}>
             {!imageFailed && (
               <img src={image} alt={`${track} circuit`} className="absolute inset-0 h-full w-full object-fill opacity-60" onError={() => {
                 if (image !== trackMapFallbackUrl(track)) setImage(trackMapFallbackUrl(track)); else setImageFailed(true);
@@ -483,6 +483,7 @@ export function ErsMapEditor({ season, track, cat }: { season: number; track: st
               <svg viewBox="0 0 1080 608" preserveAspectRatio="none" className="absolute inset-0 h-full w-full cursor-crosshair touch-pan-x touch-pan-y" role="group" aria-label="ERS track map — choose a tool, then tap the racing line" onPointerDown={(e) => { if (e.isPrimary) pointerStart.current = { x: e.clientX, y: e.clientY }; }} onPointerUp={onMapTap} onPointerCancel={() => { pointerStart.current = null; }}>
                 <polyline points={toSvg([...line, line[0]])} fill="none" stroke="currentColor" strokeOpacity="0.2" strokeWidth="18" strokeLinejoin="round" className="text-foreground" />
                 <polyline points={toSvg([...line, line[0]])} fill="none" stroke="currentColor" strokeOpacity="0.75" strokeWidth="5" strokeLinejoin="round" strokeDasharray="2 10" strokeLinecap="round" className="text-foreground" />
+                {/* Saved order is paint order, so later strokes stay visible over earlier ones. */}
                 {segments.map((s) => {
                   const c = colorOf(s.colorId);
                   if (!c) return null;
@@ -507,17 +508,28 @@ export function ErsMapEditor({ season, track, cat }: { season: number; track: st
                 {notes.map((note) => {
                   const p = pointAtProgress(line, note.progress);
                   const active = note.id === activeNoteId;
+                  const x = p.x * 1080;
+                  const y = p.y * 608;
+                  const noteBoxX = x > 800 ? -276 : 16;
+                  const noteBoxY = y < 160 ? 14 : -152;
                   return (
-                    <g key={note.id} transform={`translate(${p.x * 1080} ${p.y * 608})`}
+                    <g key={note.id} transform={`translate(${x} ${y})`}
                       className="cursor-pointer" role="button" tabIndex={0} aria-label={`Track note: ${note.text}`}
                       onPointerDown={(e) => e.stopPropagation()} onPointerUp={(e) => e.stopPropagation()}
                       onPointerEnter={() => setActiveNoteId(note.id)} onPointerLeave={() => setActiveNoteId((id) => id === note.id ? null : id)}
                       onFocus={() => setActiveNoteId(note.id)} onBlur={() => setActiveNoteId((id) => id === note.id ? null : id)}
                       onClick={(e) => { e.stopPropagation(); setActiveNoteId(note.id); }}
                       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setActiveNoteId(note.id); } }}>
-                      <title>{note.text}</title>
                       <circle r={active ? 14 : 11} fill="#facc15" stroke="var(--background)" strokeWidth="4" />
                       <path d="M-4 0h8M0-4v8" stroke="#1c1917" strokeWidth="2" />
+                      {active && (
+                        <foreignObject x={noteBoxX} y={noteBoxY} width="260" height="140">
+                          <div className="w-[260px] rounded-md border border-amber-400/70 bg-background/95 p-2 text-left text-xs text-foreground shadow-lg backdrop-blur">
+                            <p className="mb-1 font-semibold text-amber-600 dark:text-amber-300">Track note · {pct(note.progress)}</p>
+                            <p className="max-h-28 overflow-y-auto whitespace-pre-wrap break-words">{note.text}</p>
+                          </div>
+                        </foreignObject>
+                      )}
                     </g>
                   );
                 })}
@@ -559,7 +571,7 @@ export function ErsMapEditor({ season, track, cat }: { season: number; track: st
                 {palette.filter((c) => cover[c.id]).map((c) => (
                   <span key={c.id} className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full" style={{ background: c.color }} />{c.name}: <b className="tabular-nums">{pct(cover[c.id])}</b></span>
                 ))}
-                {cover[""] > 0.0005 && <span className="text-muted-foreground">Unpainted: {pct(cover[""])}</span>}
+                {cover[""] > 0.0005 && <span className="text-muted-foreground">None: {pct(cover[""])}</span>}
               </div>
             </div>
           )}
