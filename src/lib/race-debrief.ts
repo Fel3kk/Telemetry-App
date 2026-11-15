@@ -388,6 +388,13 @@ export function raceConsistency(laps: DebriefLap[]): Consistency {
 const avgWear = (w?: DebriefLap["tyre_wear"]) =>
   w ? ((w.FL ?? 0) + (w.FR ?? 0) + (w.RL ?? 0) + (w.RR ?? 0)) / 4 : null;
 
+type DebriefOtherDriver = {
+  name?: string;
+  team?: string;
+  position?: number | string | null;
+  lap_history?: DebriefLap[];
+};
+
 export type DebriefSession = {
   track_name: string;
   category: string;
@@ -396,6 +403,7 @@ export type DebriefSession = {
   starting_position?: number | null;
   finishing_position?: number | null;
   lap_history?: DebriefLap[];
+  other_driver_lap_histories?: DebriefOtherDriver[];
   race_story?: DebriefRaceStory;
   results?: DebriefResult[];
 };
@@ -422,6 +430,7 @@ export function buildDebriefFacts(s: DebriefSession) {
   const cleanLapsByTime = [...cleanRaceLaps].sort((a, b) => a.time_s - b.time_s);
   const bestCleanLap = cleanLapsByTime[0] ?? null;
   const slowestCleanLap = cleanLapsByTime.at(-1) ?? null;
+  const cleanPlayerLapTimes = new Map(cleanRaceLaps.map((lap) => [lap.lap, lap.time_s]));
 
   const stints = splitStints(laps).map((g, i) => {
     const first = g[0];
@@ -594,6 +603,91 @@ export function buildDebriefFacts(s: DebriefSession) {
       }
     : null;
 
+  const driverLapComparisons = !isQuali
+    ? (s.other_driver_lap_histories ?? [])
+        .map((driver) => {
+          const driverLaps = (driver.lap_history ?? [])
+            .filter((lap) => Number(lap?.lap) > 0)
+            .sort((a, b) => a.lap - b.lap);
+          const excluded = new Set(raceConsistency(driverLaps).excluded.map((entry) => entry.lap));
+          const clean = driverLaps.flatMap((lap) => {
+            const time = lapSeconds(lap.lap_time);
+            return time !== null && !excluded.has(lap.lap)
+              ? [
+                  {
+                    lap: lap.lap,
+                    time_s: time,
+                    compound: lap.current_tyre_compound || "",
+                    tyre_wear: lap.tyre_wear,
+                  },
+                ]
+              : [];
+          });
+          const cleanTimes = clean.map((lap) => lap.time_s);
+          const best = [...clean].sort((a, b) => a.time_s - b.time_s)[0];
+          const rivalCleanByLap = new Map(clean.map((lap) => [lap.lap, lap.time_s]));
+          const lapDeltas = [...cleanPlayerLapTimes]
+            .flatMap(([lap, playerTime]) => {
+              const driverTime = rivalCleanByLap.get(lap);
+              return driverTime === undefined
+                ? []
+                : [
+                    {
+                      lap,
+                      player_time_s: r3(playerTime),
+                      driver_time_s: r3(driverTime),
+                      player_minus_driver_s: r3(playerTime - driverTime),
+                    },
+                  ];
+            })
+            .slice(0, 60);
+          const driverStints = splitStints(driverLaps).map((group, index) => {
+            const first = group[0];
+            const last = group[group.length - 1];
+            const stintClean = clean.filter((lap) => lap.lap >= first.lap && lap.lap <= last.lap);
+            const startWear = avgWear(first.tyre_wear);
+            const endWear = avgWear(last.tyre_wear);
+            const stintBest = [...stintClean].sort((a, b) => a.time_s - b.time_s)[0];
+            return {
+              stint: index + 1,
+              laps: `${first.lap}-${last.lap}`,
+              length: group.length,
+              compound: first.current_tyre_compound || "",
+              clean_laps: stintClean.length,
+              clean_median_lap_s: stintClean.length
+                ? r3(median(stintClean.map((lap) => lap.time_s)))
+                : null,
+              best_clean_lap: stintBest
+                ? { lap: stintBest.lap, time_s: r3(stintBest.time_s) }
+                : null,
+              wear_change_pct:
+                startWear !== null && endWear !== null ? r3(endWear - startWear) : null,
+              end_wear_pct: endWear === null ? null : r3(endWear),
+            };
+          });
+          return {
+            name: driver.name || "",
+            team: driver.team || "",
+            position: Number(driver.position) > 0 ? Number(driver.position) : null,
+            laps_completed: driverLaps.length,
+            clean_laps: clean.length,
+            best_clean_lap: best ? { lap: best.lap, time_s: r3(best.time_s) } : null,
+            median_clean_lap_s: cleanTimes.length ? r3(median(cleanTimes)) : null,
+            lap_deltas: lapDeltas,
+            stints: driverStints,
+          };
+        })
+        .filter((driver) => driver.name)
+        .sort((a, b) => {
+          const playerPosition = Number(s.finishing_position);
+          if (a.position === null || b.position === null || !Number.isFinite(playerPosition)) {
+            return b.clean_laps - a.clean_laps;
+          }
+          return Math.abs(a.position - playerPosition) - Math.abs(b.position - playerPosition);
+        })
+        .slice(0, 6)
+    : [];
+
   const lastLap = laps[laps.length - 1];
   const damage = lastLap?.damage
     ? Object.fromEntries(
@@ -690,6 +784,7 @@ export function buildDebriefFacts(s: DebriefSession) {
     fuel_left_kg: fuelEnd,
     stints: isQuali ? [] : stints,
     race_comparison: raceComparison,
+    driver_lap_comparisons: driverLapComparisons,
     consistency: consistency && {
       score: consistency.score,
       spread_s: consistency.spread,

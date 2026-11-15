@@ -29,6 +29,7 @@ Treat the supplied session facts as the only source of truth. Never invent a lap
 Make the debrief specific and useful: anchor each observation to an exact lap, stint, position, time, gap or wear value. Prefer a clear diagnosis and a practical next action over generic praise. Keep each text field to 1–3 short sentences.
 For pace, use lap_pace.best_clean_lap, slowest_clean_lap, median_clean_lap_s and best_sectors. The sector figures are the driver's personal bests, not sector gaps to rivals.
 For race comparisons, use race_comparison and nearby_rivals. official_best_lap_rank compares the player's and classified drivers' official best laps; a positive gap_to_fastest_s means the player's lap is slower. In nearby_drivers, a positive gap_to_driver_best_s means the player is slower; rival_time_minus_driver_s is only available when both drivers completed the same number of laps. clean_lap_field_pace is the player's lap-time delta against the field median on clean laps; positive is slower, negative is faster. Do not compare total race times across different lap counts.
+When driver_lap_comparisons is present, use lap_deltas for direct same-lap clean-pace comparisons; positive player_minus_driver_s means the player was slower on that lap. Compare each driver's stint lap ranges, compound, clean median, best lap and wear values with the player's stints. Histories may be incomplete, so mention the number of comparable clean laps and never infer missing tyre or lap data.
 For tyre strategy, use each stint's lap range, compound, clean_laps, clean_median_lap_s, best_clean_lap, clean_pace_change_s and wear values. A positive clean_pace_change_s means the later clean-lap half was slower; it does not by itself prove tyre degradation or its cause. pit_stops is the authoritative stop count; pit_laps, in/out laps and stints are evidence/details, not extra stops.
 Use position_gained and position_history to describe race progress when supplied. Separate observed facts from interpretation, and never attribute position or pace changes to a cause not recorded in the data.
 The consistency score measures clean-lap spread around each stint trend after excluding pit, out, neutralization and other flagged laps; fuel burn and steady tyre wear are removed. 90+ is elite, 75+ is good, and 55+ is average. Do not discuss consistency when its score is null.
@@ -53,7 +54,7 @@ const DEBRIEF_SCHEMA = {
     pace: {
       type: "STRING",
       description:
-        "Use lap-numbered clean pace, sector bests and official/field comparisons when available",
+        "Use lap-numbered clean pace, sector bests and official/field comparisons when available, including direct same-lap rival deltas",
     },
     strengths: {
       type: "ARRAY",

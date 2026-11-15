@@ -325,4 +325,38 @@ describe("debrief facts", () => {
       ],
     });
   });
+
+  it("compares same-lap clean pace and exposes each rival's tyre stints", () => {
+    const rivalLaps = laps([89, 90, 91, 110, 93, 92, 91, 90], (n) => ({
+      pit_status: n === 4 ? 1 : 0,
+      current_tyre_compound: n >= 5 ? "Hard" : "Medium",
+      tyre_wear: { FL: n, FR: n, RL: n, RR: n },
+    }));
+    const facts = buildDebriefFacts({
+      track_name: "Spa",
+      category: "Race",
+      finishing_position: 4,
+      lap_history: laps([90, 91, 92, 110, 94, 93, 92, 91]),
+      other_driver_lap_histories: [
+        { name: "RIVAL", team: "Team", position: 3, lap_history: rivalLaps },
+      ],
+    });
+
+    expect(facts.driver_lap_comparisons[0]).toMatchObject({
+      name: "RIVAL",
+      laps_completed: 8,
+      best_clean_lap: { lap: 2, time_s: 90 },
+      lap_deltas: [
+        { lap: 2, player_minus_driver_s: 1 },
+        { lap: 3, player_minus_driver_s: 1 },
+        { lap: 6, player_minus_driver_s: 1 },
+        { lap: 7, player_minus_driver_s: 1 },
+        { lap: 8, player_minus_driver_s: 1 },
+      ],
+      stints: [
+        { laps: "1-4", compound: "Medium", wear_change_pct: 3 },
+        { laps: "5-8", compound: "Hard", clean_laps: 3 },
+      ],
+    });
+  });
 });

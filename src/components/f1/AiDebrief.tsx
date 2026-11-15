@@ -475,6 +475,58 @@ export function AiDebrief({
               </table>
             </div>
           )}
+          {facts && facts.driver_lap_comparisons.length > 0 && (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[52rem] text-left text-sm">
+                <caption className="mb-2 text-left text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                  Clean laps shared with rivals · positive delta means you were slower
+                </caption>
+                <thead className="text-xs text-muted-foreground">
+                  <tr>
+                    <th className="pb-2 pr-3 font-medium">Driver</th>
+                    <th className="pb-2 pr-3 font-medium">Best / median</th>
+                    <th className="pb-2 pr-3 font-medium">Same-lap deltas</th>
+                    <th className="pb-2 font-medium">Tyre stints · median · end wear</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {facts.driver_lap_comparisons.map((rival) => (
+                    <tr key={rival.name} className="border-t border-border/70 align-top">
+                      <td className="py-2 pr-3 font-medium">
+                        {rival.position ? `P${rival.position} ` : ""}
+                        {rival.name}
+                        <span className="block text-xs text-muted-foreground">
+                          {rival.lap_deltas.length} comparable laps
+                        </span>
+                      </td>
+                      <td className="py-2 pr-3 whitespace-nowrap">
+                        {seconds(rival.best_clean_lap?.time_s)} /{" "}
+                        {seconds(rival.median_clean_lap_s)}
+                      </td>
+                      <td className="py-2 pr-3">
+                        {rival.lap_deltas.length
+                          ? rival.lap_deltas
+                              .slice(0, 6)
+                              .map(
+                                (lap) => `L${lap.lap} ${signedSeconds(lap.player_minus_driver_s)}`,
+                              )
+                              .join(" · ")
+                          : "No shared clean laps"}
+                      </td>
+                      <td className="py-2">
+                        {rival.stints
+                          .map(
+                            (stint) =>
+                              `${stint.compound || "Unknown"} L${stint.laps} · ${seconds(stint.clean_median_lap_s)} · ${stint.end_wear_pct === null ? "wear —" : `${stint.end_wear_pct.toFixed(1)}% wear`}`,
+                          )
+                          .join(" / ") || "No stint data"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </section>
       )}
 

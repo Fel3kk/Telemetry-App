@@ -8,27 +8,59 @@ describe("saved debrief sessions", () => {
     let requested: URL | undefined;
     const client = createClient("https://sessions.example", "public-test-key", {
       auth: { persistSession: false, autoRefreshToken: false },
-      global: { fetch: async (input) => {
-        requested = new URL(String(input));
-        const columns = requested.searchParams.get("select")?.split(",") ?? [];
-        const correct = columns.includes("starting_position:starting_pos") && columns.includes("finishing_position:finishing_pos");
-        return Response.json(correct ? [{ id: "race-1", track_name: "Abu Dhabi", category: "Race", starting_position: 7, finishing_position: 10 }] : { message: "Unknown position column" }, { status: correct ? 200 : 400 });
-      } },
+      global: {
+        fetch: async (input) => {
+          requested = new URL(String(input));
+          const columns = requested.searchParams.get("select")?.split(",") ?? [];
+          const correct =
+            columns.includes("starting_position:starting_pos") &&
+            columns.includes("finishing_position:finishing_pos") &&
+            columns.includes("other_driver_lap_histories");
+          return Response.json(
+            correct
+              ? [
+                  {
+                    id: "race-1",
+                    track_name: "Abu Dhabi",
+                    category: "Race",
+                    starting_position: 7,
+                    finishing_position: 10,
+                    other_driver_lap_histories: [
+                      { name: "RIVAL", lap_history: [{ lap: 1, lap_time: "1:30.000" }] },
+                    ],
+                  },
+                ]
+              : { message: "Unknown session columns" },
+            { status: correct ? 200 : 400 },
+          );
+        },
+      },
     });
-    const rows = await fetchDebriefSessions(client, { season: 2, career: "driver-1", track: "abu_dhabi", cat: "Race" });
+    const rows = await fetchDebriefSessions(client, {
+      season: 2,
+      career: "driver-1",
+      track: "abu_dhabi",
+      cat: "Race",
+    });
     expect(requested?.searchParams.get("season")).toBe("eq.2");
     expect(requested?.searchParams.get("career_slot")).toBe("eq.driver-1");
     expect(rows).toHaveLength(1);
     expect(rows[0].starting_position).toBe(7);
     expect(rows[0].finishing_position).toBe(10);
+    expect(rows[0].other_driver_lap_histories?.[0].name).toBe("RIVAL");
     expect(buildDebriefFacts(rows[0])).toMatchObject({ grid: 7, finish: 10 });
   });
 
   it("does not disguise a failed request as an empty weekend", async () => {
     const client = createClient("https://sessions.example", "public-test-key", {
       auth: { persistSession: false, autoRefreshToken: false },
-      global: { fetch: async () => Response.json({ code: "42501", message: "Permission denied" }, { status: 403 }) },
+      global: {
+        fetch: async () =>
+          Response.json({ code: "42501", message: "Permission denied" }, { status: 403 }),
+      },
     });
-    await expect(fetchDebriefSessions(client, { season: 1, career: null, track: "spa", cat: "Race" })).rejects.toMatchObject({ code: "42501" });
+    await expect(
+      fetchDebriefSessions(client, { season: 1, career: null, track: "spa", cat: "Race" }),
+    ).rejects.toMatchObject({ code: "42501" });
   });
 });
