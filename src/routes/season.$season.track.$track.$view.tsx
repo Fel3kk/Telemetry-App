@@ -6,6 +6,7 @@ import { QualifyingSimulation } from "@/components/f1/QualifyingSimulation";
 import { ErsMapEditor } from "@/components/f1/ErsMapEditor";
 import { AiDebrief } from "@/components/f1/AiDebrief";
 import { SeasonStats } from "@/components/f1/SeasonStats";
+import { AllTimeRecordsPage } from "@/components/f1/AllTimeRecordsPage";
 
 export const Route = createFileRoute("/season/$season/track/$track/$view")({
   head: ({ params }) => {
@@ -43,7 +44,13 @@ const LABELS: Record<string, string> = {
   practice: "Practice",
 };
 
-const NATIVE_VIEWS = new Set(["quali-simulation", "ers-map", "ai-debrief", "season-stats"]);
+const NATIVE_VIEWS = new Set([
+  "quali-simulation",
+  "ers-map",
+  "ai-debrief",
+  "season-stats",
+  "records",
+]);
 
 function ViewPage() {
   const { season, track, view } = Route.useParams();
@@ -68,6 +75,18 @@ function ViewPage() {
       window.removeEventListener("message", onMsg);
     };
   }, [src, view]);
+
+  if (view === "records") {
+    return (
+      <AllTimeRecordsPage
+        embeddedContext={{
+          season: Number(season),
+          track,
+          cat,
+        }}
+      />
+    );
+  }
 
   return (
     <>
