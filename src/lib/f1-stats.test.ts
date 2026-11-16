@@ -4,10 +4,13 @@ import {
   GP_MAX_POINTS,
   SPRINT_MAX_POINTS,
   computeStandings,
+  computeConstructorStandings,
   computeTitleMath,
   hasClinchedTitle,
   seasonDriverProfiles,
   allTimeDriverProfiles,
+  allTimeConstructorProfiles,
+  driverTeamHistories,
   loadExcludedTracks,
   saveExcludedTracks,
 } from "./f1-stats";
@@ -221,5 +224,95 @@ describe("driver season and career profiles", () => {
     assert.equal(career[0].name, "BOB");
     assert.equal(career[0].stats.totalPoints, 31);
     assert.equal(career[0].seasonsActive, 1);
+  });
+});
+
+describe("constructor career profiles", () => {
+  test("aggregates points, wins, podiums, poles, and titles across normalized team names", () => {
+    const sessions = [2025, 2026].map((season) =>
+      makeSession({
+        season,
+        session_type: "Race",
+        race_story: {
+          classification: [
+            { name: "ALICE", team: `Williams ${season}`, position: 1, status: "FINISHED" },
+            { name: "BOB", team: `Williams ${season}`, position: 2, status: "FINISHED" },
+            { name: "CAROL", team: `Ferrari ${season}`, position: 3, status: "FINISHED" },
+          ],
+          starting_grid: [{ name: "ALICE", team: `Williams ${season}`, position: 1 }],
+        },
+      }),
+    );
+
+    const perSeason = computeConstructorStandings(
+      sessions.filter((session) => session.season === 2025),
+    );
+    assert.deepEqual(perSeason[0], {
+      team: "Williams",
+      points: 43,
+      wins: 1,
+      podiums: 2,
+      poles: 1,
+    });
+
+    const profiles = allTimeConstructorProfiles(sessions, new Map([["Williams", 2]]));
+    assert.deepEqual(profiles[0], {
+      team: "Williams",
+      seasonsActive: 2,
+      titles: 2,
+      points: 86,
+      wins: 2,
+      podiums: 4,
+      poles: 2,
+    });
+  });
+
+  describe("driver team histories", () => {
+    test("chooses one team per driver-season, preserves historical names, and sorts chronologically", () => {
+      const sessions = [
+        makeSession({
+          season: 3,
+          race_story: {
+            classification: [
+              { name: "Alice", team: "Aston Martin" },
+              { name: "Bob", team: "McLaren" },
+              { name: "Ghost", team: "Unassigned" },
+            ],
+          },
+        }),
+        makeSession({
+          season: 1,
+          race_story: {
+            classification: [{ name: "ALICE", team: "Racing Point 2020" }],
+          },
+        }),
+        makeSession({
+          season: 2,
+          race_story: {
+            classification: [
+              { name: "ALICE", team: "McLaren" },
+              { name: "alice", team: "McLaren" },
+              { name: "ALICE", team: "Aston Martin" },
+            ],
+          },
+        }),
+      ];
+
+      assert.deepEqual(
+        driverTeamHistories(sessions).find((history) => history.name === "ALICE"),
+        {
+          name: "ALICE",
+          seasons: [
+            { season: 1, team: "Racing Point" },
+            { season: 2, team: "McLaren" },
+            { season: 3, team: "Aston Martin" },
+          ],
+        },
+      );
+      assert.equal(
+        driverTeamHistories(sessions).some((history) => history.name === "GHOST"),
+        false,
+      );
+    });
   });
 });

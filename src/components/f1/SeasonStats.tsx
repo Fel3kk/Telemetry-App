@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { fetchSessions, loadCachedSessions, type Session } from "@/lib/f1-shell";
-import { seasonDriverProfiles } from "@/lib/f1-stats";
+import { driverTeamHistories, seasonDriverProfiles } from "@/lib/f1-stats";
 import { DriverProfileDialog, type DriverProfile } from "@/components/f1/DriverProfileDialog";
 import { DriverProfileTiles } from "@/components/f1/DriverProfileTiles";
 
@@ -29,18 +29,25 @@ export function SeasonStats({ season }: { season: number }) {
   }, []);
 
   const drivers = useMemo(() => seasonDriverProfiles(sessions, season), [sessions, season]);
+  const teamHistories = useMemo(() => driverTeamHistories(sessions), [sessions]);
 
   return (
     <>
       <p className="mb-3 text-sm text-white/50">
-        Season {season} · Select a driver to view their full season profile.
+        Season {season} · Select a driver for their profile or compare any two drivers.
       </p>
       {loading && <p className="py-6 text-sm text-white/50">Loading season stats…</p>}
       {error && <p className="py-6 text-sm text-red-400">Failed to load season stats: {error}</p>}
       {!loading && !error && drivers.length === 0 && (
         <p className="py-6 text-sm text-white/50">No driver stats for this season yet.</p>
       )}
-      {drivers.length > 0 && <DriverProfileTiles drivers={drivers} onSelect={setSelectedDriver} />}
+      {drivers.length > 0 && (
+        <DriverProfileTiles
+          drivers={drivers}
+          teamHistories={teamHistories}
+          onSelect={setSelectedDriver}
+        />
+      )}
       <DriverProfileDialog
         driver={selectedDriver}
         context={`Season ${season}`}

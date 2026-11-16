@@ -6,11 +6,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import type { SeasonSummary } from "@/lib/f1-stats";
+import { DRIVER_PROFILE_PLACEHOLDER } from "@/lib/profile-images";
 
 export type DriverProfile = {
   name: string;
   team: string;
   stats: SeasonSummary;
+  imageSrc?: string;
   titles?: number;
   seasonsActive?: number;
 };
@@ -42,17 +44,28 @@ export function DriverProfileDialog({
       {driver && (
         <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto border-border bg-background">
           <DialogHeader>
-            <DialogTitle className="text-xl font-black">{driver.name}</DialogTitle>
-            <DialogDescription>
-              {[
-                driver.team,
-                context,
-                driver.seasonsActive ? `${driver.seasonsActive} seasons` : "",
-                driver.titles ? `${driver.titles} title${driver.titles === 1 ? "" : "s"}` : "",
-              ]
-                .filter(Boolean)
-                .join(" · ")}
-            </DialogDescription>
+            <div className="flex items-center gap-3">
+              <div className="h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-border bg-muted/40">
+                <img
+                  src={driver.imageSrc ?? DRIVER_PROFILE_PLACEHOLDER}
+                  alt=""
+                  className="h-full w-full object-contain"
+                />
+              </div>
+              <div className="min-w-0">
+                <DialogTitle className="text-xl font-black">{driver.name}</DialogTitle>
+                <DialogDescription>
+                  {[
+                    driver.team,
+                    context,
+                    driver.seasonsActive ? `${driver.seasonsActive} seasons` : "",
+                    driver.titles ? `${driver.titles} title${driver.titles === 1 ? "" : "s"}` : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </DialogDescription>
+              </div>
+            </div>
           </DialogHeader>
 
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">

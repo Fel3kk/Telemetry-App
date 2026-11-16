@@ -1,7 +1,15 @@
 // Shared season computations for the React shell (title race, records wall).
 // Reuses the same classification data the legacy app uses for standings.
 
-import { badgesFor, isRaceResultSession, racePosition, roundOrder, trackSlug, type Session } from "./f1-shell";
+import {
+  badgesFor,
+  isRaceResultSession,
+  racePosition,
+  roundOrder,
+  trackSlug,
+  type Session,
+} from "./f1-shell";
+import { canonicalTeam, normalizeDriver } from "./driver-identity";
 
 export const RACE_POINTS = [0, 25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
 export const SPRINT_POINTS = [0, 8, 7, 6, 5, 4, 3, 2, 1];
@@ -88,6 +96,14 @@ export type DriverStanding = {
   fastestLaps: number;
   gpStarts: number;
   sprintStarts: number;
+};
+
+export type ConstructorStanding = {
+  team: string;
+  points: number;
+  wins: number;
+  podiums: number;
+  poles: number;
 };
 
 // Championship standings for one season, scored from each race/sprint
@@ -195,7 +211,24 @@ export function computeStandings(sessions: Session[]): DriverStanding[] {
   );
 }
 
-export function hasClinchedTitle(standings: DriverStanding[], maxPointsLeft: number): boolean {
+export function computeConstructorStandings(sessions: Session[]): ConstructorStanding[] {
+  const teams = new Map<string, ConstructorStanding>();
+  for (const driver of computeStandings(sessions)) {
+    const team = canonicalTeam(driver.team);
+    if (!team || team.toLowerCase() === "unassigned") continue;
+    const standing = teams.get(team) ?? { team, points: 0, wins: 0, podiums: 0, poles: 0 };
+    standing.points += driver.points;
+    standing.wins += driver.wins;
+    standing.podiums += driver.podiums;
+    standing.poles += driver.gpPoles + driver.sprintPoles;
+    teams.set(team, standing);
+  }
+  return [...teams.values()].sort(
+    (a, b) => b.points - a.points || b.wins - a.wins || a.team.localeCompare(b.team),
+  );
+}
+
+export function hasClinchedTitle(standings: { points: number }[], maxPointsLeft: number): boolean {
   const leader = standings[0];
   if (!leader || leader.points <= 0) return false;
   return leader.points > (standings[1]?.points ?? 0) + Math.max(0, maxPointsLeft);
@@ -446,6 +479,16 @@ export type DriverCareerProfile = {
   seasonsActive: number;
   titles: number;
   stats: SeasonSummary;
+};
+
+export type ConstructorCareerProfile = {
+  team: string;
+  seasonsActive: number;
+  titles: number;
+  points: number;
+  wins: number;
+  podiums: number;
+  poles: number;
 };
 
 function calculateDriverSeasonProfile(
@@ -773,6 +816,108 @@ export function allTimeDriverProfiles(
       },
     };
   });
+}
+
+export type DriverTeamHistorySeason = {
+  season: number;
+  team: string;
+};
+
+export type DriverTeamHistory = {
+  name: string;
+  seasons: DriverTeamHistorySeason[];
+};
+
+export function driverTeamHistories(sessions: Session[]): DriverTeamHistory[] {
+  const teamsByDriver = new Map<
+    string,
+    Map<number, Map<string, { appearances: number; latestObservation: string }>>
+  >();
+
+  for (const session of sessions) {
+    const season = Number(session.season);
+    if (!Number.isFinite(season)) continue;
+
+    const classification = Array.isArray(session.race_story?.classification)
+      ? session.race_story.classification
+      : [];
+    for (const entry of classification) {
+      const name = normalizeDriver(entry?.name);
+      const team = String(entry?.team ?? "")
+        .trim()
+        .replace(/[\s_-]*(?:19|20)?\d{2}\s*$/, "")
+        .replace(/\s+/g, " ")
+        .trim();
+      if (!name || !team || team.toLowerCase() === "unassigned") continue;
+
+      const seasons =
+        teamsByDriver.get(name) ??
+        new Map<number, Map<string, { appearances: number; latestObservation: string }>>();
+      const teams = seasons.get(season) ?? new Map();
+      const teamObservation = teams.get(team) ?? { appearances: 0, latestObservation: "" };
+      teamObservation.appearances += 1;
+      const observationDate = String(session.created_at ?? "");
+      if (observationDate > teamObservation.latestObservation) {
+        teamObservation.latestObservation = observationDate;
+      }
+      teams.set(team, teamObservation);
+      seasons.set(season, teams);
+      teamsByDriver.set(name, seasons);
+    }
+  }
+
+  return [...teamsByDriver.entries()]
+    .map(([name, seasons]) => ({
+      name,
+      seasons: [...seasons.entries()]
+        .map(([season, teams]) => ({
+          season,
+          team:
+            [...teams.entries()].sort(
+              ([teamA, a], [teamB, b]) =>
+                b.appearances - a.appearances ||
+                b.latestObservation.localeCompare(a.latestObservation) ||
+                teamA.localeCompare(teamB),
+            )[0]?.[0] ?? "",
+        }))
+        .sort((a, b) => a.season - b.season),
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export function allTimeConstructorProfiles(
+  sessions: Session[],
+  titles: ReadonlyMap<string, number> = new Map(),
+): ConstructorCareerProfile[] {
+  const profiles = new Map<string, ConstructorCareerProfile>();
+  const seasons = [
+    ...new Set(sessions.map((session) => Number(session.season)).filter(Number.isFinite)),
+  ];
+
+  for (const season of seasons) {
+    const seasonSessions = sessions.filter((session) => Number(session.season) === season);
+    for (const standing of computeConstructorStandings(seasonSessions)) {
+      const profile = profiles.get(standing.team) ?? {
+        team: standing.team,
+        seasonsActive: 0,
+        titles: 0,
+        points: 0,
+        wins: 0,
+        podiums: 0,
+        poles: 0,
+      };
+      profile.seasonsActive += 1;
+      profile.points += standing.points;
+      profile.wins += standing.wins;
+      profile.podiums += standing.podiums;
+      profile.poles += standing.poles;
+      profiles.set(standing.team, profile);
+    }
+  }
+
+  return [...profiles.values()]
+    .map((profile) => ({ ...profile, titles: titles.get(profile.team) ?? 0 }))
+    .sort((a, b) => b.points - a.points || a.team.localeCompare(b.team));
 }
 
 export type SeasonBest = {
