@@ -411,7 +411,27 @@ export type DebriefSession = {
 const r3 = (v: number) => Math.round(v * 1000) / 1000;
 
 /** Compact, number-only summary of one session for the model. */
-export function buildDebriefFacts(s: DebriefSession) {
+const num = (v: unknown) => (Number.isFinite(Number(v)) && v !== null && v !== "" ? Number(v) : null);
+
+/** Compact summary of another session from the same weekend (results only). */
+export function buildWeekendSessionSummary(s: DebriefSession) {
+  const rows = Array.isArray(s.results) ? s.results : [];
+  return {
+    session: s.session_type || s.category,
+    category: s.category,
+    player_grid: s.starting_position ?? null,
+    player_finish: s.finishing_position ?? null,
+    results: rows.slice(0, 30).map((r) => ({
+      pos: num(r.position),
+      name: String(r.name || ""),
+      team: String((r as { team?: string }).team || ""),
+      best_lap_s: lapSeconds(r.best_lap),
+      sectors_s: [lapSeconds(r.s1), lapSeconds(r.s2), lapSeconds(r.s3)],
+    })),
+  };
+}
+
+export function buildDebriefFacts(s: DebriefSession, weekend: DebriefSession[] = []) {
   const laps = (s.lap_history ?? [])
     .filter((l) => Number(l?.lap) > 0)
     .sort((a, b) => a.lap - b.lap);
@@ -674,6 +694,11 @@ export function buildDebriefFacts(s: DebriefSession) {
             best_clean_lap: best ? { lap: best.lap, time_s: r3(best.time_s) } : null,
             median_clean_lap_s: cleanTimes.length ? r3(median(cleanTimes)) : null,
             lap_deltas: lapDeltas,
+            lap_times_s: driverLaps.map((lap) => {
+              const t = lapSeconds(lap.lap_time);
+              return t === null ? null : r3(t);
+            }),
+            pit_laps: verifiedPitLaps(driverLaps),
             stints: driverStints,
           };
         })
@@ -685,7 +710,11 @@ export function buildDebriefFacts(s: DebriefSession) {
           }
           return Math.abs(a.position - playerPosition) - Math.abs(b.position - playerPosition);
         })
-        .slice(0, 6)
+        .map((driver, index) => ({
+          ...driver,
+          // Full per-lap deltas only for the closest rivals; everyone keeps their raw lap times.
+          lap_deltas: index < 8 ? driver.lap_deltas : [],
+        }))
     : [];
 
   const lastLap = laps[laps.length - 1];
@@ -812,6 +841,24 @@ export function buildDebriefFacts(s: DebriefSession) {
     nearby_rivals: nearby,
     final_damage: damage,
     quali,
+    full_classification: (story.classification ?? []).slice(0, 30).map((c) => ({
+      pos: num(c.position),
+      name: c.name || "",
+      team: c.team || "",
+      laps: num(c.laps),
+      pits: num(c.pits),
+      status: c.status || null,
+      points: num(c.points),
+      best_lap: c.best_lap_str || null,
+    })),
+    player_position_by_lap: (story.position_history ?? [])
+      .map((p) => [num(p.lap), num(p.position)])
+      .filter(([l, p]) => l !== null && p !== null),
+    overtakes_made_detail: Array.isArray(story.overtakes_made) ? story.overtakes_made.slice(0, 40) : [],
+    overtakes_suffered_detail: Array.isArray(story.overtakes_suffered)
+      ? story.overtakes_suffered.slice(0, 40)
+      : [],
+    other_weekend_sessions: weekend.filter((w) => w !== s).map(buildWeekendSessionSummary),
   };
 }
 

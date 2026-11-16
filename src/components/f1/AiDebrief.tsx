@@ -209,8 +209,8 @@ export function AiDebrief({
 
   const session = sessions.find((s) => s.id === selected);
   const facts = useMemo(
-    () => (session && !session.localOnly ? buildDebriefFacts(session) : null),
-    [session],
+    () => (session && !session.localOnly ? buildDebriefFacts(session, sessions) : null),
+    [session, sessions],
   );
 
   useEffect(() => {

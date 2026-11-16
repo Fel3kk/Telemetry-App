@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { Copy, Download, Minus, Pencil, Plus, Trash2, Upload, X, Check, Undo2, Cloud, CloudOff, ZoomIn, ZoomOut, MousePointer2, CloudUpload, MapPin } from "lucide-react";
+import { Copy, Download, Minus, Pencil, Plus, Trash2, Upload, X, Check, Undo2, Cloud, CloudOff, ZoomIn, ZoomOut, MousePointer2, CloudUpload, StickyNote } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { trackMapUrl, trackMapFallbackUrl, trackSlug } from "@/lib/f1-shell";
@@ -464,7 +464,7 @@ export function ErsMapEditor({ season, track, cat }: { season: number; track: st
           <div className="sticky top-16 z-20 mb-2 flex flex-wrap items-center gap-1 rounded-lg border border-border bg-background/95 p-1.5 shadow-sm backdrop-blur" aria-label="Map tools">
             <Button variant={tool === "paint" ? "default" : "ghost"} size="sm" aria-pressed={tool === "paint"} onClick={() => { setTool("paint"); setPending(null); cancelNoteEdit(); }}><Pencil />Paint</Button>
             <Button variant={tool === "select" ? "default" : "ghost"} size="sm" aria-pressed={tool === "select"} onClick={() => { setTool("select"); setPending(null); cancelNoteEdit(); }}><MousePointer2 />Select</Button>
-            <Button variant={tool === "note" ? "default" : "ghost"} size="sm" aria-pressed={tool === "note"} title="Place a note on the circuit" onClick={() => { setTool("note"); setPending(null); cancelNoteEdit(); }}><MapPin />Note</Button>
+            <Button variant={tool === "note" ? "default" : "ghost"} size="sm" aria-pressed={tool === "note"} title="Place a note on the circuit" onClick={() => { setTool("note"); setPending(null); cancelNoteEdit(); }}><StickyNote />Note</Button>
             <Button variant="ghost" size="icon" disabled={!history.length} onClick={undo} aria-label="Undo" title="Undo"><Undo2 /></Button>
             <Button variant="ghost" size="icon" disabled={zoom === 1} onClick={() => setZoom((z) => z - 1)} aria-label="Zoom out" title="Zoom out"><ZoomOut /></Button>
             <Button variant="ghost" size="icon" disabled={zoom === 3} onClick={() => setZoom((z) => z + 1)} aria-label="Zoom in" title="Zoom in"><ZoomIn /></Button>
@@ -521,12 +521,11 @@ export function ErsMapEditor({ season, track, cat }: { season: number; track: st
                       onClick={(e) => { e.stopPropagation(); setActiveNoteId(note.id); }}
                       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setActiveNoteId(note.id); } }}>
                       <circle r={active ? 14 : 11} fill="#facc15" stroke="var(--background)" strokeWidth="4" />
-                      <path d="M-4 0h8M0-4v8" stroke="#1c1917" strokeWidth="2" />
+                      <path d="M-5-4h10M-5 0h10M-5 4h6" stroke="#1c1917" strokeWidth="2" strokeLinecap="round" />
                       {active && (
                         <foreignObject x={noteBoxX} y={noteBoxY} width="260" height="140">
                           <div className="w-[260px] rounded-md border border-amber-400/70 bg-background/95 p-2 text-left text-xs text-foreground shadow-lg backdrop-blur">
-                            <p className="mb-1 font-semibold text-amber-600 dark:text-amber-300">Track note · {pct(note.progress)}</p>
-                            <p className="max-h-28 overflow-y-auto whitespace-pre-wrap break-words">{note.text}</p>
+                                                        <p className="max-h-28 overflow-y-auto whitespace-pre-wrap break-words">{note.text}</p>
                           </div>
                         </foreignObject>
                       )}
@@ -549,7 +548,7 @@ export function ErsMapEditor({ season, track, cat }: { season: number; track: st
           <p className="mt-2 min-h-5 text-sm text-muted-foreground" role="status">
             {hint || (pending !== null ? `Start: ${pct(pending)}` : pendingNote !== null ? `Note location: ${pct(pendingNote)}` : selectedSeg ? "Section selected" : "")}
           </p>
-          {activeNote && <div className="mb-2 rounded-md border border-amber-400/50 bg-amber-300/10 px-3 py-2 text-sm" role="status"><span className="mr-2 inline-flex items-center gap-1 font-semibold"><MapPin className="h-4 w-4" />Track note</span>{activeNote.text}</div>}
+          {activeNote && <div className="mb-2 rounded-md border border-amber-400/50 bg-amber-300/10 px-3 py-2 text-sm" role="status">{activeNote.text}</div>}
           {(pendingNote !== null || editingNoteId !== null) && (
             <form className="mb-3 flex flex-col gap-2 rounded-md border border-border p-3" onSubmit={submitNote}>
               <label htmlFor="ers-track-note" className="text-sm font-semibold">{editingNoteId ? "Edit track note" : `Add track note at ${pct(pendingNote ?? 0)}`}</label>

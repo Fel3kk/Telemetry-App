@@ -1,8 +1,7 @@
-import { useEffect, useRef, useState } from "react";
-import { useServerFn } from "@tanstack/react-start";
+import { useEffect, useState } from "react";
 import { CloudUpload, Download, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { generateRacingLineDraft } from "@/lib/racing-line-ai.functions";
+import { maskFromPixels, smoothOnTrack, smoothRacingLine, type TrackMask } from "@/lib/line-smooth";
 import { downloadRacingLineCollection, validRacingLine } from "@/lib/racing-lines";
 import { saveTrackData } from "@/lib/track-cloud";
 import { trackSlug } from "@/lib/f1-shell";
@@ -15,64 +14,43 @@ type Props = {
   onDraft: (points: Point[]) => void;
 };
 
-function base64(bytes: Uint8Array): string {
-  let binary = "";
-  const size = 0x8000;
-  for (let i = 0; i < bytes.length; i += size) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + size));
-  }
-  return btoa(binary);
-}
-
-function supportedImageType(value: string): value is "image/webp" | "image/png" | "image/jpeg" {
-  return value === "image/webp" || value === "image/png" || value === "image/jpeg";
-}
-
 export function RacingLineActions({ track, mapUrl, line, onDraft }: Props) {
-  const generate = useServerFn(generateRacingLineDraft);
-  const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const requestId = useRef(0);
 
-  useEffect(() => {
-    requestId.current += 1;
-    setBusy(false);
-    setMessage("");
-    setError("");
-  }, [track, mapUrl]);
+  useEffect(() => { setMessage(""); setError(""); }, [track, mapUrl]);
 
-  async function makeDraft() {
-    const request = ++requestId.current;
+  const [busy, setBusy] = useState(false);
+
+  async function loadMask(): Promise<TrackMask | null> {
+    try {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.src = mapUrl;
+      await img.decode();
+      const w = 720, h = Math.round(720 * 608 / 1080);
+      const canvas = document.createElement("canvas");
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return null;
+      ctx.drawImage(img, 0, 0, w, h);
+      const mask = maskFromPixels(ctx.getImageData(0, 0, w, h).data, w, h);
+      return mask.white.some((v) => v) ? mask : null;
+    } catch { return null; }
+  }
+
+  async function smooth() {
+    if (!validRacingLine(line)) return;
     setBusy(true);
     setError("");
-    setMessage("");
-    try {
-      const response = await fetch(mapUrl);
-      if (!response.ok) throw new Error(`Track map couldn't be loaded (${response.status}).`);
-      const image = await response.blob();
-      if (!supportedImageType(image.type)) {
-        throw new Error("The track map must be a WebP, PNG, or JPEG image.");
-      }
-      if (image.size > 3_000_000) throw new Error("This track map is too large to send for AI tracing.");
-      const result = await generate({
-        data: {
-          track,
-          mimeType: image.type,
-          imageBase64: base64(new Uint8Array(await image.arrayBuffer())),
-        },
-      });
-      if (request !== requestId.current) return;
-      if (!result.ok) {
-        setError(result.error);
-        return;
-      }
-      onDraft(result.points);
-      setMessage("AI draft ready. Check the route and start/finish position, then save it to your account.");
-    } catch (e) {
-      if (request === requestId.current) setError(e instanceof Error ? e.message : "The AI draft couldn't be generated. Try again.");
-    } finally {
-      if (request === requestId.current) setBusy(false);
+    const mask = await loadMask();
+    setBusy(false);
+    if (mask) {
+      onDraft(smoothOnTrack(line, mask));
+      setMessage("Line smoothed and kept on the white track. Press again for more, then save it to your account.");
+    } else {
+      onDraft(smoothRacingLine(line));
+      setMessage("Line smoothed, but the white track couldn't be read from this map — check it stays on the track.");
     }
   }
 
@@ -102,8 +80,8 @@ export function RacingLineActions({ track, mapUrl, line, onDraft }: Props) {
   return (
     <div className="space-y-2 border-t border-border pt-3">
       <div className="flex gap-2">
-        <Button variant="outline" className="flex-1" disabled={busy} onClick={makeDraft}>
-          <Sparkles />{busy ? "Tracing map…" : "AI draw line"}
+        <Button variant="outline" className="flex-1" disabled={busy || !validRacingLine(line)} onClick={smooth}>
+          <Sparkles />{busy ? "Smoothing…" : "AI smooth"}
         </Button>
         <Button variant="outline" className="flex-1" disabled={!validRacingLine(line)} onClick={exportCollection}>
           <Download />Download
@@ -113,7 +91,7 @@ export function RacingLineActions({ track, mapUrl, line, onDraft }: Props) {
         <CloudUpload />Save line to my account
       </Button>
       <p className="text-xs text-muted-foreground">
-        AI sends the track-map image to Google Gemini; it uses no lap times or movement telemetry. Review the draft, then save it to your account so it follows you to every device.
+        AI smooth evens out wobbles in the line you drew while keeping it on the white track, and keeps the start/finish point. Save it to your account so it follows you to every device.
       </p>
       {message && <p role="status" className="text-xs text-muted-foreground">{message}</p>}
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
