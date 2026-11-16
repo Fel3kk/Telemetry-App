@@ -483,55 +483,99 @@ export function AiDebrief({
             </div>
           )}
           {facts && facts.driver_lap_comparisons.length > 0 && (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[52rem] text-left text-sm">
-                <caption className="mb-2 text-left text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                  Clean laps shared with rivals · positive delta means you were slower
-                </caption>
-                <thead className="text-xs text-muted-foreground">
-                  <tr>
-                    <th className="pb-2 pr-3 font-medium">Driver</th>
-                    <th className="pb-2 pr-3 font-medium">Best / median</th>
-                    <th className="pb-2 pr-3 font-medium">Same-lap deltas</th>
-                    <th className="pb-2 font-medium">Tyre stints · median · end wear</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {facts.driver_lap_comparisons.map((rival) => (
-                    <tr key={rival.name} className="border-t border-border/70 align-top">
-                      <td className="py-2 pr-3 font-medium">
+            <div className="space-y-2">
+              <div>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                  Clean-lap comparison
+                </h4>
+                <p className="text-xs text-muted-foreground">
+                  Positive lap delta means you were slower.
+                </p>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {facts.driver_lap_comparisons.map((rival) => (
+                  <article
+                    key={rival.name}
+                    className="min-w-0 rounded-md border border-border/70 bg-muted/20 p-3"
+                  >
+                    <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                      <h5 className="font-semibold">
                         {rival.position ? `P${rival.position} ` : ""}
                         {rival.name}
-                        <span className="block text-xs text-muted-foreground">
-                          {rival.lap_deltas.length} comparable laps
-                        </span>
-                      </td>
-                      <td className="py-2 pr-3 whitespace-nowrap">
-                        {seconds(rival.best_clean_lap?.time_s)} /{" "}
+                      </h5>
+                      <span className="text-xs text-muted-foreground">
+                        {rival.lap_deltas.length} shared clean laps
+                      </span>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm">
+                      <span>
+                        <span className="text-xs text-muted-foreground">Best </span>
+                        {seconds(rival.best_clean_lap?.time_s)}
+                      </span>
+                      <span>
+                        <span className="text-xs text-muted-foreground">Median </span>
                         {seconds(rival.median_clean_lap_s)}
-                      </td>
-                      <td className="py-2 pr-3">
-                        {rival.lap_deltas.length
-                          ? rival.lap_deltas
-                              .slice(0, 6)
-                              .map(
-                                (lap) => `L${lap.lap} ${signedSeconds(lap.player_minus_driver_s)}`,
-                              )
-                              .join(" · ")
-                          : "No shared clean laps"}
-                      </td>
-                      <td className="py-2">
-                        {rival.stints
-                          .map(
-                            (stint) =>
-                              `${stint.compound || "Unknown"} L${stint.laps} · ${seconds(stint.clean_median_lap_s)} · ${stint.end_wear_pct === null ? "wear —" : `${stint.end_wear_pct.toFixed(1)}% wear`}`,
-                          )
-                          .join(" / ") || "No stint data"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                      </span>
+                    </div>
+                    <details className="mt-2 border-t border-border/70 pt-2">
+                      <summary className="cursor-pointer text-xs font-medium text-muted-foreground hover:text-foreground">
+                        Lap and tyre details
+                      </summary>
+                      <div className="mt-3 space-y-3">
+                        <div>
+                          <p className="mb-1.5 text-xs font-semibold text-muted-foreground">
+                            Same-lap deltas
+                          </p>
+                          {rival.lap_deltas.length ? (
+                            <div className="flex flex-wrap gap-1.5">
+                              {rival.lap_deltas.slice(0, 6).map((lap) => (
+                                <span
+                                  key={lap.lap}
+                                  className="rounded bg-muted px-2 py-1 text-xs tabular-nums"
+                                >
+                                  L{lap.lap} {signedSeconds(lap.player_minus_driver_s)}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-muted-foreground">
+                              No shared clean laps
+                            </p>
+                          )}
+                        </div>
+                        <div>
+                          <p className="mb-1.5 text-xs font-semibold text-muted-foreground">
+                            Tyre stints
+                          </p>
+                          {rival.stints.length ? (
+                            <div className="grid gap-1.5">
+                              {rival.stints.map((stint) => (
+                                <div
+                                  key={stint.stint}
+                                  className="rounded bg-muted/60 px-2 py-1.5 text-xs"
+                                >
+                                  <span className="font-semibold">
+                                    {stint.compound || "Unknown"} · L{stint.laps}
+                                  </span>
+                                  <span className="text-muted-foreground">
+                                    {" "}
+                                    · Median {seconds(stint.clean_median_lap_s)} · End wear{" "}
+                                    {stint.end_wear_pct === null
+                                      ? "—"
+                                      : `${stint.end_wear_pct.toFixed(1)}%`}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-muted-foreground">No stint data</p>
+                          )}
+                        </div>
+                      </div>
+                    </details>
+                  </article>
+                ))}
+              </div>
             </div>
           )}
         </section>
