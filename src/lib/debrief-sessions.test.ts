@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createClient } from "@supabase/supabase-js";
-import { fetchDebriefSessions } from "./debrief-sessions";
+import { debriefSessionLabel, fetchDebriefSessions } from "./debrief-sessions";
 import { buildDebriefFacts } from "./race-debrief";
 
 describe("saved debrief sessions", () => {
@@ -62,5 +62,38 @@ describe("saved debrief sessions", () => {
     await expect(
       fetchDebriefSessions(client, { season: 1, career: null, track: "spa", cat: "Race" }),
     ).rejects.toMatchObject({ code: "42501" });
+  });
+
+  it("includes Sprint alongside Race and labels Sprint rows by their category", async () => {
+    const client = createClient("https://sessions.example", "public-test-key", {
+      auth: { persistSession: false, autoRefreshToken: false },
+      global: {
+        fetch: async () =>
+          Response.json([
+            {
+              id: "race-1",
+              track_name: "Spa",
+              category: "Race",
+              session_type: "Race",
+            },
+            {
+              id: "sprint-1",
+              track_name: "Spa",
+              category: "Sprint",
+              session_type: "Race",
+            },
+          ]),
+      },
+    });
+
+    const rows = await fetchDebriefSessions(client, {
+      season: 1,
+      career: null,
+      track: "spa",
+      cat: "Race",
+    });
+
+    expect(rows.map((row) => row.id)).toEqual(["race-1", "sprint-1"]);
+    expect(debriefSessionLabel(rows[1])).toBe("Sprint · Race");
   });
 });

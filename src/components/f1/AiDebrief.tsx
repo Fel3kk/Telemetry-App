@@ -4,7 +4,12 @@ import { supabase } from "@/lib/supabase";
 import { getActiveCareer } from "@/lib/career";
 import { trackSlug } from "@/lib/f1-shell";
 import { buildDebriefFacts } from "@/lib/race-debrief";
-import { fetchDebriefSessions, type DebriefSessionRow } from "@/lib/debrief-sessions";
+import {
+  debriefSessionLabel,
+  fetchDebriefSessions,
+  isSprintDebriefSession,
+  type DebriefSessionRow,
+} from "@/lib/debrief-sessions";
 import { Button } from "@/components/ui/button";
 import { generateDebrief, type Debrief } from "@/lib/ai-debrief.functions";
 
@@ -88,11 +93,6 @@ function readLocalDebriefSessions(options: {
       ) {
         continue;
       }
-      const isSprint = /sprint|shootout/i.test(
-        `${metadata.category} ${metadata.session_type ?? ""}`,
-      );
-      if (options.cat === "Sprint" ? !isSprint : isSprint) continue;
-
       const id = key.slice(CACHE_PREFIX.length);
       if (!id) continue;
       rows.push({
@@ -105,7 +105,14 @@ function readLocalDebriefSessions(options: {
   } catch (error) {
     console.warn("Unable to read locally saved AI debriefs.", error);
   }
-  return rows.sort((a, b) => String(b.created_at ?? "").localeCompare(String(a.created_at ?? "")));
+  return rows.sort((a, b) => {
+    const preferred = (session: Row) =>
+      isSprintDebriefSession(session) === (options.cat.toLowerCase() === "sprint") ? 0 : 1;
+    return (
+      preferred(a) - preferred(b) ||
+      String(b.created_at ?? "").localeCompare(String(a.created_at ?? ""))
+    );
+  });
 }
 
 function attachSessionMetadata(rows: DebriefSessionRow[], season: number, career: string | null) {
@@ -336,7 +343,7 @@ export function AiDebrief({
           >
             {sessions.map((s) => (
               <option key={s.id} value={s.id}>
-                {s.session_type || s.category}
+                {debriefSessionLabel(s)}
                 {s.localOnly ? " · saved on device" : ""}
               </option>
             ))}

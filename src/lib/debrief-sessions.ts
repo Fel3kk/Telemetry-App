@@ -4,6 +4,25 @@ import { trackSlug } from "./f1-shell";
 
 export type DebriefSessionRow = DebriefSession & { id: string; created_at?: string };
 
+export function isSprintDebriefSession(
+  session: Pick<DebriefSession, "category" | "session_type">,
+) {
+  return /sprint|shootout/i.test(`${session.category} ${session.session_type ?? ""}`);
+}
+
+export function debriefSessionLabel(
+  session: Pick<DebriefSession, "category" | "session_type">,
+) {
+  if (
+    /sprint/i.test(session.category) &&
+    session.session_type &&
+    !/sprint/i.test(session.session_type)
+  ) {
+    return `${session.category} · ${session.session_type}`;
+  }
+  return session.session_type || session.category;
+}
+
 export async function fetchDebriefSessions(
   client: SupabaseClient,
   options: { season: number; track: string; cat: string; career: string | null },
@@ -19,13 +38,13 @@ export async function fetchDebriefSessions(
   const { data, error } = await query;
   if (error) throw error;
   const rows = ((data ?? []) as DebriefSessionRow[]).filter((session) => {
-    const sprint = /sprint|shootout/i.test(`${session.category} ${session.session_type}`);
-    return (
-      trackSlug(session.track_name) === trackSlug(options.track) &&
-      (options.cat === "Sprint" ? sprint : !sprint)
-    );
+    return trackSlug(session.track_name) === trackSlug(options.track);
   });
   const rank = (session: DebriefSessionRow) =>
     /race/i.test(session.category) ? 0 : /quali/i.test(session.category) ? 1 : 2;
-  return rows.sort((a, b) => rank(a) - rank(b));
+  const preferredCategory = (session: DebriefSessionRow) =>
+    isSprintDebriefSession(session) === (options.cat.toLowerCase() === "sprint") ? 0 : 1;
+  return rows.sort(
+    (a, b) => preferredCategory(a) - preferredCategory(b) || rank(a) - rank(b),
+  );
 }
