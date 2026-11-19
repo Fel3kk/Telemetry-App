@@ -123,7 +123,7 @@ function ViewPage() {
         ) : view === "season-stats" ? (
           <SeasonStats season={Number(season)} />
         ) : (
-          <div className="relative overflow-hidden rounded-lg border border-white/10 bg-black/30">
+          <div className="relative -mx-3 overflow-hidden rounded-none border-0 bg-transparent sm:mx-0 sm:rounded-lg sm:border sm:border-white/10 sm:bg-black/30">
             {loading && (
               <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-[#0a0a0f]/90 backdrop-blur-sm">
                 <div className="h-10 w-10 animate-spin rounded-full border-2 border-white/15 border-t-red-500" />

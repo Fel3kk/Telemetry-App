@@ -588,6 +588,7 @@ window.addEventListener("DOMContentLoaded", () => {
   renderSeasonSelector();
   initCollapsibleSections();
   initChartCollapseControls();
+  initMobileChartNavigation();
   _embedApplyView();
 
   // Load sessions then attempt to auto-load driver teams for the selected season.
@@ -3189,6 +3190,9 @@ const pitLinesPlugin = {
     const x = scales.x;
     if (!x) return;
     const color = (opts && opts.color) || "rgba(255, 194, 51, 0.75)";
+    const showLabelsOnPlot =
+      !window.matchMedia("(max-width: 640px)").matches ||
+      !document.querySelector("#section-graphs.active");
     ctx.save();
     ctx.strokeStyle = color;
     ctx.setLineDash([5, 4]);
@@ -3215,7 +3219,7 @@ const pitLinesPlugin = {
       ctx.moveTo(xPos, chartArea.top);
       ctx.lineTo(xPos, chartArea.bottom);
       ctx.stroke();
-      ctx.fillText("PIT L" + lap, xPos + 3, chartArea.top + 11);
+      if (showLabelsOnPlot) ctx.fillText("PIT L" + lap, xPos + 3, chartArea.top + 11);
     });
     ctx.restore();
   },
@@ -3676,11 +3680,19 @@ function comparisonLineDatasets(lapNumbers, label, valueForLap) {
 function renderCharts() {
   renderDriverComparisonControls();
   const laps = currentData.lap_history;
+  const annotationFooter = document.getElementById("chartAnnotationFooter");
 
   if (!laps || laps.length === 0) {
     // Clear existing charts if viewing a placeholder session
     Object.values(charts).forEach((chart) => chart.destroy());
+    if (annotationFooter) annotationFooter.innerHTML = "";
     return;
+  }
+
+  if (annotationFooter) {
+    annotationFooter.innerHTML = getPlayerPitLaps()
+      .map((lap) => `<span class="chart-event-label" role="listitem">PIT L${lap}</span>`)
+      .join("");
   }
 
   const lapNumbers = laps.map((l) => l.lap);
@@ -4546,7 +4558,7 @@ function createChart(
           p.firstLap === p.lastLap
             ? `${p.label} L${p.firstLap}`
             : `${p.label} L${p.firstLap}–${p.lastLap}`;
-        ctx.fillText(rangeTxt, (xLeft + xRight) / 2, chartArea.top + 4);
+        if (!isMobile) ctx.fillText(rangeTxt, (xLeft + xRight) / 2, chartArea.top + 4);
       });
 
       // 2. Vertical lines for pit stops (kept per-lap)
@@ -4599,10 +4611,12 @@ function createChart(
           ctx.lineTo(xPos + i * 2, chartArea.bottom);
           ctx.stroke();
           ctx.setLineDash([]);
-          ctx.fillStyle = style.color;
-          ctx.font = "bold 9px sans-serif";
-          ctx.textAlign = "center";
-          ctx.fillText(style.label, xPos, chartArea.top + 14 + i * 11);
+          if (!isMobile) {
+            ctx.fillStyle = style.color;
+            ctx.font = "bold 9px sans-serif";
+            ctx.textAlign = "center";
+            ctx.fillText(style.label, xPos, chartArea.top + 14 + i * 11);
+          }
         });
       });
       ctx.restore();
@@ -4615,6 +4629,11 @@ function createChart(
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      interaction: {
+        mode: "index",
+        intersect: false,
+        axis: "x",
+      },
       layout: {
         padding: isMobile
           ? {
@@ -4651,6 +4670,8 @@ function createChart(
         },
         tooltip: formatAsTime
           ? {
+              mode: "index",
+              intersect: false,
               callbacks: {
                 label: function (context) {
                   const value = context.parsed.y;
@@ -4667,6 +4688,8 @@ function createChart(
               },
             }
           : {
+              mode: "index",
+              intersect: false,
               titleFont: {
                 size: isMobile ? 10 : 12,
               },
@@ -4974,7 +4997,7 @@ function renderStandingsTable() {
 
   const teamsAssigned = getDriverTeams(); // This is used for constructor standings
 
-  let html = `<div class="table-responsive standings-wrap"><table class="standings-table standings-v2"><thead><tr><th class="col-rank">#</th><th class="col-driver">Driver</th>`;
+  let html = `<p class="standings-scroll-hint">Swipe across to view results by round.</p><div class="table-responsive standings-wrap"><table class="standings-table standings-v2"><thead><tr><th class="col-rank">#</th><th class="col-driver">Driver</th>`;
 
   scoringSessions.forEach((s, i) => {
     const flag = getFlagHtml(s, i + 1);
@@ -6260,6 +6283,42 @@ function initChartCollapseControls() {
       if (!nextCollapsed && charts[canvas.id]) charts[canvas.id].resize();
     });
   });
+}
+
+function initMobileChartNavigation() {
+  const nav = document.querySelector(".chart-jump-nav");
+  const grid = document.querySelector("#section-graphs .charts-grid");
+  if (!nav || !grid) return;
+
+  const links = Array.from(nav.querySelectorAll('a[href^="#chart-"]'));
+  const activate = (activeLink) => {
+    links.forEach((link) => {
+      const active = link === activeLink;
+      link.classList.toggle("is-active", active);
+      if (active) link.setAttribute("aria-current", "location");
+      else link.removeAttribute("aria-current");
+      const target = grid.querySelector(link.getAttribute("href"));
+      if (!target) return;
+      target.classList.toggle("mobile-chart-active", active);
+      if (active && target.classList.contains("chart-collapsed")) {
+        target.querySelector(".chart-collapse-toggle")?.click();
+      }
+      const canvas = target.querySelector("canvas[id]");
+      if (active && canvas && charts[canvas.id]) {
+        requestAnimationFrame(() => charts[canvas.id].resize());
+      }
+    });
+  };
+
+  links.forEach((link) => {
+    link.addEventListener("click", (event) => {
+      if (!window.matchMedia("(max-width: 640px)").matches) return;
+      event.preventDefault();
+      activate(link);
+    });
+  });
+
+  activate(links.find((link) => link.classList.contains("is-active")) || links[0]);
 }
 
 function initCollapsibleSections() {

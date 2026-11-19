@@ -754,9 +754,9 @@ function TrackPage() {
             </button>
           </div>
         </div>
-        <div className="mb-4 overflow-x-auto pb-1">
+        <div className="mb-4 overflow-x-auto pb-2 sm:overflow-visible">
           <div
-            className="grid min-w-[680px] grid-cols-4 gap-2"
+            className="flex w-max min-w-full gap-2 sm:grid sm:w-full sm:grid-cols-4"
             role="tablist"
             aria-label="Track sections"
             aria-orientation="horizontal"
@@ -772,7 +772,7 @@ function TrackPage() {
                   title={g.label}
                   onClick={() => pickGroup(g.id)}
                   className={
-                    "flex min-w-0 items-center justify-between gap-2 rounded-xl border px-2.5 py-2.5 text-left transition " +
+                    "flex min-h-12 min-w-[156px] items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-left transition sm:min-w-0 " +
                     (active
                       ? "border-primary bg-primary text-primary-foreground shadow-sm"
                       : "border-border/70 bg-card/40 text-muted-foreground hover:bg-card/80 hover:text-foreground")
@@ -785,7 +785,7 @@ function TrackPage() {
                       className={active ? "shrink-0 text-primary-foreground" : "shrink-0"}
                       aria-hidden="true"
                     />
-                    <span className="truncate text-xs font-semibold">{g.label}</span>
+                    <span className="text-xs font-semibold leading-tight">{g.label}</span>
                   </span>
                   <span
                     className={

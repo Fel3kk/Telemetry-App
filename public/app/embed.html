@@ -325,6 +325,18 @@
               <div class="charts-section">
                 <h2 class="section-title">📊 Performance Metrics</h2>
                 <div id="graphsDriverComparison" class="driver-comparison" aria-label="Graph driver comparison"></div>
+                <p class="chart-interaction-hint">
+                  Swipe the graph tabs to choose a metric, then drag across the chart to inspect laps. Tap a legend label to show or hide a driver.
+                </p>
+                <nav class="chart-jump-nav" aria-label="Jump to performance chart">
+                  <a href="#chart-lap-times">Lap times</a>
+                  <a href="#chart-pace-delta">Pace delta</a>
+                  <a href="#chart-fuel-level">Fuel level</a>
+                  <a href="#chart-fuel-consumption">Fuel consumed</a>
+                  <a href="#chart-ers">ERS</a>
+                  <a href="#chart-tyre-wear">Tyre wear</a>
+                  <a href="#chart-sectors">Sectors</a>
+                </nav>
                 <div class="overlay-guide" aria-label="Chart overlay legend">
                   <div class="overlay-guide-title">Overlay guide</div>
                   <div class="overlay-guide-items">
@@ -341,36 +353,42 @@
                   </div>
                 </div>
                 <div class="charts-grid">
-                  <div class="chart-container">
+                  <div class="chart-container mobile-chart-active" id="chart-lap-times">
                     <div class="chart-title">Lap Times</div>
                     <canvas id="lapTimesChart"></canvas>
                   </div>
-                  <div class="chart-container">
+                  <div class="chart-container" id="chart-pace-delta">
                     <div class="chart-title">Pace vs Field Median (Δ seconds)</div>
                     <canvas id="paceDeltaChart"></canvas>
                   </div>
 
-                  <div class="chart-container">
+                  <div class="chart-container" id="chart-fuel-level">
                     <div class="chart-title">Fuel Level</div>
                     <canvas id="fuelChart"></canvas>
                   </div>
-                  <div class="chart-container">
+                  <div class="chart-container" id="chart-fuel-consumption">
                     <div class="chart-title">Fuel Consumed Per Lap</div>
                     <canvas id="fuelConsumptionChart"></canvas>
                   </div>
-                  <div class="chart-container full-width">
+                  <div class="chart-container full-width" id="chart-ers">
                     <div class="chart-title">ERS Deployment</div>
                     <canvas id="ersChart"></canvas>
                   </div>
-                  <div class="chart-container full-width">
+                  <div class="chart-container full-width" id="chart-tyre-wear">
                     <div class="chart-title">Tyre Wear by Wheel &amp; Average</div>
                     <canvas id="tireWearChart"></canvas>
                   </div>
-                  <div class="chart-container full-width">
+                  <div class="chart-container full-width" id="chart-sectors">
                     <div class="chart-title">Sector Times Comparison</div>
                     <canvas id="sectorChart"></canvas>
                   </div>
                 </div>
+                <div
+                  id="chartAnnotationFooter"
+                  class="chart-annotation-footer"
+                  role="list"
+                  aria-label="Pit stop laps"
+                ></div>
               </div>
 
               <!-- Download template moved to upload section -->
