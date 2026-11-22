@@ -1,6 +1,6 @@
 import { pointOnLine, type Point, type ReplayDriver } from "./quali-simulation";
 
-export const PROFILE_VERSION = 2;
+export const PROFILE_VERSION = 3;
 const G = 9.80665;
 const COUNT = 120;
 const MAX_CORNER_SPEED = 290 / 3.6;
@@ -52,6 +52,19 @@ const LENGTHS: Record<string, number> = {
 };
 const clamp = (n: number, a: number, b: number) => Math.max(a, Math.min(b, n));
 
+/** Converts geometric bend severity into an estimate of the safe corner speed. */
+export function cornerSpeedCap(radius: number, topSpeed: number): number {
+  if (!Number.isFinite(radius) || radius <= 0 || radius > 1200) return topSpeed;
+  const gripSpeed = Math.sqrt(2.35 * G * radius);
+  const cornerStrength = clamp((1200 - radius) / 1050, 0, 1);
+  const cornerReduction = 0.35 * cornerStrength ** 0.65;
+  return clamp(
+    gripSpeed * (1 - cornerReduction),
+    MIN_CORNER_SPEED,
+    Math.min(topSpeed, MAX_CORNER_SPEED),
+  );
+}
+
 /** Geometry and dynamics are estimates, not movement telemetry measured by the upload. */
 export function solveSpeedProfile(
   line: Point[],
@@ -75,13 +88,21 @@ export function solveSpeedProfile(
   const scale = distance / perimeter;
   const lengths = rawLengths.map((n) => n * scale);
   const radii = metric.map((b, i) => {
-    const a = metric[(i + COUNT - 5) % COUNT],
-      c = metric[(i + 5) % COUNT];
-    const ab = Math.hypot(b.x - a.x, b.y - a.y),
-      bc = Math.hypot(c.x - b.x, c.y - b.y),
-      ac = Math.hypot(c.x - a.x, c.y - a.y);
-    const cross = Math.abs((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x));
-    return cross > 1e-10 ? ((ab * bc * ac) / (2 * cross)) * scale : 1e6;
+    const estimates: number[] = [];
+    for (const offset of [5, 10, 15]) {
+      const a = metric[(i + COUNT - offset) % COUNT];
+      const c = metric[(i + offset) % COUNT];
+      const ab = Math.hypot(b.x - a.x, b.y - a.y);
+      const bc = Math.hypot(c.x - b.x, c.y - b.y);
+      const ac = Math.hypot(c.x - a.x, c.y - a.y);
+      const cross = Math.abs((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x));
+      if (cross > 1e-10 && ab > 1e-6 && bc > 1e-6 && ac > 1e-6) {
+        estimates.push(((ab * bc * ac) / (2 * cross)) * scale);
+      }
+    }
+    if (estimates.length === 0) return 1e6;
+    estimates.sort((a, b) => a - b);
+    return estimates[Math.floor(estimates.length / 2)];
   });
   let longestStraight = 0;
   let straightRun = 0;
@@ -94,11 +115,7 @@ export function solveSpeedProfile(
     }
   }
   const topSpeed = (315 + 30 * clamp(longestStraight / 1000, 0, 1)) / 3.6;
-  const caps = radii.map((radius) =>
-    radius > 1200
-      ? topSpeed
-      : Math.min(topSpeed, clamp(Math.sqrt(2.8 * G * radius), MIN_CORNER_SPEED, MAX_CORNER_SPEED)),
-  );
+  const caps = radii.map((radius) => cornerSpeedCap(radius, topSpeed));
   const buildSpeeds = (cornerFactor: number) => {
     const velocity = caps.map((cap, i) =>
       radii[i] > 1200 ? topSpeed : clamp(cap * cornerFactor, MIN_CORNER_SPEED, topSpeed),
@@ -107,7 +124,7 @@ export function solveSpeedProfile(
     for (let pass = 0; pass < 6; pass++) {
       for (let i = COUNT - 1; i >= 0; i--) {
         const next = (i + 1) % COUNT;
-        const braking = G * (2 + 2.5 * clamp(velocity[next] / (345 / 3.6), 0, 1));
+        const braking = G * (2.8 + 3.2 * clamp(velocity[next] / (345 / 3.6), 0, 1));
         velocity[i] = Math.min(
           velocity[i],
           Math.sqrt(velocity[next] ** 2 + 2 * braking * lengths[i]),
@@ -157,12 +174,13 @@ export function solveSpeedProfile(
     .map((cap, i) => ({ cap, i }))
     .filter(
       ({ cap, i }) =>
+        radii[i] <= 1050 &&
         cap <= caps[(i + COUNT - 1) % COUNT] && cap < caps[(i + 1) % COUNT] && cap < 285 / 3.6,
     )
     .sort((a, b) => a.cap - b.cap);
   const corners: number[] = [];
   for (const { i } of candidates) {
-    if (corners.every((j) => Math.min(Math.abs(i - j), COUNT - Math.abs(i - j)) >= 5))
+    if (corners.every((j) => Math.min(Math.abs(i - j), COUNT - Math.abs(i - j)) >= 8))
       corners.push(i);
   }
   return {

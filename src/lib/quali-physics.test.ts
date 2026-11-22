@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  cornerSpeedCap,
   progressAtTime,
   relativeSpeedMapColor,
   simulationFingerprint,
@@ -21,6 +22,15 @@ const driver = {
   sectors: [25, 30, 35] as [number, number, number],
 };
 describe("qualifying physics", () => {
+  it("distinguishes tight corners from gentle bends", () => {
+    const topSpeed = 315 / 3.6;
+    const tight = cornerSpeedCap(100, topSpeed);
+    const medium = cornerSpeedCap(450, topSpeed);
+    const gentle = cornerSpeedCap(950, topSpeed);
+    expect(tight).toBeLessThan(medium);
+    expect(medium).toBeLessThan(gentle);
+    expect(gentle / topSpeed).toBeGreaterThan(0.8);
+  });
   it("preserves straight-line speed and caps corner speeds", () => {
     const profile = solveSpeedProfile(line, driver, "zandvoort");
     expect(profile.points).toHaveLength(120);
