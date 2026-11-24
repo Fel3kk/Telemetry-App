@@ -45,8 +45,6 @@ export const RESIDUAL_CAP_S = 1.5;
  * racing in traffic: 0.7 s of RMS put almost every real race near 50.
  */
 export const HALF_SCORE_SPREAD_S = 1.0;
-/** Each mistake lap (as a share of clean laps) removes up to this fraction of the score. */
-export const MISTAKE_PENALTY = 0.5;
 /** A clean lap this far above the stint trend counts as a mistake lap. */
 export const MISTAKE_S = 1.0;
 
@@ -122,6 +120,11 @@ export type Consistency = {
   excluded: { lap: number; reason: string }[];
 };
 
+export type DebriefStint = {
+  "start-lap"?: number | string;
+  "end-lap"?: number | string;
+};
+
 type DebriefClassificationEntry = {
   position?: number | string | null;
   name?: string | null;
@@ -189,6 +192,85 @@ export function splitStints(laps: DebriefLap[]): DebriefLap[][] {
   }
   if (cur.length) groups.push(cur);
   return groups;
+}
+
+function graphConsistencyScore(
+  laps: DebriefLap[],
+  uploadedStints?: DebriefStint[] | null,
+): { score: number | null; cleanLaps: number } {
+  const pitLapNumbers = new Set(
+    laps.filter((lap) => Number(lap.pit_status || 0) === 1).map((lap) => Number(lap.lap)),
+  );
+  const groups: DebriefLap[][] = [];
+  if (uploadedStints?.length) {
+    for (const stint of uploadedStints) {
+      const startLap = Number(stint["start-lap"]);
+      const endLap = Number(stint["end-lap"]);
+      const group = laps.filter((lap) => Number(lap.lap) >= startLap && Number(lap.lap) <= endLap);
+      if (group.length) groups.push(group);
+    }
+  } else {
+    let currentGroup: DebriefLap[] = [];
+    let currentCompound: string | null | undefined = laps[0]?.current_tyre_compound;
+    for (const lap of laps) {
+      const compound = lap.current_tyre_compound;
+      if (currentGroup.length && compound !== currentCompound) {
+        groups.push(currentGroup);
+        currentGroup = [];
+        currentCompound = compound;
+      }
+      currentGroup.push(lap);
+      if (Number(lap.pit_status || 0) === 1) {
+        groups.push(currentGroup);
+        currentGroup = [];
+        currentCompound = null;
+      }
+    }
+    if (currentGroup.length) groups.push(currentGroup);
+  }
+  let totalCleanLaps = 0;
+  const stintStats: { cv: number; cleanLaps: number }[] = [];
+
+  for (const group of groups) {
+    const times = group
+      .filter((lap) => {
+        const lapNumber = Number(lap.lap);
+        return (
+          lapNumber !== 1 &&
+          Number(lap.pit_status || 0) !== 1 &&
+          !(Number(lap.sc_status || 0) > 0) &&
+          !pitLapNumbers.has(lapNumber - 1)
+        );
+      })
+      .map((lap) => lapSeconds(lap.lap_time))
+      .filter((time): time is number => time !== null);
+    if (times.length < 3) continue;
+
+    const center = median(times);
+    const mad = median(times.map((time) => Math.abs(time - center)));
+    const deviationLimit = Math.max(mad * 3, center * 0.005);
+    const sample = times.map(
+      (time) => center + Math.max(-deviationLimit, Math.min(deviationLimit, time - center)),
+    );
+    const mean = sample.reduce((sum, time) => sum + time, 0) / sample.length;
+    const variance = sample.reduce((sum, time) => sum + (time - mean) ** 2, 0) / sample.length;
+    stintStats.push({
+      cv: center > 0 ? Math.sqrt(variance) / center : 0,
+      cleanLaps: times.length,
+    });
+    totalCleanLaps += times.length;
+  }
+
+  if (totalCleanLaps < 3 || stintStats.length === 0)
+    return { score: null, cleanLaps: totalCleanLaps };
+  const totalCv = stintStats.reduce(
+    (sum, stint) => sum + stint.cv * (stint.cleanLaps / totalCleanLaps),
+    0,
+  );
+  return {
+    score: Math.round(Math.max(0, Math.min(100, 100 - totalCv * 1200)) * 10) / 10,
+    cleanLaps: totalCleanLaps,
+  };
 }
 
 /** Recorded pit flags or a sustained compound transition, never a one-lap glitch. */
@@ -278,14 +360,13 @@ export function classifyQualifyingLaps(laps: DebriefLap[]) {
   });
 }
 
-/**
- * Race consistency: fit a per-stint pace trend through clean laps, allowing
- * longer stints to model accelerating tyre degradation as well as fuel burn.
- * Measure lap-to-trend variation, scaled to a 90 s lap and weighted by stint
- * length.
- */
-export function raceConsistency(laps: DebriefLap[]): Consistency {
+/** Calculates trend diagnostics and the graphs-tab consistency rating. */
+export function raceConsistency(
+  laps: DebriefLap[],
+  uploadedStints?: DebriefStint[] | null,
+): Consistency {
   const sorted = [...laps].filter((l) => Number(l.lap) > 0).sort((a, b) => a.lap - b.lap);
+  const graphConsistency = graphConsistencyScore(sorted, uploadedStints);
   const pitLaps = new Set(verifiedPitLaps(sorted));
   const neutralLaps = new Set(sorted.filter((l) => Number(l.sc_status || 0) > 0).map((l) => l.lap));
   const excluded: { lap: number; reason: string }[] = [];
@@ -359,10 +440,10 @@ export function raceConsistency(laps: DebriefLap[]): Consistency {
   excluded.sort((a, b) => a.lap - b.lap);
   if (!cleanLaps)
     return {
-      score: null,
+      score: graphConsistency.score,
       spread: null,
       scaledSpread: null,
-      cleanLaps: 0,
+      cleanLaps: graphConsistency.cleanLaps,
       stints,
       mistakeLaps: [],
       excluded,
@@ -372,13 +453,11 @@ export function raceConsistency(laps: DebriefLap[]): Consistency {
     sorted.filter((l) => clean.has(l.lap)).map((l) => lapSeconds(l.lap_time) ?? 0),
   );
   const scaled = spread * (REFERENCE_LAP_S / ref);
-  const mistakes = stints.reduce((a, s) => a + s.mistakeLaps.length, 0);
-  const penalty = 1 - MISTAKE_PENALTY * Math.min(1, mistakes / cleanLaps);
   return {
-    score: Math.round(scoreFromSpread(scaled) * penalty * 10) / 10,
+    score: graphConsistency.score,
     spread: Math.round(spread * 1000) / 1000,
     scaledSpread: Math.round(scaled * 1000) / 1000,
-    cleanLaps,
+    cleanLaps: graphConsistency.cleanLaps,
     stints,
     mistakeLaps: stints.flatMap((s) => s.mistakeLaps),
     excluded,
@@ -403,6 +482,7 @@ export type DebriefSession = {
   starting_position?: number | null;
   finishing_position?: number | null;
   lap_history?: DebriefLap[];
+  stints?: DebriefStint[] | null;
   other_driver_lap_histories?: DebriefOtherDriver[];
   race_story?: DebriefRaceStory;
   results?: DebriefResult[];
@@ -436,7 +516,7 @@ export function buildDebriefFacts(s: DebriefSession, weekend: DebriefSession[] =
     .filter((l) => Number(l?.lap) > 0)
     .sort((a, b) => a.lap - b.lap);
   const isQuali = /quali|shootout/i.test(`${s.category} ${s.session_type ?? ""}`);
-  const consistency = isQuali ? null : raceConsistency(laps);
+  const consistency = isQuali ? null : raceConsistency(laps, s.stints);
   const pitLaps = verifiedPitLaps(laps);
   const times = laps.map((l) => lapSeconds(l.lap_time)).filter((t): t is number => t !== null);
   const bestLap = times.length ? Math.min(...times) : null;
@@ -816,16 +896,7 @@ export function buildDebriefFacts(s: DebriefSession, weekend: DebriefSession[] =
     driver_lap_comparisons: driverLapComparisons,
     consistency: consistency && {
       score: consistency.score,
-      spread_s: consistency.spread,
       clean_laps: consistency.cleanLaps,
-      mistake_laps: consistency.mistakeLaps,
-      per_stint: consistency.stints.map((x) => ({
-        stint: x.stint,
-        compound: x.compound,
-        spread_s: x.spread,
-        trend_s_per_lap: x.trend,
-        clean_laps: x.cleanLaps,
-      })),
     },
     lap_times_s: laps.map((l) => {
       const t = lapSeconds(l.lap_time);

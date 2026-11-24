@@ -1,6 +1,6 @@
 import { pointOnLine, type Point, type ReplayDriver } from "./quali-simulation";
 
-export const PROFILE_VERSION = 3;
+export const PROFILE_VERSION = 4;
 const G = 9.80665;
 const COUNT = 120;
 const MAX_CORNER_SPEED = 290 / 3.6;
@@ -57,7 +57,7 @@ export function cornerSpeedCap(radius: number, topSpeed: number): number {
   if (!Number.isFinite(radius) || radius <= 0 || radius > 1200) return topSpeed;
   const gripSpeed = Math.sqrt(2.35 * G * radius);
   const cornerStrength = clamp((1200 - radius) / 1050, 0, 1);
-  const cornerReduction = 0.35 * cornerStrength ** 0.65;
+  const cornerReduction = 0.48 * cornerStrength ** 0.65;
   return clamp(
     gripSpeed * (1 - cornerReduction),
     MIN_CORNER_SPEED,

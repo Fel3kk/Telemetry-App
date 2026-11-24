@@ -31,7 +31,7 @@ export async function fetchDebriefSessions(
   let query = client
     .from("telemetry_sessions")
     .select(
-      "id,driver_name,track_name,category,session_type,starting_position:starting_pos,finishing_position:finishing_pos,lap_history,other_driver_lap_histories,race_story,results,created_at",
+      "id,driver_name,track_name,category,session_type,starting_position:starting_pos,finishing_position:finishing_pos,lap_history,stints,other_driver_lap_histories,race_story,results,created_at",
     )
     .eq("season", options.season);
   if (options.career) query = query.eq("career_slot", options.career);

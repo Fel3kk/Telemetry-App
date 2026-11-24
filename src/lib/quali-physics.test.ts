@@ -29,6 +29,8 @@ describe("qualifying physics", () => {
     const gentle = cornerSpeedCap(950, topSpeed);
     expect(tight).toBeLessThan(medium);
     expect(medium).toBeLessThan(gentle);
+    expect(medium / gentle).toBeLessThan(0.9);
+    expect(gentle / tight).toBeGreaterThan(2.8);
     expect(gentle / topSpeed).toBeGreaterThan(0.8);
   });
   it("preserves straight-line speed and caps corner speeds", () => {
@@ -82,7 +84,7 @@ describe("qualifying physics", () => {
     const p = solveSpeedProfile(line, driver, "zandvoort");
     const minSpeed = Math.min(...p.speeds);
     const maxSpeed = Math.max(...p.speeds);
-    expect(maxSpeed / minSpeed).toBeGreaterThan(1.5);
+    expect(maxSpeed / minSpeed).toBeGreaterThan(1.8);
     const acceleratingIndex = p.speeds.findIndex(
       (value, i) => p.speeds[(i + 1) % p.speeds.length] > value + 1,
     );

@@ -2928,7 +2928,7 @@ function renderSessionInfo() {
 
   let consistencyHtml = "—";
   let consistencyTitle =
-    "Needs ≥3 clean racing laps in at least one stint (excludes lap 1, in/out laps, SC/VSC/Red, >107% of stint median)";
+    "Needs ≥3 clean racing laps in at least one stint (excludes lap 1, in/out laps, SC/VSC/Red)";
   if (totalCleanLaps >= 3 && stintStats.length > 0) {
     const totalCV = stintStats.reduce(
       (acc, s) => acc + s.cv * (s.cleanLaps / totalCleanLaps),
@@ -4536,7 +4536,7 @@ function renderStandingsTable() {
     html += `<th title="${s.track_name} - ${s.category}" class="col-race"><div class="race-head"><span class="race-flag">${flag}</span><span class="race-code">${code}</span><span class="race-type race-type-${typeLabel.toLowerCase()}">${typeLabel}</span></div></th>`;
   });
 
-  html += `<th class="col-pts">Pts</th><th class="col-gap">Gap</th></tr></thead><tbody>`;
+  html += `<th class="col-pts">Pts</th><th class="col-gap">Gap to Next</th><th class="col-gap">Gap to Leader</th></tr></thead><tbody>`;
 
   driverNames.forEach((name, idx) => {
     const d = driversMap[name];
@@ -4568,9 +4568,13 @@ function renderStandingsTable() {
       idx === 0
         ? "—"
         : `−${Math.abs(driversMap[driverNames[idx - 1]].points - d.points)}`;
+    const leaderGap =
+      idx === 0
+        ? "—"
+        : `−${Math.abs(driversMap[driverNames[0]].points - d.points)}`;
 
     html += `<td class="col-pts pts-cell">${d.points}</td>`;
-    html += `<td class="col-gap gap-cell">${gap}</td></tr>`;
+    html += `<td class="col-gap gap-cell">${gap}</td><td class="col-gap gap-cell">${leaderGap}</td></tr>`;
   });
 
 
@@ -4589,7 +4593,7 @@ function renderStandingsTable() {
       (a, b) => teamAgg[b].points - teamAgg[a].points,
     ); // Sort teams by points
 
-    let constructorsHtml = `<div class="mt-5"><h3 class="mb-3" style="font-size: 1.1rem; color: #ddd; text-transform: uppercase; letter-spacing: 1px;">Constructor Standings</h3><div class="table-responsive constructor-table-container"><table class="table table-sm table-dark table-striped standings-table" style="font-size:0.75rem;"><thead><tr><th style="padding:12px 8px; width: 40px;" class="text-center">#</th><th style="padding:12px 8px; width: 160px;" class="text-start">Team</th><th style="padding:12px 8px;" class="text-start">Drivers</th><th style="padding:12px 8px; width: 70px;" class="text-end">Pts</th><th style="padding:12px 8px; width: 70px;" class="text-end">Gap</th></tr></thead><tbody>`;
+    let constructorsHtml = `<div class="mt-5"><h3 class="mb-3" style="font-size: 1.1rem; color: #ddd; text-transform: uppercase; letter-spacing: 1px;">Constructor Standings</h3><div class="table-responsive constructor-table-container"><table class="table table-sm table-dark table-striped standings-table" style="font-size:0.75rem;"><thead><tr><th style="padding:12px 8px; width: 40px;" class="text-center">#</th><th style="padding:12px 8px; width: 160px;" class="text-start">Team</th><th style="padding:12px 8px;" class="text-start">Drivers</th><th style="padding:12px 8px; width: 70px;" class="text-end">Pts</th><th style="padding:12px 8px; width: 80px;" class="text-end">Gap to Next</th><th style="padding:12px 8px; width: 90px;" class="text-end">Gap to Leader</th></tr></thead><tbody>`;
 
     teamNames.forEach((t, idx) => {
       const info = teamAgg[t];
@@ -4598,7 +4602,9 @@ function renderStandingsTable() {
         idx === 0
           ? "-"
           : `-${Math.abs(teamAgg[teamNames[idx - 1]].points - info.points)}`;
-      constructorsHtml += `<tr class="standings-row"><td class="text-center" style="padding:10px 4px;">${idx + 1}</td><td class="text-start team-accent-cell" style="padding:10px 4px; white-space:nowrap; border-left: 4px solid ${teamColor} !important;"><strong>${t}</strong></td><td class="text-start" style="padding:10px 4px;">${info.drivers.map((d) => d.toUpperCase()).join(", ")}</td><td class="text-end" style="padding:10px 4px;"><strong>${info.points}</strong></td><td class="text-end" style="padding:10px 4px; color:#aaa;">${gap}</td></tr>`;
+      const leaderGap =
+        idx === 0 ? "-" : `-${Math.abs(teamAgg[teamNames[0]].points - info.points)}`;
+      constructorsHtml += `<tr class="standings-row"><td class="text-center" style="padding:10px 4px;">${idx + 1}</td><td class="text-start team-accent-cell" style="padding:10px 4px; white-space:nowrap; border-left: 4px solid ${teamColor} !important;"><strong>${t}</strong></td><td class="text-start" style="padding:10px 4px;">${info.drivers.map((d) => d.toUpperCase()).join(", ")}</td><td class="text-end" style="padding:10px 4px;"><strong>${info.points}</strong></td><td class="text-end" style="padding:10px 4px; color:#aaa;">${gap}</td><td class="text-end" style="padding:10px 4px; color:#aaa;">${leaderGap}</td></tr>`;
     });
 
     constructorsHtml += `</tbody></table></div>`;

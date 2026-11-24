@@ -32,15 +32,16 @@ describe("race consistency", () => {
     expect(scoreFromSpread(2)).toBeCloseTo(26.1, 0);
   });
 
-  it("does not punish steady fuel burn: laps 0.08 s quicker every lap score ~100", () => {
+  it("removes steady fuel burn from the trend-adjusted spread diagnostics", () => {
     const c = raceConsistency(laps(Array.from({ length: 20 }, (_, i) => 95 - i * 0.08)));
-    expect(c.score).toBeGreaterThan(99);
+    expect(c.spread).toBe(0);
+    expect(c.stints[0].trend).toBeCloseTo(-0.08, 2);
   });
 
-  it("does not penalize accelerating tyre degradation on a long stint", () => {
+  it("models accelerating tyre degradation in the trend-adjusted diagnostics", () => {
     const degradingPace = Array.from({ length: 18 }, (_, i) => 95 - i * 0.08 + i * i * 0.018);
     const c = raceConsistency(laps(degradingPace));
-    expect(c.score).toBeGreaterThan(99);
+    expect(c.spread).toBe(0);
     expect(c.stints[0].trend).toBeGreaterThan(0);
   });
 
@@ -58,13 +59,13 @@ describe("race consistency", () => {
 
   it("an 8 s spread scores far below a 2 s spread", () => {
     const wobble = (amp: number) =>
-      Array.from({ length: 16 }, (_, i) => 90 + (i % 2 ? amp / 2 : -amp / 2));
+      Array.from({ length: 16 }, (_, i) => 90 + [-1, -0.5, 0, 0.5, 1][i % 5] * amp);
     const tight = raceConsistency(laps(wobble(2))).score!;
     const loose = raceConsistency(laps(wobble(8))).score!;
     expect(loose).toBeLessThan(tight);
   });
 
-  it("excludes lap 1, pit, out, safety-car and restart laps", () => {
+  it("excludes lap 1, pit, out and safety-car laps from the rating", () => {
     const base = Array.from({ length: 12 }, () => 90);
     base[0] = 110;
     base[4] = 115;
@@ -79,13 +80,24 @@ describe("race consistency", () => {
       })),
     );
     expect(c.excluded.map((e) => e.lap)).toEqual([1, 5, 6, 9, 10]);
-    expect(c.score).toBeGreaterThan(99);
+    expect(c.cleanLaps).toBe(8);
+    expect(c.score).toBe(98.5);
   });
 
   it("flags a lap more than 1 s off the stint trend as a mistake", () => {
     const t = Array.from({ length: 12 }, () => 90);
     t[6] = 92;
     expect(raceConsistency(laps(t)).mistakeLaps).toEqual([7]);
+  });
+
+  it("uses the graphs tab robust CV score for the AI debrief", () => {
+    const facts = buildDebriefFacts({
+      track_name: "Spa",
+      category: "Race",
+      lap_history: laps([110, 90, 90, 90, 100]),
+      stints: [{ "start-lap": 1, "end-lap": 5 }],
+    });
+    expect(facts.consistency?.score).toBe(97.4);
   });
 });
 

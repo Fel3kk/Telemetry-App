@@ -350,7 +350,7 @@ export function AiDebrief({
           </select>
           {typeof c?.score === "number" && (
             <span className="rounded-md bg-primary/15 px-3 py-2 text-sm font-semibold text-primary">
-              Consistency {Math.round(c.score)}/100
+              Consistency {c.score.toFixed(1)}/100
             </span>
           )}
           {session?.localOnly ? (
@@ -570,7 +570,12 @@ export function AiDebrief({
           <p className="text-sm">{debrief.summary}</p>
           <div className="grid gap-3 md:grid-cols-3">
             {[
-              ["Consistency", debrief.consistency],
+              [
+                typeof c?.score === "number"
+                  ? `Consistency · ${c.score.toFixed(1)}/100`
+                  : "Consistency",
+                debrief.consistency,
+              ],
               ["Tyres", debrief.tyres],
               ["Pace", debrief.pace],
             ].map(([t, v]) => (
